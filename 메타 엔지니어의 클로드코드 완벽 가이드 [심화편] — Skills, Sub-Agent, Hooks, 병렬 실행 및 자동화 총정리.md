@@ -177,6 +177,7 @@ skill-creator는 description 최적화, frontmatter 설정, 지원 파일 구성
 </aside>
 
 ## 📋 2-2. 내장 Sub-Agent 5종
+<img width="1538" height="881" alt="image" src="https://github.com/user-attachments/assets/45e0b65b-8adf-43c6-b0c2-91bad7faaba6" />
 
 | Sub-Agent | 모델 | 권한 | 용도 |
 | --- | --- | --- | --- |
