@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+:root {
+  --background: #08101f;
+  --foreground: #e8ecff;
+  --panel: #0d192f;
+  --panel-2: #10203b;
+  --line: #1c2f52;
+  --line-strong: #2a4272;
+  --muted: #7c8db5;
+  --accent: #3b82f6;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* 다크 오피스 대시보드에 어울리는 얇은 스크롤바 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #24365e transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #24365e;
+  border-radius: 8px;
+}
+
+/* 공용 패널 카드 */
+.panel {
+  background: linear-gradient(180deg, var(--panel-2) 0%, var(--panel) 100%);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f1f5ff;
+}
+
+/* 픽셀 스프라이트가 흐려지지 않게 */
+.pixelated {
+  image-rendering: pixelated;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(74, 222, 128, 0);
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 1.8s ease-out infinite;
+}
+
+/* 예시 명령어처럼 가로 스크롤은 되지만 스크롤바는 숨기는 줄 */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

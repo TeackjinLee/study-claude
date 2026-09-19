@@ -1,0 +1,1650 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Agent Studio</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f2f5fa; --panel:#ffffff; --panel-2:#f7f9fd; --line:#dfe5ef; --line-strong:#c9d3e3;
+  --text:#101a2e; --muted:#5a6781; --faint:#8a95ab;
+  --accent:#1f6be0; --accent-soft:#e3edfd; --accent-text:#1653b3;
+  --ok:#11996a; --ok-soft:#dff5ec; --ok-text:#0b6e4c;
+  --warn:#c77700; --warn-soft:#fdf1dc; --warn-text:#8a5200;
+  --idle-soft:#eceff5; --idle-text:#56627a;
+  --danger:#d33c3c; --danger-soft:#fbe6e6;
+  --track:#e3e8f1; --code-bg:#f5f7fb;
+  --a-main:#1f6be0; --a-plan:#7c4dff; --a-code:#2f7bf6; --a-frontend:#e0507a; --a-test:#12a37a; --a-doc:#f39a1c; --a-deploy:#6d5dfc; --a-research:#12a4b8;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0a1324; --panel:#0f1a30; --panel-2:#121f39; --line:#1f2d4a; --line-strong:#2b3c5f;
+    --text:#e7edf8; --muted:#94a2bd; --faint:#6b7a96;
+    --accent:#2f80ff; --accent-soft:#16305c; --accent-text:#8fb8ff;
+    --ok:#22c38e; --ok-soft:#10392f; --ok-text:#6ee2b6;
+    --warn:#f5a524; --warn-soft:#3a2a10; --warn-text:#ffc766;
+    --idle-soft:#1a2742; --idle-text:#9aa7c0;
+    --danger:#ff5d5d; --danger-soft:#3a1a22;
+    --track:#1d2a45; --code-bg:#0b1529; --a-main:#2f80ff;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0a1324; --panel:#0f1a30; --panel-2:#121f39; --line:#1f2d4a; --line-strong:#2b3c5f;
+  --text:#e7edf8; --muted:#94a2bd; --faint:#6b7a96;
+  --accent:#2f80ff; --accent-soft:#16305c; --accent-text:#8fb8ff;
+  --ok:#22c38e; --ok-soft:#10392f; --ok-text:#6ee2b6;
+  --warn:#f5a524; --warn-soft:#3a2a10; --warn-text:#ffc766;
+  --idle-soft:#1a2742; --idle-text:#9aa7c0;
+  --danger:#ff5d5d; --danger-soft:#3a1a22;
+  --track:#1d2a45; --code-bg:#0b1529; --a-main:#2f80ff;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+[data-icon]{display:inline-flex;align-items:center;justify-content:center}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font-family:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,select{font:inherit;color:inherit}
+code,pre,.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.topbar{display:flex;align-items:center;gap:28px;height:60px;padding:0 24px;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px;letter-spacing:-.01em;white-space:nowrap}
+.logo{width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff}
+.tagline{margin:0;color:var(--muted);font-size:14px}
+.top-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;background:var(--idle-soft);color:var(--idle-text)}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{background:var(--ok-soft);color:var(--ok-text)}
+.pill.bad{background:var(--danger-soft);color:var(--danger)}
+.pill.warn{background:var(--warn-soft);color:var(--warn-text)}
+
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr) 380px;gap:20px;padding:18px 20px 28px;align-items:start;max-width:1640px;margin:0 auto}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+.panel h2{margin:0;font-size:16px;font-weight:500}
+
+.sidebar{position:sticky;top:18px}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav-item{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;border:0;background:none;text-align:left;font-size:15px;cursor:pointer}
+.nav-item svg{color:var(--muted)}
+.nav-item[aria-disabled="true"]{cursor:default;color:var(--muted)}
+.nav-item[aria-disabled="true"]:hover{background:var(--panel-2)}
+.nav-item.active{background:var(--accent-soft);color:var(--accent-text);font-weight:500}
+.nav-item.active svg{color:var(--accent)}
+.side-section{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+.side-head{display:flex;justify-content:space-between;align-items:center;padding:0 6px 10px;color:var(--muted)}
+.count{min-width:24px;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent-text);font-size:12px;text-align:center}
+.agent-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.side-agent{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 6px;border-radius:10px}
+.side-agent strong{display:block;font-weight:500}
+.side-agent small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.state{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--faint);white-space:nowrap}
+.state .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.state[data-s="running"]{color:var(--accent-text)}
+.state[data-s="done"]{color:var(--ok-text)}
+.state[data-s="error"],.state[data-s="stopped"]{color:var(--danger)}
+
+.agent-icon{width:44px;height:44px;border-radius:12px;background:var(--agent);color:#fff;display:grid;place-items:center;flex:none;overflow:hidden}
+.agent-icon.sm{width:36px;height:36px;border-radius:10px}
+.agent-icon.xs{width:30px;height:30px;border-radius:9px}
+
+.main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel-title{display:flex;align-items:center;gap:10px}
+.panel-title svg{color:var(--muted)}
+.command-row{display:flex;gap:12px;margin-top:14px;align-items:stretch}
+textarea{flex:1;resize:vertical;min-height:58px;padding:14px 16px;border-radius:10px;border:1px solid var(--line-strong);background:var(--panel-2);color:var(--text);font:inherit;font-size:15px;line-height:1.55}
+textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+textarea[readonly]{color:var(--muted)}
+.btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:120px;padding:0 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:500;font-size:15px;cursor:pointer}
+.btn-primary:hover{filter:brightness(1.08)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;filter:none}
+.btn-primary.stop{background:var(--danger)}
+.hint{display:flex;align-items:center;gap:8px;margin:12px 0 0;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.hint code{font-size:12px;padding:1px 6px;border-radius:4px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);word-break:break-all}
+.error{margin:8px 0 0;color:var(--danger);font-size:13px}
+kbd{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;padding:1px 5px;border:1px solid var(--line-strong);border-radius:4px;background:var(--panel-2)}
+
+/* 승인 요청 */
+.approvals{border-color:var(--warn);background:var(--warn-soft)}
+.approvals h2{display:flex;align-items:center;gap:8px;color:var(--warn-text)}
+.approval{margin-top:12px;padding:14px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
+.approval-head{display:flex;align-items:center;gap:10px}
+.approval-head strong{font-weight:500}
+.approval-head small{display:block;color:var(--muted);font-size:12px}
+.approval pre{margin:10px 0 0;padding:10px 12px;border-radius:8px;background:var(--code-bg);border:1px solid var(--line);font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow:auto}
+.approval-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn{border:1px solid var(--line-strong);background:var(--panel-2);padding:7px 14px;border-radius:8px;font-size:13px;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:wait}
+.btn.allow{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500}
+.btn.deny{color:var(--danger)}
+
+/* 에이전트 편집 모달 */
+.side-head .add-btn{border:1px solid var(--line-strong);background:var(--panel-2);color:var(--accent-text);font-size:12px;padding:2px 8px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.side-head .add-btn:hover{border-color:var(--accent)}
+.chev.edit{opacity:0;transition:opacity .15s}
+.agent-card:hover .chev.edit,.chev.edit:focus{opacity:1}
+dialog.editor{width:min(860px,calc(100vw - 32px));max-height:calc(100vh - 32px);padding:0;border:1px solid var(--line-strong);border-radius:14px;background:var(--panel);color:var(--text);box-shadow:0 24px 60px rgba(0,0,0,.45)}
+dialog.editor::backdrop{background:rgba(3,8,20,.6);backdrop-filter:blur(3px)}
+.ed-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.ed-head h2{margin:0;font-size:16px;flex:1;display:flex;align-items:center;gap:10px}
+.ed-body{display:grid;grid-template-columns:1fr 1.1fr;gap:16px;padding:16px 18px;max-height:calc(100vh - 170px);overflow:auto}
+@media (max-width:760px){.ed-body{grid-template-columns:1fr}}
+.ed-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.ed-field label,.ed-field>span{display:block;margin-bottom:4px;font-size:12px;color:var(--muted);font-weight:500}
+.ed-field input:not([type=checkbox]):not([type=color]),.ed-field select,.ed-field textarea{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel-2);color:var(--text);font:inherit;font-size:13px;min-height:0;line-height:1.4}
+.ed-field textarea{resize:vertical}
+.ed-field input:disabled{opacity:.6}
+.ed-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ed-row.color{grid-template-columns:1fr auto}
+.ed-field input[type=color]{width:46px;height:36px;padding:2px;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel-2);cursor:pointer}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tools label{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;cursor:pointer;color:var(--muted)}
+.tools label:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--text)}
+.tools label code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.tools label small{margin-left:auto;color:var(--faint)}
+.poke-search{position:relative}
+.poke-search input{padding-left:32px !important}
+.poke-search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--faint)}
+.poke-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;max-height:210px;min-height:110px;overflow:auto;padding:6px;margin-top:6px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2)}
+.poke-grid button{aspect-ratio:1;border:2px solid transparent;border-radius:8px;background:none;padding:0;cursor:pointer;display:grid;place-items:center}
+.poke-grid button:hover{background:var(--line)}
+.poke-grid button.on{border-color:var(--agent);background:color-mix(in srgb,var(--agent) 22%,transparent)}
+.poke-grid img{width:44px;height:44px;image-rendering:pixelated}
+.poke-grid .empty{grid-column:1/-1;text-align:center;color:var(--faint);font-size:12px;padding:20px 0}
+.poke-pick{font-size:12px;color:var(--muted);margin-top:4px}
+.ed-foot{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+.ed-foot .spacer{flex:1}
+.ed-error{margin:0 18px;padding:8px 12px;border-radius:8px;background:color-mix(in srgb,var(--danger) 12%,transparent);border:1px solid color-mix(in srgb,var(--danger) 40%,transparent);color:var(--danger);font-size:12px}
+.ed-note{font-size:11px;color:var(--faint);margin:0}
+.ed-avatar{width:34px;height:34px;border-radius:9px;background:var(--agent);display:grid;place-items:center;overflow:hidden}
+.ed-avatar img{width:44px;height:44px;image-rendering:pixelated}
+
+/* 명령 첨부 */
+.attach-row{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.attach-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-strong);background:var(--panel-2);color:var(--text);padding:6px 12px;border-radius:8px;font-size:13px;cursor:pointer}
+.attach-btn:hover{border-color:var(--accent)}
+.attach-btn .count{margin-left:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.chip{position:relative;display:flex;align-items:center;gap:8px;padding-right:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);font-size:12px;max-width:240px}
+.chip img,.chip .ficon{width:34px;height:34px;border-radius:7px 0 0 7px;object-fit:cover;flex:none}
+.chip .ficon{display:grid;place-items:center;background:var(--line);color:var(--muted)}
+.chip .cname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip small{color:var(--faint);white-space:nowrap}
+.chip .rm{position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;border:0;background:var(--line-strong);color:#fff;font-size:11px;line-height:18px;cursor:pointer;padding:0;display:none}
+.chip:hover .rm{display:block}
+.chip .rm:hover{background:var(--danger)}
+.chips.sm .chip img,.chips.sm .chip .ficon{width:24px;height:24px}
+.chips.sm .chip{font-size:11px}
+.command-row.drag textarea{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+#runAttach{margin:8px 0 0}
+/* 슬래시 명령 응답 + 자동완성 */
+.log li.cmd{grid-template-columns:auto minmax(0,1fr)}
+.log li.cmd code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-text)}
+.log li.cmd.bad code{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger)}
+.log li.cmd pre{grid-column:2;margin:6px 0 0;padding:8px 10px;border-radius:8px;background:var(--code-bg);border:1px solid var(--line);font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.command-row{position:relative}
+.slash-menu{position:absolute;left:0;right:140px;bottom:calc(100% + 6px);z-index:20;max-height:260px;overflow:auto;padding:4px;border:1px solid var(--line-strong);border-radius:12px;background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.slash-menu button{display:flex;gap:12px;align-items:baseline;width:100%;padding:7px 10px;border:0;border-radius:8px;background:none;text-align:left;cursor:pointer;color:var(--text);font:inherit}
+.slash-menu button.on,.slash-menu button:hover{background:var(--accent-soft)}
+.slash-menu code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;color:var(--accent-text);white-space:nowrap}
+.slash-menu code small{color:var(--faint)}
+.slash-menu span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.slash-menu em{font-style:normal;font-size:10px;padding:1px 6px;border-radius:999px;background:var(--line);color:var(--muted);white-space:nowrap}
+.slash-menu .foot{padding:4px 10px 2px;font-size:11px;color:var(--faint)}
+.model-pill{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:3px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--muted);white-space:nowrap}
+.model-pill b{color:var(--text);font-weight:600}
+/* 슬래시 명령 선택 창 (/model 등) */
+dialog.choice{width:min(520px,calc(100vw - 32px));padding:0;border:1px solid var(--line-strong);border-radius:14px;background:var(--panel);color:var(--text);box-shadow:0 24px 60px rgba(0,0,0,.45)}
+dialog.choice::backdrop{background:rgba(3,8,20,.55);backdrop-filter:blur(3px)}
+.choice-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.choice-head code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;padding:2px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-text)}
+.choice-head h2{margin:0;font-size:15px;flex:1}
+.choice-head small{color:var(--faint);font-size:11px}
+.choice-list{list-style:none;margin:0;padding:6px;max-height:60vh;overflow:auto}
+.choice-list button{display:flex;gap:12px;align-items:flex-start;width:100%;padding:8px 10px;border:0;border-radius:8px;background:none;text-align:left;cursor:pointer;color:var(--text);font:inherit}
+.choice-list button.on{background:var(--accent-soft)}
+.choice-list .num{width:16px;text-align:center;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;color:var(--faint);margin-top:2px}
+.choice-list b{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px}
+.choice-list b em{font-style:normal;font-size:10px;padding:1px 6px;border-radius:999px;background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.choice-list small{display:block;color:var(--muted);font-size:12px}
+.progress-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap}
+.meta{display:flex;gap:18px;margin:0;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.meta div{display:flex;gap:6px}
+.meta dd{margin:0;color:var(--text);font-variant-numeric:tabular-nums}
+.run-row{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(160px,320px);gap:14px;align-items:center;margin:14px 0 0}
+.run-title{margin:0;font-size:16px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.run-bar,.agent-bar{display:flex;align-items:center;gap:12px}
+.bar{position:relative;flex:1;height:8px;border-radius:999px;background:var(--track);overflow:hidden}
+.bar span{display:block;height:100%;width:0;border-radius:inherit;background:var(--accent);transition:width .3s ease}
+.bar.busy span{position:absolute;width:35%;animation:slide 1.3s ease-in-out infinite}
+@keyframes slide{from{left:-35%}to{left:100%}}
+.pct{min-width:40px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent-text);font-weight:500;font-size:13px}
+.run-message{margin:10px 0 0;padding:10px 12px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:13px;white-space:pre-wrap}
+
+.plan{list-style:none;margin:14px 0 0;padding:12px 14px;border-radius:10px;background:var(--panel-2);border:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 18px}
+.plan li{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted)}
+.plan li[data-s="in_progress"]{color:var(--text);font-weight:500}
+.plan li[data-s="completed"]{color:var(--faint);text-decoration:line-through}
+
+.badge{display:inline-flex;align-items:center;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap}
+.badge.idle{background:var(--idle-soft);color:var(--idle-text)}
+.badge.run{background:var(--accent);color:#fff}
+.badge.ok{background:var(--ok-soft);color:var(--ok-text)}
+.badge.stop{background:var(--danger-soft);color:var(--danger)}
+
+.cards{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+.agent-card{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:16px;padding:16px 16px 14px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel-2);transition:border-color .2s,box-shadow .2s}
+.agent-card.is-running{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.agent-card.is-unused{opacity:.6}
+.agent-name{margin:0;font-size:16px;font-weight:500;display:flex;align-items:center;gap:8px}
+.calls{font-size:12px;font-weight:400;color:var(--muted);padding:0 8px;border-radius:999px;background:var(--idle-soft)}
+.agent-desc{margin:2px 0 0;color:var(--muted);font-size:13.5px;overflow-wrap:anywhere}
+.agent-bar{margin-top:10px;max-width:420px}
+.agent-now{margin:6px 0 0;font-size:12.5px;color:var(--accent-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actions{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.actions li{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);min-width:0}
+.actions li span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actions li.more{color:var(--faint);font-size:12px;padding-left:24px}
+.tick{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line-strong);display:grid;place-items:center;color:transparent;flex:none}
+.actions li[data-s="active"]{color:var(--text)}
+.actions li[data-s="active"] .tick{border-color:var(--accent);border-top-color:transparent;animation:spin .9s linear infinite}
+.actions li[data-s="done"] .tick{background:var(--ok);border-color:var(--ok);color:#fff}
+.actions li[data-s="error"] .tick{background:var(--danger);border-color:var(--danger);color:#fff}
+@keyframes spin{to{transform:rotate(360deg)}}
+.report{margin-top:10px}
+.report summary{cursor:pointer;font-size:13px;color:var(--accent-text);width:fit-content}
+.report pre{margin:8px 0 0;padding:10px 12px;border-radius:8px;background:var(--code-bg);border:1px solid var(--line);font-family:inherit;font-size:13px;white-space:pre-wrap;max-height:320px;overflow:auto}
+.agent-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.took{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chev{margin-top:auto;border:0;background:none;padding:4px;border-radius:6px;color:var(--faint);cursor:pointer;display:grid;place-items:center}
+.chev:hover{background:var(--idle-soft);color:var(--text)}
+.chev svg{transition:transform .2s}
+.chev[aria-expanded="false"] svg{transform:rotate(-90deg)}
+
+.rail{display:flex;flex-direction:column;gap:16px;position:sticky;top:18px;min-width:0}
+.rail-head{display:flex;align-items:center;gap:12px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.live .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+.live.on .dot{background:var(--ok);animation:blink 1.4s ease-in-out infinite}
+@keyframes blink{50%{opacity:.3}}
+.link-btn{margin-left:auto;border:0;background:none;color:var(--accent-text);font-size:13px;cursor:pointer;padding:2px 4px;border-radius:4px}
+.log{list-style:none;margin:14px 0 0;padding:0 4px 0 0;height:280px;overflow-y:auto}
+.log li{display:grid;grid-template-columns:auto 8px minmax(0,1fr);gap:10px;align-items:baseline}
+.log li + li{margin-top:7px}
+.log time{color:var(--faint);font-size:12px;font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.log .ldot{width:7px;height:7px;border-radius:50%;background:var(--agent,var(--a-main));align-self:center}
+.log .msg{font-size:13px;overflow-wrap:anywhere}
+.log li.bad .msg{color:var(--danger)}
+.log li.empty{display:block;color:var(--faint);font-size:13px}
+
+.rail-agents{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:12px}
+.rail-row{display:grid;grid-template-columns:30px minmax(0,1fr) 90px;gap:10px;align-items:center}
+.rail-row strong{display:block;font-size:13px;font-weight:500}
+.rail-row small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-row .bar{height:6px}
+.rail-row[data-s="done"] .bar span{width:100%;background:var(--ok)}
+.rail-row[data-s="error"] .bar span,.rail-row[data-s="stopped"] .bar span{width:100%;background:var(--danger)}
+
+.tabs{display:flex;gap:4px;margin:14px 0 10px;padding:3px;border-radius:10px;background:var(--panel-2);border:1px solid var(--line);width:fit-content;max-width:100%;overflow-x:auto}
+.tab{position:relative;border:0;background:none;padding:6px 14px;border-radius:7px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tab[aria-selected="true"]{background:var(--accent-soft);color:var(--accent-text);font-weight:500}
+.tab.fresh::after{content:"";position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.file-pick{width:100%;margin-bottom:8px;padding:6px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel-2);font-size:12.5px}
+.preview{position:relative;border:1px solid var(--line);border-radius:10px;background:var(--code-bg);max-height:260px;overflow:hidden}
+.preview.expanded{max-height:none}
+.preview.has-more::after{content:"";position:absolute;left:0;right:0;bottom:0;height:48px;background:linear-gradient(transparent,var(--code-bg));pointer-events:none}
+.lang{position:absolute;top:8px;right:10px;padding:1px 8px;border-radius:5px;background:var(--idle-soft);color:var(--muted);font-size:11px}
+.preview pre{margin:0;padding:32px 16px 14px;font-size:12px;line-height:1.65;white-space:pre;overflow-x:auto}
+.preview pre.prose{white-space:pre-wrap;font-family:"Noto Sans KR",system-ui,sans-serif;font-size:13px}
+.preview .empty{margin:0;padding:28px 16px;color:var(--faint);font-size:13px;text-align:center}
+.preview-foot{display:flex;justify-content:flex-end;margin-top:10px}
+.btn-ghost{border:1px solid var(--line-strong);background:var(--panel-2);color:var(--accent-text);padding:6px 14px;border-radius:8px;font-size:13px;cursor:pointer}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation:none!important;transition:none!important}
+  .bar.busy span{position:static;width:100%;opacity:.5}
+}
+@media (max-width:1260px){
+  .layout{grid-template-columns:220px minmax(0,1fr)}
+  .rail{grid-column:2;position:static;display:grid;grid-template-columns:1fr 1fr}
+  .rail > .panel:last-child{grid-column:1 / -1}
+}
+@media (max-width:860px){
+  .topbar{gap:12px;padding:0 14px}
+  .tagline{display:none}
+  .brand{font-size:16px;gap:8px}
+  .layout{grid-template-columns:minmax(0,1fr);padding:12px;gap:14px}
+  .sidebar{position:static;min-width:0}
+  .nav{flex-direction:row;overflow-x:auto}
+  .nav-item{white-space:nowrap;padding:8px 12px;font-size:14px}
+  .side-section{display:none}
+  .rail{grid-column:auto;grid-template-columns:minmax(0,1fr)}
+  .command-row{flex-direction:column}
+  .btn-primary{min-height:46px}
+  .run-row{grid-template-columns:auto minmax(0,1fr)}
+  .run-bar{grid-column:1 / -1}
+  .agent-card{grid-template-columns:40px minmax(0,1fr);gap:12px}
+  .agent-icon{width:40px;height:40px}
+  .agent-side{grid-column:2;flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px}
+  .chev{margin:0 0 0 auto}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo" data-icon="bot" data-size="18"></span>AI Agent Studio</div>
+  <p class="tagline">명령하면, 여러 에이전트가 함께 일합니다.</p>
+  <div class="top-actions">
+    <span class="pill warn" id="keyPill" hidden><span class="dot"></span>API 키 없음</span>
+    <span class="pill" id="connPill" role="status"><span class="dot"></span><span id="connText">서버 연결 중</span></span>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <nav class="nav" aria-label="주 메뉴">
+      <button class="nav-item active" aria-current="page"><span data-icon="home"></span>대시보드</button>
+      <button class="nav-item" aria-disabled="true" title="준비 중인 메뉴입니다"><span data-icon="bot"></span>에이전트 관리</button>
+      <button class="nav-item" aria-disabled="true" title="준비 중인 메뉴입니다"><span data-icon="clock"></span>작업 기록</button>
+      <button class="nav-item" aria-disabled="true" title="준비 중인 메뉴입니다"><span data-icon="sliders"></span>설정</button>
+    </nav>
+    <div class="side-section">
+      <div class="side-head"><span>에이전트 목록 <span class="count" id="agentCount"></span></span><button type="button" class="add-btn" id="addAgentBtn"><span data-icon="plus" data-size="12"></span>추가</button></div>
+      <ul class="agent-list" id="sideAgents"></ul>
+    </div>
+  </aside>
+
+  <main class="main">
+    <section class="panel" aria-labelledby="cmdTitle">
+      <h2 class="panel-title" id="cmdTitle"><span data-icon="user"></span>나의 명령<span class="model-pill" id="modelPill" title="/model 로 바꿀 수 있습니다">모델 <b id="modelPillValue">기본</b></span></h2>
+      <div class="command-row">
+        <label for="cmd" class="sr-only">에이전트에게 보낼 명령</label>
+        <textarea id="cmd" rows="2" placeholder="예: Express로 할 일 목록 API를 만들고 테스트까지 진행해줘. 결과는 문서로 정리해줘."></textarea>
+        <button id="runBtn" class="btn-primary" type="button"></button>
+        <div class="slash-menu" id="slashMenu" hidden></div>
+      </div>
+      <div class="attach-row">
+        <input type="file" id="fileInput" multiple hidden>
+        <button type="button" class="attach-btn" id="attachBtn" title="이미지 / 파일 첨부"><span data-icon="clip" data-size="15"></span>첨부<span class="count" id="attachCount" hidden></span></button>
+        <span class="hint" style="margin:0">이미지는 드래그하거나 붙여넣기(Ctrl+V)해도 첨부됩니다</span>
+      </div>
+      <ul class="chips" id="attachList"></ul>
+      <p id="cmdError" class="error" role="alert" hidden></p>
+      <p class="hint"><span data-icon="folder" data-size="16"></span>작업 폴더 <code id="workspacePath">확인 중</code></p>
+      <p class="hint"><span data-icon="shield" data-size="16"></span><span id="permHint">권한 설정 확인 중</span> <span><kbd>Ctrl</kbd> + <kbd>Enter</kbd>로 바로 실행</span></p>
+    </section>
+
+    <section class="panel approvals" id="approvals" aria-labelledby="apprTitle" hidden>
+      <h2 id="apprTitle"><span data-icon="shield" data-size="18"></span>승인이 필요합니다</h2>
+      <div id="approvalList"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="progTitle">
+      <div class="progress-head">
+        <h2 id="progTitle">작업 진행 상황</h2>
+        <dl class="meta">
+          <div><dt>시작</dt><dd id="startTime">--:--:--</dd></div>
+          <div><dt>소요</dt><dd id="elapsed">0초</dd></div>
+          <div><dt>비용</dt><dd id="cost">-</dd></div>
+          <div><dt>모델</dt><dd id="modelName">-</dd></div>
+        </dl>
+      </div>
+      <div class="run-row">
+        <span id="runBadge" class="badge idle">대기</span>
+        <h3 id="runTitle" class="run-title"></h3>
+        <ul class="chips sm" id="runAttach" hidden></ul>
+        <div class="run-bar">
+          <div class="bar" id="runBarEl" role="progressbar" aria-label="전체 진행률" aria-valuemin="0" aria-valuemax="100"><span id="runFill"></span></div>
+          <span id="runPct" class="pct">0%</span>
+        </div>
+      </div>
+      <p id="runMessage" class="run-message" hidden></p>
+      <ol id="plan" class="plan" aria-label="작업 계획" hidden></ol>
+      <div id="cards" class="cards"></div>
+    </section>
+  </main>
+
+  <aside class="rail">
+    <section class="panel" aria-labelledby="logTitle">
+      <div class="rail-head">
+        <h2 id="logTitle">실시간 로그</h2>
+        <span class="live" id="live"><span class="dot"></span>실시간 업데이트</span>
+        <button id="clearLog" class="link-btn" type="button">지우기</button>
+      </div>
+      <ol id="log" class="log" role="log"></ol>
+    </section>
+
+    <section class="panel" aria-labelledby="nowTitle">
+      <h2 id="nowTitle">에이전트별 현재 작업</h2>
+      <ul id="railAgents" class="rail-agents"></ul>
+    </section>
+
+    <section class="panel" aria-labelledby="prevTitle">
+      <h2 id="prevTitle">결과 미리보기</h2>
+      <div class="tabs" role="tablist" aria-label="결과 종류">
+        <button class="tab" role="tab" id="tab-code" data-tab="code" aria-selected="true" aria-controls="previewArea">코드</button>
+        <button class="tab" role="tab" id="tab-test" data-tab="test" aria-selected="false" aria-controls="previewArea" tabindex="-1">테스트 결과</button>
+        <button class="tab" role="tab" id="tab-doc" data-tab="doc" aria-selected="false" aria-controls="previewArea" tabindex="-1">문서</button>
+        <button class="tab" role="tab" id="tab-summary" data-tab="summary" aria-selected="false" aria-controls="previewArea" tabindex="-1">최종 요약</button>
+      </div>
+      <div id="previewArea" role="tabpanel" aria-labelledby="tab-code">
+        <label for="filePick" class="sr-only">볼 파일 선택</label>
+        <select id="filePick" class="file-pick" hidden></select>
+        <div class="preview" id="preview"></div>
+      </div>
+      <div class="preview-foot"><button id="expandBtn" class="btn-ghost" type="button" hidden>전체 보기</button></div>
+    </section>
+  </aside>
+</div>
+
+<dialog class="choice" id="choiceDialog" aria-labelledby="choiceTitle">
+  <div class="choice-head"><code id="choiceCmd"></code><h2 id="choiceTitle"></h2><small>↑↓ 이동 · Enter 선택 · Esc 취소</small></div>
+  <ul class="choice-list" id="choiceList"></ul>
+</dialog>
+<dialog class="editor" id="agentEditor" aria-labelledby="edTitle">
+  <form method="dialog" id="agentForm">
+    <div class="ed-head">
+      <span class="ed-avatar" id="edAvatar"></span>
+      <h2 id="edTitle">에이전트 추가</h2>
+      <button type="button" class="chev" id="edClose" aria-label="닫기"><span data-icon="x" data-size="18"></span></button>
+    </div>
+    <div class="ed-body">
+      <div class="ed-col">
+        <div class="ed-row color">
+          <div class="ed-field"><label for="edName">이름</label><input id="edName" name="name" placeholder="예: Reviewer Agent" autocomplete="off"></div>
+          <div class="ed-field"><label for="edColor">색</label><input id="edColor" name="color" type="color" value="#60a5fa"></div>
+        </div>
+        <div class="ed-row">
+          <div class="ed-field"><label for="edShort">짧은 이름 <small>(맵 이름표)</small></label><input id="edShort" name="shortName" maxlength="16"></div>
+          <div class="ed-field"><label for="edId">id</label><input id="edId" name="id" placeholder="reviewer" style="font-family:'JetBrains Mono',ui-monospace,monospace"></div>
+        </div>
+        <div class="ed-row">
+          <div class="ed-field"><label for="edRole">역할</label><input id="edRole" name="roleLabel" placeholder="예: 코드 리뷰"></div>
+          <div class="ed-field"><label for="edTask">담당 작업명 <small>(작업 트리)</small></label><input id="edTask" name="taskLabel" maxlength="24" placeholder="예: 코드 리뷰"></div>
+        </div>
+        <div class="ed-field"><label for="edDesc">한 줄 설명 <small>(목록 카드)</small></label><input id="edDesc" name="description" placeholder="예: PR 리뷰 및 개선 제안"></div>
+        <div class="ed-field"><label for="edRoom">작업실</label>
+          <select id="edRoom" name="room">
+            <option value="meeting">회의실</option><option value="dev">개발실</option><option value="test">테스트실</option><option value="doc">문서실</option><option value="server">서버실</option>
+          </select>
+        </div>
+        <div class="ed-field"><span>사용 도구</span><div class="tools" id="edTools"></div></div>
+      </div>
+      <div class="ed-col">
+        <div class="ed-field"><span>캐릭터 (PokeAPI)</span>
+          <div class="poke-search"><span data-icon="search" data-size="14"></span><input id="edPokeSearch" placeholder="이름(영문) 또는 도감 번호로 검색 — 예: pikachu, 25" autocomplete="off"></div>
+          <div class="poke-grid" id="edPokeGrid"></div>
+          <p class="poke-pick" id="edPokePick"></p>
+        </div>
+        <div class="ed-field"><label for="edSdkDesc">총괄 에이전트용 설명 <small>(언제 이 에이전트를 부를지)</small></label><textarea id="edSdkDesc" name="sdkDescription" rows="2" placeholder="예: 작성된 코드를 리뷰하고 개선점을 제안한다. 코드 작성이 끝난 뒤 호출한다."></textarea></div>
+        <div class="ed-field"><label for="edPrompt">시스템 프롬프트</label><textarea id="edPrompt" name="prompt" rows="6" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px" placeholder="너는 코드 리뷰 에이전트다.&#10;작업 폴더의 변경 내용을 읽고 버그, 보안 문제, 개선점을 한국어로 보고한다.&#10;파일은 수정하지 않는다."></textarea></div>
+        <p class="ed-note">저장하면 서버의 data/agents.json에 반영되어 다음 실행부터 총괄 에이전트가 이 에이전트를 호출할 수 있습니다. 두 대시보드(3000/3100) 모두 즉시 갱신됩니다.</p>
+      </div>
+    </div>
+    <p class="ed-error" id="edError" hidden></p>
+    <div class="ed-foot">
+      <button type="button" class="btn deny" id="edDelete" hidden><span data-icon="trash" data-size="14"></span> 삭제</button>
+      <button type="button" class="link-btn" id="edReset" style="margin-left:0">기본 7종으로 되돌리기</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="edCancel">취소</button>
+      <button type="submit" class="btn allow" id="edSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+/* ============================================================
+ * 아이콘
+ * ============================================================ */
+const ICONS = {
+  home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  bot:'<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><circle cx="12" cy="3" r="1"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  sliders:'<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+  user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  folder:'<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  send:'<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+  stop:'<rect x="6" y="6" width="12" height="12" rx="2"/>',
+  chev:'<polyline points="6 9 12 15 18 9"/>',
+  check:'<polyline points="20 6 9 17 4 12"/>',
+  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  bulb:'<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/>',
+  code:'<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  test:'<circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+  cloud:'<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>',
+  search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  layout:'<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>',
+  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  pencil:'<path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M13.5 6.5l3 3"/>',
+  trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  clip:'<path d="M21 11.5l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l9-9a3.5 3.5 0 0 1 5 5l-9 9a1.5 1.5 0 0 1-2.1-2.1l8.3-8.3"/>',
+  file2:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'
+};
+const icon = (name, size = 20, sw = 2) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+document.querySelectorAll('[data-icon]').forEach(el => {
+  el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, Number(el.dataset.size || 20)));
+});
+
+/* ============================================================
+ * 에이전트 목록
+ * 서버의 /api/agents(data/agents.json)가 단일 진실 공급원이다. 접속 시 hello 스냅샷으로 받고,
+ * Next.js 대시보드에서 추가/삭제/수정하면 'agents-changed'로 새 목록이 와서 카드를 다시 그린다.
+ * ============================================================ */
+let AGENTS = [];
+const MAIN = { id:'main', name:'총괄 에이전트', color:'var(--a-main)', icon:'bot' };
+let BY_ID = { main: MAIN };
+const agentOf = id => BY_ID[id] || MAIN;
+const MAX_ACTIONS = 6;
+
+/* 방/역할별 대체 아이콘 (포켓몬 스프라이트를 못 받았을 때) */
+const ICON_BY_ROOM = { meeting:'bulb', dev:'code', test:'test', doc:'file', server:'cloud' };
+const spriteUrl = id => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
+
+/** 서버의 AgentConfig → 이 화면이 쓰는 모양 */
+function toUiAgent(a) {
+  return {
+    id: a.id,
+    name: a.name,
+    role: a.description || a.roleLabel,
+    color: a.color,
+    icon: a.id === 'research' ? 'search' : (ICON_BY_ROOM[a.room] || 'bot'),
+    pokemonId: a.pokemonId
+  };
+}
+
+/** 에이전트 아이콘 칸: 포켓몬 스프라이트, 로드 실패 시 선 아이콘 */
+function agentIconHtml(a, size) {
+  if (!a.pokemonId) return icon(a.icon, size);
+  return `<img src="${spriteUrl(a.pokemonId)}" alt="" width="${size + 14}" height="${size + 14}" style="image-rendering:pixelated" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:${JSON.stringify(icon('bot', size)).replace(/"/g, '&quot;')}}))">`;
+}
+
+/** 서버에서 받은 목록으로 교체하고 카드를 다시 그린다. 이미 있던 에이전트의 진행 상태는 유지한다. */
+function applyAgents(list) {
+  if (!Array.isArray(list) || list.length === 0) return;
+  RAW_AGENTS = list;
+  AGENTS = list.map(toUiAgent);
+  BY_ID = Object.fromEntries([...AGENTS, MAIN].map(a => [a.id, a]));
+  if (state) {
+    const prev = state.agents;
+    state.agents = Object.fromEntries(AGENTS.map(a => [a.id, prev[a.id] || freshAgent()]));
+  }
+  buildAgentDom();
+  AGENTS.forEach(a => renderAgent(a.id));
+}
+
+/* ============================================================
+ * 상태
+ * ============================================================ */
+const $ = sel => document.querySelector(sel);
+const cmd = $('#cmd'), runBtn = $('#runBtn');
+
+const freshAgent = () => ({
+  status:'waiting', calls:0, active:0, task:'', now:'', summary:'',
+  actions:[], totalActions:0, runningSince:null, accMs:0
+});
+
+let state;
+function resetState(keepMeta) {
+  const meta = keepMeta && state ? { workspace:state.workspace, permissionMode:state.permissionMode } : {};
+  state = {
+    status:'idle', command:'', message:'', startedAt:null, endedAt:null,
+    model:'', cost:null, plan:[],
+    agents:Object.fromEntries(AGENTS.map(a => [a.id, freshAgent()])),
+    actionIndex:new Map(),
+    artifacts:{ code:new Map(), test:new Map(), doc:new Map(), summary:new Map() },
+    picked:{ code:null, test:null, doc:null, summary:null },
+    permissions:new Map(),
+    ...meta
+  };
+}
+resetState(false);
+
+const pad = n => String(n).padStart(2, '0');
+const clock = t => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+function fmtDur(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
+  if (h) return `${h}시간 ${m}분`;
+  return m ? `${m}분 ${s}초` : `${s}초`;
+}
+const agentTime = (s, now) => s.accMs + (s.runningSince ? now - s.runningSince : 0);
+
+/* ============================================================
+ * DOM 구성
+ * ============================================================ */
+const refs = {};
+const pick = (root, key) => root.querySelector(`[data-f="${key}"]`);
+
+function buildAgentDom() {
+  $('#agentCount').textContent = AGENTS.length;
+  $('#cards').replaceChildren();
+  $('#sideAgents').replaceChildren();
+  $('#railAgents').replaceChildren();
+  for (const k of Object.keys(refs)) delete refs[k];
+  AGENTS.forEach(a => {
+    const card = document.createElement('article');
+    card.className = 'agent-card';
+    card.style.setProperty('--agent', a.color);
+    card.innerHTML = `
+      <div class="agent-icon">${agentIconHtml(a, 22)}</div>
+      <div style="min-width:0">
+        <h3 class="agent-name"><span data-f="name"></span><span class="calls" data-f="calls" hidden></span></h3>
+        <p class="agent-desc" data-f="desc"></p>
+        <div class="agent-bar" data-f="barwrap" hidden><div class="bar busy"><span></span></div></div>
+        <p class="agent-now" data-f="now" hidden></p>
+        <div data-f="body" id="body-${a.id}">
+          <ul class="actions" data-f="actions"></ul>
+          <details class="report" data-f="report" hidden><summary>보고 내용 보기</summary><pre data-f="reportText"></pre></details>
+        </div>
+      </div>
+      <div class="agent-side">
+        <span class="badge idle" data-f="badge">대기중</span>
+        <span class="took" data-f="took"></span>
+        <span class="took" data-f="tools"></span>
+        <button class="chev edit" type="button" data-f="edit" title="에이전트 설정" aria-label="${a.name} 설정">${icon('pencil', 15)}</button>
+        <button class="chev" type="button" aria-expanded="true" aria-controls="body-${a.id}" data-f="chev">${icon('chev', 18)}</button>
+      </div>`;
+    pick(card, 'name').textContent = a.name;
+    $('#cards').append(card);
+
+    const chev = pick(card, 'chev'), body = pick(card, 'body');
+    pick(card, 'edit').addEventListener('click', () => openEditor(a.id));
+    chev.setAttribute('aria-label', `${a.name} 세부 내용 접기`);
+    chev.addEventListener('click', () => {
+      const open = chev.getAttribute('aria-expanded') === 'true';
+      chev.setAttribute('aria-expanded', String(!open));
+      chev.setAttribute('aria-label', `${a.name} 세부 내용 ${open ? '펼치기' : '접기'}`);
+      body.hidden = open;
+    });
+
+    const li = document.createElement('li');
+    li.className = 'side-agent';
+    li.style.setProperty('--agent', a.color);
+    li.innerHTML = `
+      <span class="agent-icon sm">${agentIconHtml(a, 18)}</span>
+      <span><strong></strong><small></small></span>
+      <span class="state" data-f="state"><span class="dot"></span><span data-f="stateText"></span></span>`;
+    li.querySelector('strong').textContent = a.name;
+    li.querySelector('small').textContent = a.role;
+    $('#sideAgents').append(li);
+
+    const row = document.createElement('li');
+    row.className = 'rail-row';
+    row.style.setProperty('--agent', a.color);
+    row.innerHTML = `
+      <span class="agent-icon xs">${agentIconHtml(a, 16)}</span>
+      <span style="min-width:0"><strong></strong><small data-f="now"></small></span>
+      <div class="bar" data-f="bar"><span></span></div>`;
+    row.querySelector('strong').textContent = a.name;
+    $('#railAgents').append(row);
+
+    refs[a.id] = {
+      card, calls:pick(card, 'calls'), desc:pick(card, 'desc'), barwrap:pick(card, 'barwrap'),
+      now:pick(card, 'now'), actions:pick(card, 'actions'), report:pick(card, 'report'),
+      reportText:pick(card, 'reportText'), badge:pick(card, 'badge'), took:pick(card, 'took'), tools:pick(card, 'tools'),
+      sideState:pick(li, 'state'), sideText:pick(li, 'stateText'),
+      row, railNow:pick(row, 'now'), railBar:pick(row, 'bar')
+    };
+  });
+}
+
+/* ============================================================
+ * 렌더링
+ * ============================================================ */
+const BADGE = {
+  waiting:['idle', '대기중'], running:['run', '진행중'], done:['ok', '완료'],
+  error:['stop', '오류'], stopped:['stop', '중지됨'], unused:['idle', '미사용']
+};
+const SIDE = { waiting:'대기', running:'작업중', done:'완료', error:'오류', stopped:'중지', unused:'미사용' };
+
+function renderAgent(id) {
+  const a = AGENTS.find(x => x.id === id);
+  const s = state.agents[id], r = refs[id];
+  if (!a || !s || !r) return; // 목록에 없는(삭제된) 에이전트
+  const [cls, label] = BADGE[s.status];
+  r.badge.className = `badge ${cls}`;
+  r.badge.textContent = label;
+  r.card.classList.toggle('is-running', s.status === 'running');
+  r.card.classList.toggle('is-unused', s.status === 'unused');
+
+  r.calls.hidden = s.calls < 2;
+  r.calls.textContent = `${s.calls}회 호출`;
+
+  const desc = {
+    waiting: a.role,
+    running: s.task || '작업 중',
+    done: s.task || '작업 완료',
+    error: s.task ? `${s.task} (실패)` : '작업 중 오류가 발생했습니다.',
+    stopped: '작업이 중지되었습니다.',
+    unused: '이번 작업에서는 호출되지 않았습니다.'
+  }[s.status];
+  r.desc.textContent = desc;
+
+  const running = s.status === 'running';
+  r.barwrap.hidden = !running;
+  r.now.hidden = !running || !s.now;
+  r.now.textContent = s.now;
+
+  const items = s.actions.map(act => {
+    const li = document.createElement('li');
+    li.dataset.s = act.status;
+    li.innerHTML = `<span class="tick">${icon(act.status === 'error' ? 'x' : 'check', 10, 3)}</span><span class="t"></span>`;
+    li.lastChild.textContent = act.label;
+    li.title = act.label;
+    return li;
+  });
+  const hiddenCount = s.totalActions - s.actions.length;
+  if (hiddenCount > 0) {
+    const more = document.createElement('li');
+    more.className = 'more';
+    more.textContent = `이전 작업 ${hiddenCount}개 더 있음`;
+    items.unshift(more);
+  }
+  r.actions.replaceChildren(...items);
+
+  r.report.hidden = !s.summary;
+  r.reportText.textContent = s.summary;
+
+  const t = agentTime(s, Date.now());
+  r.took.textContent = s.calls ? `${fmtDur(t)} 소요` : '';
+  r.tools.textContent = s.totalActions ? `도구 ${s.totalActions}회` : '';
+
+  r.sideState.dataset.s = s.status;
+  r.sideText.textContent = SIDE[s.status];
+  r.row.dataset.s = s.status;
+  r.railBar.classList.toggle('busy', running);
+  r.railNow.textContent = running ? (s.now || s.task || '작업 중') : { waiting:'대기 중', done:'완료', error:'오류', stopped:'중지됨', unused:'호출 안 됨' }[s.status];
+}
+
+function overallPercent() {
+  if (state.status === 'done' && !state.message) return 100;
+  if (state.plan.length) {
+    const done = state.plan.filter(p => p.status === 'completed').length;
+    return Math.round(done / state.plan.length * 100);
+  }
+  const called = AGENTS.filter(a => state.agents[a.id].calls > 0);
+  if (!called.length) return 0;
+  const finished = called.filter(a => state.agents[a.id].status === 'done').length;
+  return Math.min(95, Math.round(finished / called.length * 100));
+}
+
+let lastBtnMode = null;
+function renderRun() {
+  const map = { idle:['idle', '대기'], running:['run', '진행중'], done:['ok', '완료'], error:['stop', '실패'], aborted:['stop', '중지됨'] };
+  const [cls, label] = map[state.status];
+  $('#runBadge').className = `badge ${cls}`;
+  $('#runBadge').textContent = label;
+  $('#runTitle').textContent = state.command || '명령을 실행하면 진행 상황이 여기에 표시됩니다';
+  $('#runTitle').title = state.command;
+
+  const pct = overallPercent();
+  $('#runFill').style.width = `${pct}%`;
+  $('#runPct').textContent = `${pct}%`;
+  $('#runBarEl').setAttribute('aria-valuenow', pct);
+
+  $('#runMessage').hidden = !state.message;
+  $('#runMessage').textContent = state.message;
+
+  $('#startTime').textContent = state.startedAt ? clock(state.startedAt) : '--:--:--';
+  $('#elapsed').textContent = fmtDur(state.startedAt ? (state.endedAt || Date.now()) - state.startedAt : 0);
+  $('#cost').textContent = state.cost == null ? '-' : `$${state.cost.toFixed(4)}`;
+  $('#modelName').textContent = state.model || '-';
+
+  const running = state.status === 'running';
+  $('#live').classList.toggle('on', running);
+  cmd.readOnly = running;
+  runBtn.disabled = !connected;
+  const mode = running ? 'stop' : 'run';
+  if (mode !== lastBtnMode) {
+    runBtn.classList.toggle('stop', running);
+    runBtn.innerHTML = running ? `${icon('stop', 18)}중지하기` : `${icon('send', 18)}실행하기`;
+    lastBtnMode = mode;
+  }
+  document.title = state.permissions.size ? `(승인 필요) AI Agent Studio` : 'AI Agent Studio';
+}
+
+function renderPlan() {
+  const ol = $('#plan');
+  ol.hidden = !state.plan.length;
+  ol.replaceChildren(...state.plan.map(p => {
+    const li = document.createElement('li');
+    li.dataset.s = p.status;
+    const mark = p.status === 'completed' ? '✓' : p.status === 'in_progress' ? '▸' : '○';
+    li.textContent = `${mark} ${p.text}`;
+    return li;
+  }));
+}
+
+/* 승인 요청 */
+function renderApprovals() {
+  const list = $('#approvalList');
+  $('#approvals').hidden = state.permissions.size === 0;
+  const keep = new Set(state.permissions.keys());
+  [...list.children].forEach(el => { if (!keep.has(el.dataset.id)) el.remove(); });
+
+  for (const [id, p] of state.permissions) {
+    if (list.querySelector(`[data-id="${id}"]`)) continue;
+    const a = agentOf(p.agent);
+    const el = document.createElement('div');
+    el.className = 'approval';
+    el.dataset.id = id;
+    el.innerHTML = `
+      <div class="approval-head">
+        <span class="agent-icon xs" style="--agent:${a.color}">${icon(a.icon, 16)}</span>
+        <span><strong></strong><small></small></span>
+      </div>
+      <pre></pre>
+      <div class="approval-actions">
+        <button class="btn allow" data-act="allow">허용</button>
+        <button class="btn deny" data-act="deny">거부</button>
+        ${p.canAlwaysAllow ? '<button class="btn" data-act="always"></button>' : ''}
+      </div>`;
+    el.querySelector('strong').textContent = `${a.name}가 승인을 요청합니다`;
+    el.querySelector('small').textContent = p.title;
+    el.querySelector('pre').textContent = p.detail;
+    const always = el.querySelector('[data-act="always"]');
+    if (always) always.textContent = `이번 작업 동안 ${p.tool} 항상 허용`;
+    el.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
+      el.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      const act = btn.dataset.act;
+      socket.emit('permission-reply', { id, allowed: act !== 'deny', always: act === 'always' }, res => {
+        if (!res || !res.ok) {
+          addLog(null, '이 승인 요청은 이미 처리되었거나 만료되었습니다.', Date.now(), true);
+          state.permissions.delete(id);
+          renderApprovals();
+          renderRun();
+        }
+      });
+    }));
+    list.append(el);
+    if (!replaying) el.querySelector('.allow').focus({ preventScroll:false });
+  }
+}
+
+/* 실시간 로그 */
+let replaying = false;
+function resetLog() {
+  const li = document.createElement('li');
+  li.className = 'empty';
+  li.textContent = '명령을 실행하면 에이전트 활동이 여기에 기록됩니다.';
+  $('#log').replaceChildren(li);
+}
+function addLog(agentId, text, at, bad) {
+  const list = $('#log');
+  const empty = list.querySelector('.empty');
+  if (empty) empty.remove();
+  const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+  const li = document.createElement('li');
+  if (bad) li.className = 'bad';
+  li.style.setProperty('--agent', agentOf(agentId).color);
+  const time = document.createElement('time');
+  time.textContent = `[${clock(at)}]`;
+  const dot = document.createElement('span');
+  dot.className = 'ldot';
+  const msg = document.createElement('span');
+  msg.className = 'msg';
+  msg.textContent = text;
+  li.append(time, dot, msg);
+  list.append(li);
+  while (list.children.length > 500) list.firstElementChild.remove();
+  if (nearBottom || replaying) list.scrollTop = list.scrollHeight;
+}
+
+/* 결과 미리보기 */
+const PREVIEW_EMPTY = {
+  code:'에이전트가 파일을 만들거나 고치면 여기에 표시됩니다.',
+  test:'테스트를 실행하면 결과가 여기에 표시됩니다.',
+  doc:'Markdown 문서가 만들어지면 여기에 표시됩니다.',
+  summary:'작업이 끝나면 총괄 에이전트의 최종 요약이 여기에 표시됩니다.'
+};
+let activeTab = 'code', expanded = false;
+
+function renderPreview() {
+  const box = $('#preview'), btn = $('#expandBtn'), sel = $('#filePick');
+  const items = state.artifacts[activeTab];
+  $('#previewArea').setAttribute('aria-labelledby', `tab-${activeTab}`);
+  box.classList.toggle('expanded', expanded);
+
+  sel.hidden = items.size < 2;
+  if (items.size >= 2) {
+    const current = state.picked[activeTab];
+    sel.replaceChildren(...[...items.keys()].map(k => {
+      const o = document.createElement('option');
+      o.value = k;
+      o.textContent = items.get(k).title;
+      o.selected = k === current;
+      return o;
+    }));
+  }
+
+  const art = items.get(state.picked[activeTab]);
+  if (!art) {
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = PREVIEW_EMPTY[activeTab];
+    box.replaceChildren(p);
+    box.classList.remove('has-more');
+    btn.hidden = true;
+    return;
+  }
+  const lang = document.createElement('span');
+  lang.className = 'lang';
+  lang.textContent = art.lang;
+  const pre = document.createElement('pre');
+  if (activeTab === 'doc' || activeTab === 'summary') pre.className = 'prose';
+  const bare = activeTab === 'summary' || art.text.startsWith('$ ');
+  pre.textContent = bare ? art.text : `${art.title}\n\n${art.text}`;
+  box.replaceChildren(lang, pre);
+  const more = pre.scrollHeight > 262;
+  box.classList.toggle('has-more', more && !expanded);
+  btn.hidden = !more;
+  btn.textContent = expanded ? '접기' : '전체 보기';
+  btn.setAttribute('aria-expanded', String(expanded));
+}
+
+function selectTab(name, focus) {
+  activeTab = name;
+  expanded = false;
+  document.querySelectorAll('.tab').forEach(t => {
+    const on = t.dataset.tab === name;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    if (on) { t.classList.remove('fresh'); if (focus) t.focus(); }
+  });
+  renderPreview();
+}
+
+/* ============================================================
+ * 이벤트 처리: 화면은 오직 이 함수를 거쳐 갱신된다.
+ * ============================================================ */
+function startAgentClock(s, at) { if (s.active === 0) s.runningSince = at; s.active++; }
+function stopAgentClock(s, at) {
+  s.active = Math.max(0, s.active - 1);
+  if (s.active === 0 && s.runningSince) { s.accMs += at - s.runningSince; s.runningSince = null; }
+}
+
+function pushAction(agentId, actionId, label) {
+  if (agentId === 'main') return;
+  const s = state.agents[agentId];
+  const act = { id:actionId, label, status:'active' };
+  s.actions.push(act);
+  s.totalActions++;
+  if (s.actions.length > MAX_ACTIONS) s.actions.shift();
+  s.now = label;
+  state.actionIndex.set(actionId, act);
+}
+
+function finishRun(at) {
+  state.endedAt = at;
+  AGENTS.forEach(a => {
+    const s = state.agents[a.id];
+    if (s.status === 'running') { s.status = state.status === 'aborted' ? 'stopped' : 'error'; stopAgentClock(s, at); s.active = 0; }
+    else if (s.calls === 0) s.status = 'unused';
+    s.actions.forEach(act => { if (act.status === 'active') act.status = 'error'; });
+    renderAgent(a.id);
+  });
+  state.permissions.clear();
+  renderApprovals();
+}
+
+function handleEvent(e) {
+  const at = e.at || Date.now();
+  const a = e.agent ? agentOf(e.agent) : null;
+  // 목록에 없는 에이전트(삭제됐거나 아직 목록을 못 받음)의 이벤트도 상태는 쌓아둔다. 카드가 없으면 renderAgent가 건너뛴다.
+  if (e.agent && e.agent !== 'main' && !state.agents[e.agent]) state.agents[e.agent] = freshAgent();
+  const s = e.agent && state.agents[e.agent];
+
+  switch (e.type) {
+    case 'run_start':
+      resetState(true);
+      Object.assign(state, { status:'running', command:e.command, startedAt:at, workspace:e.workspace, attachments:Array.isArray(e.attachments) ? e.attachments : [] });
+      renderRunAttach();
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('fresh'));
+      expanded = false;
+      AGENTS.forEach(x => renderAgent(x.id));
+      renderPlan();
+      renderApprovals();
+      renderPreview();
+      if (!replaying) resetLog();
+      addLog(null, `명령이 접수되었습니다: ${e.command}`, at);
+      break;
+
+    case 'session':
+      state.model = e.model;
+      addLog(null, `세션을 시작했습니다. (모델 ${e.model})`, at);
+      break;
+
+    case 'plan': {
+      const before = new Map(state.plan.map(p => [p.text, p.status]));
+      if (!state.plan.length && e.items.length) addLog(null, `작업 계획을 세웠습니다. (${e.items.length}단계)`, at);
+      e.items.forEach(p => {
+        if (p.status === 'completed' && before.get(p.text) !== 'completed') addLog(null, `계획 완료: ${p.text}`, at);
+      });
+      state.plan = e.items;
+      renderPlan();
+      break;
+    }
+
+    case 'main_note':
+      addLog('main', e.text, at);
+      break;
+
+    case 'command_result':
+      addCommandLog(e.command, e.text, at, !e.ok);
+      if (e.choices && !replaying) openChoice(e.choices);
+      break;
+
+    case 'settings':
+      applySettings(e.settings);
+      break;
+
+    case 'cleared':
+      if (!replaying) { resetState(true); resetLog(); AGENTS.forEach(x => renderAgent(x.id)); renderPlan(); renderApprovals(); renderPreview(); renderRun(); }
+      break;
+
+    case 'api_retry':
+      addLog(null, `API 재시도 ${e.attempt}/${e.maxRetries} (${Math.round(e.delayMs / 1000)}초 후): ${e.reason}`, at, true);
+      break;
+
+    case 'api_error':
+      state.message = e.reason;
+      addLog(null, `API 오류: ${e.reason}`, at, true);
+      break;
+
+    case 'agent_start':
+      s.status = 'running';
+      s.calls++;
+      s.task = e.task;
+      s.now = '';
+      startAgentClock(s, at);
+      addLog(e.agent, `${a.name}가 작업을 시작했습니다: ${e.task}`, at);
+      break;
+
+    case 'agent_progress':
+      s.now = e.text;
+      break;
+
+    case 'agent_note':
+      addLog(e.agent, `${a.name}: ${e.text}`, at);
+      break;
+
+    case 'agent_done':
+      stopAgentClock(s, at);
+      if (s.active === 0) s.status = e.ok ? 'done' : 'error';
+      if (e.summary) s.summary = e.summary;
+      s.now = '';
+      addLog(e.agent, e.ok ? `${a.name}가 작업을 완료했습니다.` : `${a.name}의 작업이 실패했습니다.`, at, !e.ok);
+      break;
+
+    case 'action_start':
+      pushAction(e.agent, e.actionId, e.label);
+      addLog(e.agent, e.agent === 'main' ? `총괄: ${e.label}` : `${a.name}: ${e.label}`, at);
+      break;
+
+    case 'action_done': {
+      const act = state.actionIndex.get(e.actionId);
+      if (act) {
+        act.status = e.ok ? 'done' : 'error';
+        if (!e.ok) addLog(e.agent, `실패: ${act.label}`, at, true);
+      }
+      break;
+    }
+
+    case 'artifact': {
+      state.artifacts[e.kind].set(e.key, { title:e.title, lang:e.lang, text:e.text });
+      state.picked[e.kind] = e.key;
+      if (e.kind === activeTab) renderPreview();
+      else document.querySelector(`.tab[data-tab="${e.kind}"]`).classList.add('fresh');
+      break;
+    }
+
+    case 'permission_request':
+      state.permissions.set(e.id, e);
+      addLog(e.agent, `${agentOf(e.agent).name}가 승인을 기다립니다: ${e.title}`, at);
+      renderApprovals();
+      break;
+
+    case 'permission_resolved':
+      state.permissions.delete(e.id);
+      addLog(null, e.allowed ? '요청을 허용했습니다.' : '요청을 거부했습니다.', at);
+      renderApprovals();
+      break;
+
+    case 'run_done':
+      state.status = e.ok ? 'done' : 'error';
+      state.cost = e.costUsd;
+      if (!e.ok) state.message = e.result || '작업이 실패했습니다.';
+      state.artifacts.summary.set('result', { title:'최종 요약', lang:'결과', text:e.result || '(요약 없음)' });
+      state.picked.summary = 'result';
+      finishRun(at);
+      addLog(null, `${e.ok ? '모든 작업이 완료되었습니다' : '작업이 실패로 끝났습니다'}. (${e.turns}턴, $${e.costUsd.toFixed(4)})`, at, !e.ok);
+      if (!replaying) selectTab('summary');
+      else document.querySelector('.tab[data-tab="summary"]').classList.add('fresh');
+      break;
+
+    case 'run_error':
+      state.status = 'error';
+      state.message = e.message;
+      finishRun(at);
+      addLog(null, `오류: ${e.message}`, at, true);
+      break;
+
+    case 'run_aborted':
+      state.status = 'aborted';
+      finishRun(at);
+      addLog(null, '사용자가 작업을 중지했습니다.', at, true);
+      break;
+  }
+
+  if (e.agent && state.agents[e.agent]) renderAgent(e.agent);
+  renderRun();
+}
+
+/* ============================================================
+ * 서버 연결
+ * ============================================================ */
+let connected = false;
+const socket = io({ transports:['websocket'] });
+
+function setConn(kind, text) {
+  $('#connPill').className = `pill ${kind}`;
+  $('#connText').textContent = text;
+}
+
+socket.on('connect', () => {
+  connected = true;
+  setConn('ok', '서버 연결됨');
+  renderRun();
+});
+socket.on('disconnect', () => {
+  connected = false;
+  setConn('bad', '서버 연결 끊김');
+  renderRun();
+});
+socket.on('connect_error', () => {
+  connected = false;
+  setConn('bad', '서버에 연결할 수 없음');
+  renderRun();
+});
+
+socket.on('hello', snap => {
+  $('#workspacePath').textContent = snap.workspace;
+  $('#keyPill').hidden = snap.hasApiKey;
+  $('#permHint').textContent = snap.permissionMode === 'acceptEdits'
+    ? '작업 폴더 안의 파일 수정은 자동 허용, 명령 실행은 여기서 승인합니다.'
+    : '파일 수정과 명령 실행 모두 여기서 승인합니다.';
+
+  applyAgents(snap.agents);
+  if (snap.settings) applySettings(snap.settings);
+
+  // 새로고침하거나 다시 연결되면 지금까지의 이벤트로 화면을 복원한다.
+  resetState(false);
+  state.workspace = snap.workspace;
+  state.permissionMode = snap.permissionMode;
+  resetLog();
+  replaying = true;
+  try { snap.events.forEach(handleEvent); }
+  finally { replaying = false; }
+  AGENTS.forEach(a => renderAgent(a.id));
+  renderPlan();
+  renderApprovals();
+  renderPreview();
+  renderRun();
+});
+
+socket.on('agent-event', handleEvent);
+socket.on('agents-changed', payload => applyAgents(payload && payload.agents));
+
+/* ============================================================
+ * 입력
+ * ============================================================ */
+function showError(msg) { const el = $('#cmdError'); el.textContent = msg; el.hidden = false; }
+function hideError() { $('#cmdError').hidden = true; }
+
+
+/* ============================================================
+ * 명령 첨부 (이미지 / 파일) — /api/uploads 로 올린 뒤 command에 경로를 실어 보낸다
+ * ============================================================ */
+const MAX_ATTACH = 10, MAX_ATTACH_BYTES = 1024 * 1024 * 1024; // 1GB
+const ACCEPT_EXT = /\.(png|jpe?g|gif|webp|pdf|txt|md|mdx|csv|tsv|json|ya?ml|xml|toml|html|css|scss|jsx?|tsx?|mjs|cjs|py|java|kt|go|rs|rb|php|c|h|cpp|hpp|cs|swift|sql|sh|log|svg)$/i;
+let pendingFiles = [];   // [{ file, url }]
+const fmtBytes = n => n < 1024 ? `${n}B` : n < 1048576 ? `${(n / 1024).toFixed(0)}KB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)}MB` : `${(n / 1073741824).toFixed(2)}GB`;
+const isImg = f => /^image\/(png|jpeg|gif|webp)$/.test(f.type);
+
+function chipEl(a, onRemove) {
+  const li = document.createElement('li');
+  li.className = 'chip';
+  li.title = `${a.name} (${fmtBytes(a.size)})`;
+  if (a.kind === 'image' && a.url) {
+    const img = document.createElement('img'); img.src = a.url; img.alt = a.name; li.append(img);
+  } else {
+    const s = document.createElement('span'); s.className = 'ficon'; s.innerHTML = icon('file2', 16); li.append(s);
+  }
+  const name = document.createElement('span'); name.className = 'cname'; name.textContent = a.name; li.append(name);
+  const size = document.createElement('small'); size.textContent = fmtBytes(a.size); li.append(size);
+  if (onRemove) {
+    const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'rm'; rm.textContent = '×'; rm.setAttribute('aria-label', `${a.name} 제거`);
+    rm.addEventListener('click', onRemove); li.append(rm);
+  }
+  return li;
+}
+
+function renderPending() {
+  const list = $('#attachList');
+  list.replaceChildren(...pendingFiles.map((p, i) => chipEl({ name:p.file.name, size:p.file.size, kind:isImg(p.file) ? 'image' : 'file', url:p.url }, () => {
+    if (p.url) URL.revokeObjectURL(p.url);
+    pendingFiles.splice(i, 1);
+    renderPending();
+  })));
+  const c = $('#attachCount');
+  c.hidden = pendingFiles.length === 0;
+  c.textContent = pendingFiles.length;
+}
+
+function addFiles(files) {
+  hideError();
+  for (let file of Array.from(files)) {
+    if (pendingFiles.length >= MAX_ATTACH) { showError(`첨부는 최대 ${MAX_ATTACH}개까지 가능합니다.`); break; }
+    if (!file.name && isImg(file)) file = new File([file], `clipboard-${Date.now()}.png`, { type:file.type });
+    if (!ACCEPT_EXT.test(file.name)) { showError(`허용하지 않는 파일 형식입니다: ${file.name}`); continue; }
+    if (file.size > MAX_ATTACH_BYTES) { showError(`${file.name}: ${fmtBytes(MAX_ATTACH_BYTES)}를 넘는 파일은 첨부할 수 없습니다.`); continue; }
+    pendingFiles.push({ file, url:isImg(file) ? URL.createObjectURL(file) : null });
+  }
+  renderPending();
+}
+
+async function uploadPending() {
+  if (!pendingFiles.length) return [];
+  const form = new FormData();
+  pendingFiles.forEach(p => form.append('files', p.file, p.file.name));
+  const res = await fetch('/api/uploads', { method:'POST', body:form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(Array.isArray(data.message) ? data.message.join(', ') : (data.message || `업로드 실패 (${res.status})`));
+  return data.files || [];
+}
+
+function renderRunAttach() {
+  const ul = $('#runAttach');
+  const list = (state.attachments || []).map(a => ({ ...a, url:a.kind === 'image' ? `/${a.path}` : null }));
+  ul.hidden = list.length === 0;
+  ul.replaceChildren(...list.map(a => chipEl(a)));
+}
+
+$('#attachBtn').addEventListener('click', () => $('#fileInput').click());
+$('#fileInput').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
+cmd.addEventListener('paste', e => {
+  const files = Array.from(e.clipboardData.files || []);
+  if (files.length) { e.preventDefault(); addFiles(files); }
+});
+const cmdRow = cmd.closest('.command-row');
+cmdRow.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); cmdRow.classList.add('drag'); } });
+cmdRow.addEventListener('dragleave', () => cmdRow.classList.remove('drag'));
+cmdRow.addEventListener('drop', e => { e.preventDefault(); cmdRow.classList.remove('drag'); addFiles(e.dataTransfer.files); });
+
+async function startOrStop() {
+  if (!connected) { showError('서버에 연결되어 있지 않습니다. 서버가 켜져 있는지 확인하세요.'); return; }
+  if (state.status === 'running') { socket.emit('interrupt'); return; }
+  const prompt = cmd.value.trim();
+  if (!prompt && !pendingFiles.length) { showError('명령을 입력하세요.'); cmd.focus(); return; }
+  hideError();
+  runBtn.disabled = true;
+  let attachments = [];
+  try { attachments = await uploadPending(); }
+  catch (err) { runBtn.disabled = !connected; showError(err.message); return; }
+  socket.emit('command', { prompt, attachments }, res => {
+    runBtn.disabled = !connected;
+    if (!res || !res.ok) { showError((res && res.error) || '명령을 보내지 못했습니다.'); return; }
+    if (/^\/[a-zA-Z]/.test(prompt)) cmd.value = '';
+    pendingFiles.forEach(p => p.url && URL.revokeObjectURL(p.url));
+    pendingFiles = [];
+    renderPending();
+  });
+}
+
+
+/* ============================================================
+ * 슬래시 명령 (/model, /effort, /help ...) — 서버가 처리하고 command_result로 답한다
+ * ============================================================ */
+function addCommandLog(command, text, at, bad) {
+  const list = $('#log');
+  const empty = list.querySelector('.empty');
+  if (empty) empty.remove();
+  const li = document.createElement('li');
+  li.className = `cmd${bad ? ' bad' : ''}`;
+  const time = document.createElement('time');
+  time.textContent = `[${clock(at)}]`;
+  const code = document.createElement('code');
+  code.textContent = command;
+  const pre = document.createElement('pre');
+  pre.textContent = text;
+  li.append(time, code, pre);
+  list.append(li);
+  while (list.children.length > 500) list.firstElementChild.remove();
+  if (!replaying) list.scrollTop = list.scrollHeight;
+}
+
+let runSettings = null;
+function applySettings(s) {
+  runSettings = s;
+  $('#modelPillValue').textContent = (s.model || '기본') + (s.effort ? ` · ${s.effort}` : '');
+}
+
+let slashCommands = null;   // /api/commands 캐시
+let slashIndex = 0;
+const slashMenu = $('#slashMenu');
+
+function slashQuery() {
+  const m = /^\/([\w-]*)$/.exec(cmd.value);
+  return m ? m[1].toLowerCase() : null;
+}
+function slashItems() {
+  const q = slashQuery();
+  if (q === null || !slashCommands) return [];
+  const starts = slashCommands.filter(c => c.name.startsWith(q));
+  const contains = q ? slashCommands.filter(c => !c.name.startsWith(q) && c.name.includes(q)) : [];
+  return [...starts, ...contains].slice(0, 12);
+}
+function renderSlashMenu() {
+  const q = slashQuery();
+  if (q === null) { slashMenu.hidden = true; return; }
+  slashMenu.hidden = false;
+  if (!slashCommands) {
+    slashMenu.innerHTML = '<div class="foot">명령 목록을 불러오는 중...</div>';
+    fetch('/api/commands').then(r => r.json()).then(d => { slashCommands = d.commands || []; renderSlashMenu(); }).catch(() => { slashCommands = []; renderSlashMenu(); });
+    return;
+  }
+  const items = slashItems();
+  slashIndex = Math.min(slashIndex, Math.max(0, items.length - 1));
+  slashMenu.replaceChildren(...items.map((c, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = i === slashIndex ? 'on' : '';
+    b.innerHTML = `<code>/${c.name} <small></small></code><span></span>${c.source === 'sdk' ? '<em>Claude Code</em>' : ''}`;
+    b.querySelector('small').textContent = c.argumentHint || '';
+    b.querySelector('span').textContent = c.description;
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.addEventListener('click', () => pickSlash(c));
+    b.addEventListener('mouseenter', () => { slashIndex = i; renderSlashMenu(); });
+    return b;
+  }));
+  const foot = document.createElement('div');
+  foot.className = 'foot';
+  foot.textContent = items.length ? '↑↓ 이동 · Tab/Enter 선택 · Esc 닫기' : `일치하는 명령이 없습니다. 그대로 보내면 Claude Code에 /${q} 로 전달됩니다.`;
+  slashMenu.append(foot);
+}
+function pickSlash(c) {
+  cmd.value = `/${c.name}${c.argumentHint ? ' ' : ''}`;
+  slashMenu.hidden = true;
+  cmd.focus();
+}
+cmd.addEventListener('input', () => { slashIndex = 0; renderSlashMenu(); });
+cmd.addEventListener('blur', () => { setTimeout(() => { slashMenu.hidden = true; }, 120); });
+cmd.addEventListener('focus', renderSlashMenu);
+cmd.addEventListener('keydown', e => {
+  if (slashMenu.hidden) return;
+  const items = slashItems();
+  if (e.key === 'ArrowDown' && items.length) { e.preventDefault(); slashIndex = (slashIndex + 1) % items.length; renderSlashMenu(); }
+  else if (e.key === 'ArrowUp' && items.length) { e.preventDefault(); slashIndex = (slashIndex - 1 + items.length) % items.length; renderSlashMenu(); }
+  else if ((e.key === 'Tab' || e.key === 'Enter') && items.length && !e.shiftKey) {
+    // 이미 명령 이름을 다 친 상태에서 Enter면 완성 대신 그대로 보낸다
+    if (e.key === 'Enter' && items[slashIndex].name === slashQuery()) { slashMenu.hidden = true; return; }
+    e.preventDefault(); pickSlash(items[slashIndex]);
+  }
+  else if (e.key === 'Escape') { slashMenu.hidden = true; }
+});
+
+
+/* /model 처럼 인자 없이 부른 명령의 선택 창 */
+const choiceDialog = $('#choiceDialog');
+let choice = null, choiceIndex = 0;
+function renderChoice() {
+  $('#choiceList').replaceChildren(...choice.options.map((o, i) => {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = i === choiceIndex ? 'on' : '';
+    b.innerHTML = `<span class="num">${i < 9 ? i + 1 : ''}</span><span style="min-width:0;flex:1"><b></b><small></small></span>`;
+    const label = b.querySelector('b');
+    label.textContent = o.label;
+    if (o.current) { const em = document.createElement('em'); em.textContent = '현재'; label.append(em); }
+    b.querySelector('small').textContent = o.description || '';
+    if (!o.description) b.querySelector('small').remove();
+    b.addEventListener('mouseenter', () => { choiceIndex = i; renderChoice(); });
+    b.addEventListener('click', () => pickChoice(o.value));
+    li.append(b);
+    return li;
+  }));
+}
+function openChoice(c) {
+  choice = c;
+  const cur = c.options.findIndex(o => o.current);
+  choiceIndex = cur >= 0 ? cur : 0;
+  $('#choiceCmd').textContent = c.command;
+  $('#choiceTitle').textContent = c.title;
+  renderChoice();
+  choiceDialog.showModal();
+}
+function pickChoice(value) {
+  const c = choice;
+  choice = null;
+  choiceDialog.close();
+  if (c && value !== null && connected) socket.emit('command', { prompt: `${c.command} ${value}` }, () => {});
+}
+choiceDialog.addEventListener('keydown', e => {
+  if (!choice) return;
+  const n = choice.options.length;
+  if (e.key === 'ArrowDown') { e.preventDefault(); choiceIndex = (choiceIndex + 1) % n; renderChoice(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); choiceIndex = (choiceIndex - 1 + n) % n; renderChoice(); }
+  else if (e.key === 'Enter') { e.preventDefault(); pickChoice(choice.options[choiceIndex].value); }
+  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= n) { e.preventDefault(); pickChoice(choice.options[Number(e.key) - 1].value); }
+});
+choiceDialog.addEventListener('cancel', () => { choice = null; });
+choiceDialog.addEventListener('click', e => { if (e.target === choiceDialog) { choice = null; choiceDialog.close(); } });
+
+runBtn.addEventListener('click', startOrStop);
+cmd.addEventListener('keydown', e => {
+  if (e.defaultPrevented) return; // 자동완성 메뉴가 먼저 처리한 키
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startOrStop(); }
+  // 슬래시 명령은 한 줄이므로 Enter만 눌러도 보낸다 (메뉴가 닫혀 있을 때)
+  else if (e.key === 'Enter' && !e.shiftKey && slashMenu.hidden && /^\/[a-zA-Z]/.test(cmd.value)) { e.preventDefault(); startOrStop(); }
+});
+cmd.addEventListener('input', hideError);
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => selectTab(tab.dataset.tab));
+  tab.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const order = ['code', 'test', 'doc', 'summary'];
+    const i = order.indexOf(activeTab) + (e.key === 'ArrowRight' ? 1 : -1);
+    selectTab(order[(i + order.length) % order.length], true);
+  });
+});
+$('#filePick').addEventListener('change', e => { state.picked[activeTab] = e.target.value; expanded = false; renderPreview(); });
+$('#expandBtn').addEventListener('click', () => { expanded = !expanded; renderPreview(); });
+$('#clearLog').addEventListener('click', resetLog);
+
+setInterval(() => {
+  if (state.status !== 'running') return;
+  renderRun();
+  AGENTS.forEach(a => { if (state.agents[a.id].status === 'running') renderAgent(a.id); });
+}, 1000);
+
+
+/* ============================================================
+ * 에이전트 편집 (추가 / 수정 / 삭제) — 서버 /api/agents
+ * ============================================================ */
+let RAW_AGENTS = [];              // 서버가 준 원본 AgentConfig 목록 (편집 폼 초기값용)
+const TOOLS = [['Read','파일 읽기'],['Glob','파일 찾기'],['Grep','내용 검색'],['Edit','파일 수정'],['Write','파일 생성'],['Bash','명령 실행'],['WebSearch','웹 검색'],['WebFetch','웹 페이지 읽기']];
+const ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
+const editor = $('#agentEditor');
+const ed = {
+  title:$('#edTitle'), avatar:$('#edAvatar'), name:$('#edName'), color:$('#edColor'), short:$('#edShort'), id:$('#edId'),
+  role:$('#edRole'), task:$('#edTask'), desc:$('#edDesc'), room:$('#edRoom'), tools:$('#edTools'),
+  search:$('#edPokeSearch'), grid:$('#edPokeGrid'), pick:$('#edPokePick'), sdkDesc:$('#edSdkDesc'), prompt:$('#edPrompt'),
+  error:$('#edError'), del:$('#edDelete'), reset:$('#edReset'), save:$('#edSave')
+};
+let editing = null;               // null = 추가, 아니면 수정 중인 id
+let idTouched = false;
+let pokemon = { id:133, name:'eevee' };
+let pokeList = null;
+let pokeLimit = 120;
+
+ed.tools.innerHTML = TOOLS.map(([t, d]) => `<label><input type="checkbox" name="tools" value="${t}"><code>${t}</code><small>${d}</small></label>`).join('');
+
+const slugify = t => t.toLowerCase().replace(/agent/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+
+function loadPokeList() {
+  if (pokeList) return Promise.resolve(pokeList);
+  return fetch('https://pokeapi.co/api/v2/pokemon?limit=1025').then(r => r.json())
+    .then(d => d.results.map(r => ({ id:Number((r.url.match(/\/(\d+)\/?$/) || [])[1]), name:r.name })).filter(p => p.id))
+    .catch(() => Array.from({ length:151 }, (_, i) => ({ id:i + 1, name:`#${i + 1}` })))
+    .then(list => (pokeList = list));
+}
+
+function renderPokeGrid() {
+  const q = ed.search.value.trim().toLowerCase();
+  const list = (pokeList || []).filter(p => !q || p.name.includes(q) || String(p.id) === q || String(p.id).startsWith(q));
+  ed.grid.style.setProperty('--agent', ed.color.value);
+  if (!pokeList) { ed.grid.innerHTML = '<p class="empty">도감을 불러오는 중...</p>'; return; }
+  if (!list.length) { ed.grid.innerHTML = '<p class="empty">검색 결과가 없습니다.</p>'; return; }
+  ed.grid.replaceChildren(...list.slice(0, pokeLimit).map(p => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.title = `#${p.id} ${p.name}`;
+    b.className = p.id === pokemon.id ? 'on' : '';
+    b.innerHTML = `<img src="${spriteUrl(p.id)}" alt="${p.name}" loading="lazy">`;
+    b.addEventListener('click', () => { pokemon = p; renderPokeGrid(); renderPokePick(); });
+    return b;
+  }));
+  ed.grid.dataset.total = list.length;
+}
+function renderPokePick() {
+  ed.pick.textContent = `선택: #${pokemon.id} ${pokemon.name}`;
+  ed.avatar.style.setProperty('--agent', ed.color.value);
+  ed.avatar.innerHTML = `<img src="${spriteUrl(pokemon.id)}" alt="">`;
+}
+ed.grid.addEventListener('scroll', () => {
+  if (ed.grid.scrollHeight - ed.grid.scrollTop - ed.grid.clientHeight < 120 && pokeLimit < Number(ed.grid.dataset.total || 0)) {
+    pokeLimit += 120; renderPokeGrid();
+  }
+});
+ed.search.addEventListener('input', () => { pokeLimit = 120; renderPokeGrid(); });
+ed.color.addEventListener('input', () => { renderPokePick(); renderPokeGrid(); });
+
+function openEditor(id) {
+  const src = id ? RAW_AGENTS.find(a => a.id === id) : null;
+  editing = src ? src.id : null;
+  idTouched = false;
+  ed.error.hidden = true;
+  ed.title.textContent = src ? `${src.name} 설정` : '에이전트 추가';
+  ed.name.value = src ? src.name : '';
+  ed.color.value = src ? src.color : '#60a5fa';
+  ed.short.value = src ? src.shortName : '';
+  ed.id.value = src ? src.id : '';
+  ed.id.disabled = !!src;
+  ed.role.value = src ? src.roleLabel : '';
+  ed.task.value = src ? src.taskLabel : '';
+  ed.desc.value = src ? src.description : '';
+  ed.room.value = src ? src.room : 'dev';
+  ed.sdkDesc.value = src ? src.sdkDescription : '';
+  ed.prompt.value = src ? src.prompt : '';
+  const tools = new Set(src ? src.tools : ['Read', 'Glob', 'Grep']);
+  ed.tools.querySelectorAll('input').forEach(i => { i.checked = tools.has(i.value); });
+  pokemon = src ? { id:src.pokemonId, name:src.pokemonName || `#${src.pokemonId}` } : { id:133, name:'eevee' };
+  ed.search.value = '';
+  pokeLimit = 120;
+  ed.del.hidden = !src;
+  ed.del.disabled = RAW_AGENTS.length <= 1;
+  ed.del.title = RAW_AGENTS.length <= 1 ? '에이전트는 최소 1개는 있어야 합니다' : '';
+  ed.save.textContent = src ? '저장' : '추가';
+  renderPokePick();
+  renderPokeGrid();
+  loadPokeList().then(renderPokeGrid);
+  editor.showModal();
+  ed.name.focus();
+}
+
+ed.name.addEventListener('input', () => {
+  if (!editing && !idTouched) ed.id.value = slugify(ed.name.value);
+  if (!ed.short.value || ed.short.dataset.auto === '1') { ed.short.value = ed.name.value.replace(/\s*Agent$/i, '').slice(0, 16); ed.short.dataset.auto = '1'; }
+});
+ed.short.addEventListener('input', () => { ed.short.dataset.auto = '0'; });
+ed.id.addEventListener('input', () => { idTouched = true; ed.id.value = ed.id.value.toLowerCase(); });
+
+function edFail(msg) { ed.error.textContent = msg; ed.error.hidden = false; }
+async function edCall(path, method, body) {
+  const res = await fetch(`/api/agents${path}`, { method, headers:{ 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(Array.isArray(data.message) ? data.message.join(', ') : (data.message || `요청 실패 (${res.status})`));
+  return data.agents;
+}
+function busy(on) { [ed.save, ed.del, ed.reset].forEach(b => { b.disabled = on; }); }
+
+$('#agentForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = ed.id.value.trim();
+  const form = {
+    id, sdkName:id,
+    name:ed.name.value.trim(), shortName:ed.short.value.trim(), roleLabel:ed.role.value.trim(), taskLabel:ed.task.value.trim(),
+    description:ed.desc.value.trim() || ed.role.value.trim(), room:ed.room.value, color:ed.color.value,
+    pokemonId:pokemon.id, pokemonName:pokemon.name,
+    tools:[...ed.tools.querySelectorAll('input:checked')].map(i => i.value),
+    sdkDescription:ed.sdkDesc.value.trim(), prompt:ed.prompt.value.trim()
+  };
+  if (editing) form.sdkName = (RAW_AGENTS.find(a => a.id === editing) || {}).sdkName || id;
+  if (!form.name) return edFail('이름을 입력하세요.');
+  if (!form.shortName) return edFail('짧은 이름을 입력하세요.');
+  if (!ID_RE.test(id)) return edFail('id는 영문 소문자로 시작하는 2~31자의 영문/숫자/하이픈이어야 합니다.');
+  if (!editing && RAW_AGENTS.some(a => a.id === id)) return edFail(`이미 있는 id입니다: ${id}`);
+  if (!form.roleLabel) return edFail('역할을 입력하세요.');
+  if (!form.taskLabel) return edFail('담당 작업명을 입력하세요.');
+  if (!form.tools.length) return edFail('도구를 하나 이상 선택하세요.');
+  if (!form.sdkDescription) return edFail('총괄 에이전트에게 보여줄 설명을 입력하세요.');
+  if (!form.prompt) return edFail('시스템 프롬프트를 입력하세요.');
+  busy(true);
+  try {
+    applyAgents(await edCall(editing ? `/${encodeURIComponent(editing)}` : '', editing ? 'PUT' : 'POST', form));
+    editor.close();
+  } catch (err) { edFail(err.message); }
+  finally { busy(false); }
+});
+ed.del.addEventListener('click', async () => {
+  if (!editing || !confirm(`'${ed.name.value}' 에이전트를 삭제할까요?`)) return;
+  busy(true);
+  try { applyAgents(await edCall(`/${encodeURIComponent(editing)}`, 'DELETE')); editor.close(); }
+  catch (err) { edFail(err.message); }
+  finally { busy(false); }
+});
+ed.reset.addEventListener('click', async () => {
+  if (!confirm('에이전트 목록을 기본 7종으로 되돌릴까요? 직접 만든 에이전트는 삭제됩니다.')) return;
+  busy(true);
+  try { applyAgents(await edCall('/reset', 'POST')); editor.close(); }
+  catch (err) { edFail(err.message); }
+  finally { busy(false); }
+});
+$('#edCancel').addEventListener('click', () => editor.close());
+$('#edClose').addEventListener('click', () => editor.close());
+$('#addAgentBtn').addEventListener('click', () => openEditor(null));
+editor.addEventListener('click', e => { if (e.target === editor) editor.close(); });
+
+buildAgentDom();
+renderRun();
+resetLog();
+renderPreview();
+// 소켓 hello가 오기 전에도 목록을 보여준다 (소켓이 늦거나 막혀도 카드는 뜨게)
+fetch('/api/agents').then(r => r.json()).then(d => { if (!AGENTS.length) applyAgents(d.agents); }).catch(() => {});
+</script>
+</body>
+</html>

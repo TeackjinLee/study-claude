@@ -1,0 +1,56 @@
+/**
+ * 서버 → 대시보드로 보내는 이벤트.
+ * 화면은 이 이벤트만 보고 그려지므로, SDK 메시지 형식이 바뀌어도 message-mapper.ts만 고치면 된다.
+ */
+import type { Attachment } from './attachments.js';
+import type { RunSettings } from './settings.service.js';
+import type { CommandChoices } from './slash-commands.service.js';
+
+/** 대시보드에서 편집 가능한 에이전트 id (AgentRegistryService). */
+export type UiAgentId = string;
+/** 'main'은 서브에이전트에게 일을 나눠주는 총괄 에이전트 */
+export type AgentRef = UiAgentId | 'main';
+
+export type PlanItem = { text: string; status: 'pending' | 'in_progress' | 'completed' };
+
+export type RunMode = 'chat' | 'cowork';
+export const RUN_MODES: readonly RunMode[] = ['chat', 'cowork'];
+
+export type ArtifactKind = 'code' | 'test' | 'doc' | 'image';
+/** Codex 협업자에게 보내는 요청 종류. discuss/review는 읽기 전용, implement만 파일 수정 가능 */
+/** image: 총괄이 쓴 프롬프트로 Codex가 내장 이미지 생성 도구를 써서 그림 파일을 만든다 */
+export type CodexMode = 'discuss' | 'review' | 'implement' | 'image';
+
+export type UiEventBody =
+  /** mode: chat=대화만(읽기 전용, 세션 이어감) / cowork=총괄+서브에이전트+Codex로 실제 작업 (기본) */
+  | { type: 'run_start'; command: string; workspace: string; attachments?: Attachment[]; mode?: RunMode }
+  /** 슬래시 명령(/model 등)을 서버가 처리한 결과 */
+  | { type: 'command_result'; command: string; ok: boolean; text: string; choices?: CommandChoices }
+  /** 실행 설정이 바뀜 (/model, /effort ...) */
+  | { type: 'settings'; settings: RunSettings }
+  /** /clear: 화면의 로그/결과를 비우라는 신호 */
+  | { type: 'cleared' }
+  | { type: 'session'; sessionId: string; model: string }
+  | { type: 'plan'; items: PlanItem[] }
+  | { type: 'main_note'; text: string }
+  | { type: 'api_retry'; attempt: number; maxRetries: number; delayMs: number; reason: string }
+  | { type: 'api_error'; reason: string }
+  | { type: 'agent_start'; agent: UiAgentId; callId: string; task: string }
+  | { type: 'agent_progress'; agent: UiAgentId; callId: string; text: string }
+  | { type: 'agent_note'; agent: UiAgentId; text: string }
+  | { type: 'agent_done'; agent: UiAgentId; callId: string; ok: boolean; summary: string }
+  /** 에이전트 사이의 대화 한 마디 (총괄→Codex, Codex→총괄, 사용자(/codex)→Codex) */
+  | { type: 'agent_message'; from: AgentRef | 'user'; to: AgentRef; mode: CodexMode; text: string }
+  /** /codex 직접 대화 시작/끝 — 실행(run)이 아니어도 화면에 중지 버튼을 보여주기 위해 */
+  | { type: 'codex_direct'; active: boolean }
+  | { type: 'action_start'; agent: AgentRef; actionId: string; tool: string; label: string }
+  | { type: 'action_done'; agent: AgentRef; actionId: string; ok: boolean }
+  /** image 종류는 text가 작업 폴더 기준 경로이고 url로 파일을 받아 볼 수 있다 */
+  | { type: 'artifact'; kind: ArtifactKind; key: string; title: string; lang: string; text: string; url?: string }
+  | { type: 'permission_request'; id: string; agent: AgentRef; tool: string; title: string; detail: string; canAlwaysAllow: boolean }
+  | { type: 'permission_resolved'; id: string; allowed: boolean }
+  | { type: 'run_done'; ok: boolean; result: string; costUsd: number; turns: number; durationMs: number }
+  | { type: 'run_error'; message: string }
+  | { type: 'run_aborted' };
+
+export type UiEvent = UiEventBody & { at: number };

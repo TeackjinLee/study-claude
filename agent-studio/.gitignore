@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+*.tsbuildinfo
+workspace/*
+!workspace/.gitkeep
+data/agents.json
+data/settings.json
+data/cost.json
+.DS_Store
+.idea/
