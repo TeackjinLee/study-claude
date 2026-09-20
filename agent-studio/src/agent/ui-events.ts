@@ -43,13 +43,16 @@ export type UiEventBody =
   | { type: 'agent_message'; from: AgentRef | 'user'; to: AgentRef; mode: CodexMode; text: string }
   /** /codex 직접 대화 시작/끝 — 실행(run)이 아니어도 화면에 중지 버튼을 보여주기 위해 */
   | { type: 'codex_direct'; active: boolean }
+  /** /talk — 사용자(Master)가 사무실에서 Claude 서브에이전트에게 직접 말을 걸어 대화 중 */
+  | { type: 'direct_talk'; active: boolean; agent: UiAgentId }
   | { type: 'action_start'; agent: AgentRef; actionId: string; tool: string; label: string }
   | { type: 'action_done'; agent: AgentRef; actionId: string; ok: boolean }
   /** image 종류는 text가 작업 폴더 기준 경로이고 url로 파일을 받아 볼 수 있다 */
   | { type: 'artifact'; kind: ArtifactKind; key: string; title: string; lang: string; text: string; url?: string }
   | { type: 'permission_request'; id: string; agent: AgentRef; tool: string; title: string; detail: string; canAlwaysAllow: boolean }
   | { type: 'permission_resolved'; id: string; allowed: boolean }
-  | { type: 'run_done'; ok: boolean; result: string; costUsd: number; turns: number; durationMs: number }
+  /** suggestions: 총괄이 요약 끝에 붙인 다음 추천 명령 (명령 입력창의 버튼으로 표시) */
+  | { type: 'run_done'; ok: boolean; result: string; costUsd: number; turns: number; durationMs: number; suggestions?: string[] }
   | { type: 'run_error'; message: string }
   | { type: 'run_aborted' };
 

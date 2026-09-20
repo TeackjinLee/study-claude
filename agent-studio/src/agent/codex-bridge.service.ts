@@ -12,7 +12,10 @@ import { ARTIFACT_MAX_CHARS, TEST_COMMAND, artifactKindOf, clip, isImagePath, la
 import type { CodexMode, UiAgentId, UiEventBody } from './ui-events.js';
 
 export const isCodexTool = (name: string) => name.startsWith(`mcp__${CODEX_MCP_SERVER}__ask_`);
-export const sandboxFor = (mode: CodexMode): ThreadOptions['sandboxMode'] => (mode === 'implement' || mode === 'image' ? 'workspace-write' : 'read-only');
+/** review만 읽기 전용. discuss도 요청받으면 파일을 고칠 수 있게 작업 폴더 쓰기를 허용한다 */
+export const sandboxFor = (mode: CodexMode): ThreadOptions['sandboxMode'] => (mode === 'review' ? 'read-only' : 'workspace-write');
+/** 파일을 고칠 수 있는 모드 (권한 확인 대상) */
+export const codexModeWrites = (mode: CodexMode) => mode !== 'review';
 
 /** 총괄 도구가 돌려받는 Codex 답변 최대 길이 (총괄의 컨텍스트 보호) */
 const REPLY_MAX_CHARS = 12000;
@@ -29,7 +32,7 @@ export interface CodexSessionCtx {
 type AgentThread = { threadId: string | null; introduced: boolean; queue: Promise<unknown> };
 
 const MODE_NOTE: Record<CodexMode, string> = {
-  discuss: '설계/방향 토론이다. 파일은 읽기만 하고 수정하지 마라.',
+  discuss: '대화/작업 요청이다. 질문이면 답하고, 파일 수정을 요청받았으면 작업 폴더 안에서 필요한 최소 범위로 고친 뒤 바꾼 파일 경로를 보고해라. 요청받지 않은 파일은 건드리지 마라.',
   review: '코드 리뷰 요청이다. 파일은 읽기만 하고 수정하지 마라. 문제를 심각도 순으로 정리해라.',
   implement: '구현 요청이다. 필요한 최소 범위로 파일을 수정하고, 바꾼 파일 경로와 내용을 보고해라.',
   image:

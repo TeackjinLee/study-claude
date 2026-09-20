@@ -52,13 +52,24 @@ export function PermissionBanner() {
                 거부
               </button>
               {p.canAlwaysAllow && (
-                <button
-                  type="button"
-                  onClick={() => reply(p.id, true, true)}
-                  className="rounded-md border border-line px-3 py-1 text-[12px] font-semibold text-slate-200 hover:border-accent/60 hover:text-white"
-                >
-                  항상 허용
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => reply(p.id, true, 'all')}
+                    title="이번 명령이 끝날 때까지 어떤 도구든 다시 묻지 않습니다"
+                    className="rounded-md border border-line px-3 py-1 text-[12px] font-semibold text-slate-200 hover:border-accent/60 hover:text-white"
+                  >
+                    이번 실행 모두 허용
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => reply(p.id, true, true)}
+                    title={`이번 명령이 끝날 때까지 ${p.tool} 은(는) 다시 묻지 않습니다`}
+                    className="rounded-md border border-line px-3 py-1 text-[12px] font-semibold text-slate-200 hover:border-accent/60 hover:text-white"
+                  >
+                    {p.tool} 계속 허용
+                  </button>
+                </>
               )}
               <button
                 type="button"

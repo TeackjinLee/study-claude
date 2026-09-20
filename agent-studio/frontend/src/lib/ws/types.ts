@@ -59,6 +59,10 @@ export interface CommandInfo {
   description: string;
   argumentHint: string;
   source: 'builtin' | 'sdk';
+  /** codex: 입력창이 Codex 대상(/codex ...)일 때만 뜨는 하위 명령 (`/codex /<name>`) */
+  scope?: 'codex';
+  /** 인자를 메뉴에서 고를 수 있는 명령의 선택지 (/model, /codex /model, /effort ...) */
+  choices?: CommandChoice[];
 }
 
 export interface RunResult {
@@ -67,6 +71,8 @@ export interface RunResult {
   costUsd?: number;
   turns?: number;
   durationMs?: number;
+  /** 총괄이 제안한 다음 추천 명령 (명령 입력창 버튼) */
+  suggestions?: string[];
 }
 
 /**
@@ -94,7 +100,9 @@ export type AgentSimEvent =
   | { type: 'run_error'; message: string }
   | { type: 'run_aborted' }
   /** /codex 직접 대화 진행 중 (실행이 아니어도 중지 버튼을 보여준다) */
-  | { type: 'codex_direct'; active: boolean };
+  | { type: 'codex_direct'; active: boolean }
+  /** 사용자(Master)가 에이전트에게 한 말 — 사무실에서 Master 말풍선으로 보여준다 */
+  | { type: 'master_say'; to: AgentRole; text: string };
 
 /** Mock/실제 소스가 공통으로 구현하는 추상화 인터페이스. */
 export interface AgentEventSource {
@@ -105,7 +113,8 @@ export interface AgentEventSource {
   /** 실행 중인 작업 중단 */
   interrupt(): void;
   /** 승인 요청에 응답 (always = 이번 세션 동안 같은 요청은 자동 허용) */
-  replyPermission(id: string, allowed: boolean, always: boolean): void;
+  /** always: true=이 도구를 이번 실행 동안 허용, 'all'=모든 도구를 이번 실행 동안 허용 */
+  replyPermission(id: string, allowed: boolean, always: boolean | 'all'): void;
   /** 자동완성용 슬래시 명령 목록 */
   listCommands(): Promise<CommandInfo[]>;
 }

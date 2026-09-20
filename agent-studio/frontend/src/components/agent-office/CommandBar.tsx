@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAgentStore } from '@/store/agentStore';
 import { ACCEPT, MAX_FILES, MAX_FILE_BYTES, formatBytes, isImageFile, uploadFiles, type Attachment } from '@/lib/uploads';
-import { ChatIcon, ClaudeMarkIcon, CodexMarkIcon, CoworkIcon, MicIcon, PaperclipIcon, SendIcon, StopIcon, TerminalIcon } from '@/components/ui/icons';
+import { ChatIcon, ClaudeMarkIcon, CodexMarkIcon, CoworkIcon, MicIcon, PaperclipIcon, SendIcon, StopIcon, TerminalIcon, XIcon } from '@/components/ui/icons';
+import { AgentAvatar } from './AgentAvatar';
 import { CommandControls } from './CommandControls';
 import { useSpeechInput } from '@/lib/useSpeechInput';
 import type { RunMode } from '@/lib/ws';
 import { AttachmentChips } from './AttachmentChips';
 import { SlashCommandMenu } from './SlashCommandMenu';
 
-const QUICK_COMMANDS = ['로그인 기능 만들어줘', '회원가입 기능 추가해줘', '배포해줘', '테스트 실행해줘'];
+const QUICK_COMMANDS = ['택시 차종 추가해줘', '트럭 제동 거리 튜닝해줘', '헤드리스 검증 4종 돌려줘', '도시에 신호등 교차로 추가해줘'];
 
 /** 명령을 받는 쪽. /codex 로 시작하면 Codex에게 직접, 아니면 Claude 총괄에게 */
 type Target = 'claude' | 'codex';
@@ -70,6 +71,7 @@ export function CommandBar() {
   const running = useAgentStore((s) => s.running);
   const hasCodex = useAgentStore((s) => s.defs.some((d) => d.provider === 'codex'));
   const commandMode = useAgentStore((s) => s.commandMode);
+  const suggestions = useAgentStore((s) => s.suggestions);
   const setCommandMode = useAgentStore((s) => s.setCommandMode);
   const target = targetOf(value);
   // 음성 입력: 확정된 문장을 입력창 끝에 이어 붙인다
@@ -83,6 +85,20 @@ export function CommandBar() {
   };
   const codexBusy = useAgentStore((s) => s.codexBusy);
   const interrupt = useAgentStore((s) => s.interrupt);
+  // 사무실에서 Master가 에이전트 옆에 서서 E(또는 클릭)를 누르면 이 입력이 그 에이전트에게 간다 (/talk)
+  const talkTarget = useAgentStore((s) => s.talkTarget);
+  const setTalkTarget = useAgentStore((s) => s.setTalkTarget);
+  const talkDef = useAgentStore((s) => (s.talkTarget ? s.defsById[s.talkTarget] : undefined));
+  const talking = !!talkDef && !value.trim().startsWith('/');
+  useEffect(() => {
+    const focus = () => textarea.current?.focus();
+    window.addEventListener('agent-studio:focus-command', focus);
+    return () => window.removeEventListener('agent-studio:focus-command', focus);
+  }, []);
+  // 대상 에이전트가 삭제되면 해제
+  useEffect(() => {
+    if (talkTarget && !talkDef) setTalkTarget(null);
+  }, [talkTarget, talkDef, setTalkTarget]);
 
   pendingRef.current = pending;
   // 언마운트 시 object URL 정리
@@ -150,7 +166,9 @@ export function CommandBar() {
       }
       setUploading(false);
     }
-    sendCommand(prompt, attachments);
+    // 에이전트에게 직접 말하기: 슬래시 명령이 아니면 /talk 로 감싼다
+    if (talkDef && !prompt.startsWith('/')) sendCommand(`/talk @${talkDef.sdkName} ${prompt}`, attachments);
+    else sendCommand(prompt, attachments);
     setValue('');
     setPending([]);
   };
@@ -202,6 +220,24 @@ export function CommandBar() {
               })}
             </div>
           )}
+          {talkDef && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold text-white"
+              style={{ borderColor: `${talkDef.color}88`, backgroundColor: `${talkDef.color}22` }}
+              title="사무실에서 Master가 이 에이전트에게 말하는 중입니다 (/talk). Esc 또는 ✕ 로 해제"
+            >
+              <AgentAvatar role={talkDef.id} size={16} />
+              {talkDef.shortName}에게 말하기
+              <button
+                type="button"
+                onClick={() => setTalkTarget(null)}
+                className="rounded-full p-0.5 text-slate-300 hover:bg-white/10 hover:text-white"
+                aria-label="대화 대상 해제"
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            </span>
+          )}
           {/* 누가 이 명령을 받는지: Claude 총괄 / Codex 직접 */}
           <div className="flex rounded-full border border-line bg-panel p-0.5" role="radiogroup" aria-label="명령 대상" title={style.hint}>
             {(Object.keys(TARGET_STYLE) as Target[]).map((t) => {
@@ -241,17 +277,23 @@ export function CommandBar() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
         <div className="relative flex min-h-[56px] flex-1 flex-col">
-          <SlashCommandMenu value={value} onPick={pickCommand} registerKeyHandler={registerKeyHandler} />
-          <span
-            className="pointer-events-none absolute left-2.5 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-md"
-            style={{ backgroundColor: `${style.color}26`, color: style.color }}
-            title={`${style.label}에게 보냅니다`}
-            aria-hidden
-          >
-            <style.Icon className="h-4 w-4" />
-          </span>
+          <SlashCommandMenu value={value} onPick={pickCommand} onSubmit={(text) => void submit(text)} registerKeyHandler={registerKeyHandler} />
+          {talking && talkDef ? (
+            <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center" aria-hidden>
+              <AgentAvatar role={talkDef.id} size={26} />
+            </span>
+          ) : (
+            <span
+              className="pointer-events-none absolute left-2.5 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-md"
+              style={{ backgroundColor: `${style.color}26`, color: style.color }}
+              title={`${style.label}에게 보냅니다`}
+              aria-hidden
+            >
+              <style.Icon className="h-4 w-4" />
+            </span>
+          )}
           <textarea
             ref={textarea}
             value={value}
@@ -265,6 +307,8 @@ export function CommandBar() {
                 e.preventDefault();
                 void submit();
               }
+              // 빈 입력에서 Esc: 에이전트 대화 대상 해제 → 다시 총괄에게
+              if (e.key === 'Escape' && talkTarget && !value.trim()) setTalkTarget(null);
             }}
             onPaste={(e) => {
               // 스크린샷 붙여넣기(Ctrl/Cmd+V) → 이미지 첨부
@@ -277,14 +321,17 @@ export function CommandBar() {
             placeholder={
               dragging
                 ? '여기에 놓으면 첨부됩니다'
-                : target === 'codex'
-                  ? '/codex 뒤에 Codex에게 할 말   ( review / implement / image 모드, @에이전트 지정 가능 )'
-                  : commandMode === 'chat'
-                    ? '무엇이든 물어보세요   ( 채팅: 파일 읽기만, 이전 대화를 이어갑니다 )'
-                    : '로그인 기능 만들어줘   ( / 로 명령, /codex 로 Codex에게 직접, 첨부는 버튼·드래그·붙여넣기 )'
+                : talking && talkDef
+                  ? `${talkDef.shortName}에게 할 말   ( Esc 로 해제, / 로 시작하면 일반 명령 )`
+                  : target === 'codex'
+                    ? '/codex 뒤에 Codex에게 할 말   ( review / implement / image 모드, @에이전트 지정 가능 )'
+                    : commandMode === 'chat'
+                      ? '무엇이든 물어보세요   ( 채팅: 파일 읽기만, 이전 대화를 이어갑니다 )'
+                      : '로그인 기능 만들어줘   ( / 로 명령, /codex 로 Codex에게 직접, 첨부는 버튼·드래그·붙여넣기 )'
             }
             rows={2}
             className={`min-h-[44px] w-full flex-1 resize-none rounded-xl border border-line bg-[#08101f]/80 py-2.5 pl-10 pr-3 text-[13px] text-slate-100 outline-none placeholder:text-slate-600 ${style.ring}`}
+            style={talking && talkDef ? { borderColor: `${talkDef.color}88`, boxShadow: `0 0 0 3px ${talkDef.color}22` } : undefined}
           />
         </div>
 
@@ -342,25 +389,47 @@ export function CommandBar() {
             title={style.hint}
           >
             <SendIcon className="h-4 w-4" />
-            {uploading ? '업로드 중...' : target === 'claude' && commandMode === 'chat' ? 'Claude에게 질문' : `${style.label}에게 전송`}
+            {uploading
+              ? '업로드 중...'
+              : talking && talkDef
+                ? `${talkDef.shortName}에게 말하기`
+                : target === 'claude' && commandMode === 'chat'
+                  ? 'Claude에게 질문'
+                  : `${style.label}에게 전송`}
           </button>
         </div>
 
         <CommandControls />
 
         <div>
-          <p className="mb-1.5 text-[11px] text-muted">예시 명령어</p>
+          <p className="mb-1.5 text-[11px] text-muted">{suggestions.length ? '다음 추천 작업 — 누르면 입력창에 채워집니다' : '예시 명령어'}</p>
           <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
-            {QUICK_COMMANDS.map((cmd) => (
-              <button
-                key={cmd}
-                type="button"
-                onClick={() => void submit(cmd)}
-                className="shrink-0 rounded-md border border-line bg-panel-2 px-2 py-1 text-[11px] text-slate-300 hover:border-accent/60 hover:text-white"
-              >
-                {cmd}
-              </button>
-            ))}
+            {suggestions.length
+              ? suggestions.map((cmd) => (
+                  <button
+                    key={cmd}
+                    type="button"
+                    onClick={() => {
+                      // 추천은 바로 보내지 않고 입력창에 넣어 고칠 수 있게 한다 (/codex 접두어는 유지)
+                      setValue((v) => (CODEX_PREFIX_RE.test(v) ? `/codex ${cmd}` : cmd));
+                      textarea.current?.focus();
+                    }}
+                    title={cmd}
+                    className="shrink-0 max-w-[260px] truncate rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-100 hover:border-emerald-400/60 hover:text-white"
+                  >
+                    → {cmd}
+                  </button>
+                ))
+              : QUICK_COMMANDS.map((cmd) => (
+                  <button
+                    key={cmd}
+                    type="button"
+                    onClick={() => void submit(cmd)}
+                    className="shrink-0 rounded-md border border-line bg-panel-2 px-2 py-1 text-[11px] text-slate-300 hover:border-accent/60 hover:text-white"
+                  >
+                    {cmd}
+                  </button>
+                ))}
           </div>
         </div>
       </div>

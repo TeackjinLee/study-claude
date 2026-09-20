@@ -3,14 +3,18 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { query, type CanUseTool, type PermissionResult, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { config } from '../config.js';
 import { AgentRegistryService } from './agent-registry.service.js';
+import type { AgentConfig } from './agents.config.js';
+import { clip, oneLine } from './artifact-utils.js';
 import { buildPromptContent, validateAttachments, type Attachment } from './attachments.js';
 import { SettingsService } from './settings.service.js';
 import { SlashCommandsService } from './slash-commands.service.js';
 import { CostTrackerService } from './cost-tracker.service.js';
-import { CodexBridgeService, isCodexTool } from './codex-bridge.service.js';
+import { CodexBridgeService, codexModeWrites, isCodexTool } from './codex-bridge.service.js';
 import { CodexAuthService } from '../auth/codex-auth.service.js';
 import { MessageMapper } from './message-mapper.js';
-import { RUN_MODES, type RunMode, type UiEvent, type UiEventBody } from './ui-events.js';
+import { RUN_MODES, type CodexMode, type RunMode, type UiEvent, type UiEventBody } from './ui-events.js';
+
+const modeOf = (v: unknown): CodexMode => (v === 'review' || v === 'implement' || v === 'image' ? v : 'discuss');
 
 type Listener = (event: UiEvent) => void;
 type PendingPermission = { tool: string; resolve: (allowed: boolean) => void };
@@ -22,7 +26,8 @@ const AUTO_ALLOWED_TOOLS = new Set([
 ]);
 
 /** '이번 작업 동안 항상 허용'을 제공하지 않는 도구 (매번 확인) */
-const ALWAYS_ASK_TOOLS = new Set(['Bash']);
+/** 허용 범위: true=이 도구를 이번 실행 동안, 'all'=모든 도구를 이번 실행 동안 */
+type AlwaysScope = boolean | 'all';
 
 const MAX_HISTORY = 3000;
 
@@ -33,12 +38,40 @@ const CHAT_DISALLOWED_TOOLS = [
   'Skill', 'EnterPlanMode', 'ExitPlanMode',
 ];
 
+/** 직접 대화(/talk)에서 에이전트에게 주지 않는 도구. 서브에이전트 호출과 할 일 목록은 총괄 실행에서만 쓴다 */
+const TALK_ALWAYS_DISALLOWED = ['Agent', 'Task', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskOutput', 'TaskStop', 'Skill', 'EnterPlanMode', 'ExitPlanMode'];
+/** 에이전트 정의의 tools에 없으면 막는 도구 (편집기의 체크박스에 대응) */
+const TALK_GATED_TOOLS: Record<string, string[]> = {
+  Edit: ['Edit', 'MultiEdit', 'NotebookEdit'],
+  Write: ['Write'],
+  Bash: ['Bash', 'BashOutput', 'KillShell'],
+  WebSearch: ['WebSearch'],
+  WebFetch: ['WebFetch'],
+};
+
+/** /talk — 사용자가 사무실에서 에이전트에게 직접 말을 걸었을 때의 지시 */
+const talkPrompt = (agent: AgentConfig) => `
+# ${agent.name} — 사용자와 직접 대화
+${agent.prompt}
+
+## 지금 상황
+지금은 총괄 에이전트가 시킨 작업이 아니라, 사용자(Master)가 사무실에서 너에게 직접 말을 건 것이다. 동료와 대화하듯 한국어로 핵심부터 간결하게 답한다.
+- 질문이면 네 담당 분야의 관점에서 답하고, 작업을 부탁받았으면 네 도구 범위 안에서 요청받은 것만 한다. 담당이 아닌 일은 어느 에이전트에게 말하면 좋을지 알려준다.
+- 사용자와의 이전 대화를 기억하고 이어서 답한다. 파일을 바꿨으면 경로를 말해준다.
+- 할 일 목록이나 다른 에이전트 호출은 하지 않는다.
+`;
+
 const CHAT_PROMPT = `
 # 채팅 모드
 너는 AI Agent Studio 대시보드에서 사용자와 대화하는 상대다. 지금은 작업 모드(Cowork)가 아니라 채팅 모드다.
 - 질문에 답하고, 코드를 설명하고, 방향을 상의한다. 작업 폴더의 파일은 읽기와 검색만 할 수 있다.
 - 파일 수정, 명령 실행, 서브에이전트 호출, 할 일 목록 작성은 할 수 없고 하지 않는다. 사용자가 실제 작업(구현·수정·실행)을 원하면 "Cowork 모드로 바꿔서 요청해 주세요"라고 한 줄로 안내하고, 대신 방법이나 계획을 설명해 준다.
 - 한국어로, 핵심부터 간결하게 답한다. 이전 대화를 기억하고 이어서 답한다.
+- 답 맨 끝에 사용자가 다음에 물어보거나 시킬 만한 것 3개를 아래 형식으로 붙인다. 각 줄은 입력창에 그대로 넣을 수 있는 한국어 한 문장(40자 이내). 실제 작업이 필요한 항목이면 Cowork에서 할 명령으로 적어도 된다.
+<next-steps>
+- server.js의 에러 처리 방식을 설명해줘
+- 비밀번호 길이 검증을 추가해줘
+</next-steps>
 `;
 
 @Injectable()
@@ -47,12 +80,18 @@ export class AgentRunnerService implements OnModuleDestroy {
   private readonly listeners = new Set<Listener>();
   private readonly pending = new Map<string, PendingPermission>();
   private readonly sessionAllowed = new Set<string>();
+  /** "이번 실행 모두 허용"을 눌렀으면 남은 승인 요청을 전부 통과시킨다 (실행마다 초기화) */
+  private allowAllThisRun = false;
   private history: UiEvent[] = [];
   private abort: AbortController | null = null;
   /** 채팅 모드는 이전 대화를 이어가기 위해 Claude Code 세션을 기억한다 (/clear 나 작업 폴더가 바뀌면 새로 시작) */
   private chat: { sessionId: string; workspaceDir: string } | null = null;
   /** 지금 실행 중인 명령이 쓰는 첨부 파일 (자동 정리에서 제외하려고 기억) */
   private currentAttachments: Attachment[] = [];
+  /** /talk 직접 대화: 진행 중인 대화의 중단 컨트롤러와, 에이전트별로 이어갈 세션 */
+  private talkAbort: AbortController | null = null;
+  private talkAgent: string | null = null;
+  private talks = new Map<string, { sessionId: string; workspaceDir: string }>();
 
   constructor(
     private readonly registry: AgentRegistryService,
@@ -105,8 +144,10 @@ export class AgentRunnerService implements OnModuleDestroy {
         clearHistory: () => {
           this.history = [];
           this.chat = null;
+          this.talks.clear();
         },
         emit: (e) => this.emit(e),
+        talk: (agent, message) => this.talk(agent, message),
       });
       if (result) {
         if (result.clear) this.emit({ type: 'cleared' });
@@ -117,10 +158,12 @@ export class AgentRunnerService implements OnModuleDestroy {
     }
     if (this.running) return { ok: false, error: '이미 실행 중인 작업이 있습니다. 끝나거나 중지한 뒤 다시 실행하세요.' };
     if (this.codexBridge.busy) return { ok: false, error: 'Codex가 /codex 메시지에 답하는 중입니다. 끝난 뒤 다시 실행하세요.' };
+    if (this.talkAbort) return { ok: false, error: '에이전트가 /talk 메시지에 답하는 중입니다. 끝난 뒤 다시 실행하세요.' };
     if (!config.hasAuth()) return { ok: false, error: '아직 인증되지 않았습니다. 대시보드 상단의 "로그인 필요" 버튼을 눌러 로그인하거나 .env에 ANTHROPIC_API_KEY를 넣으세요.' };
 
     this.history = [];
     this.sessionAllowed.clear();
+    this.allowAllThisRun = false;
     this.currentAttachments = files;
     const abort = new AbortController();
     this.abort = abort;
@@ -129,8 +172,14 @@ export class AgentRunnerService implements OnModuleDestroy {
   }
 
   interrupt() {
-    // 실행 중인 작업이 없어도 /codex 직접 대화는 중지할 수 있다
+    // 실행 중인 작업이 없어도 /codex, /talk 직접 대화는 중지할 수 있다
     if (!this.abort) {
+      if (this.talkAbort) {
+        this.logger.log('사용자가 /talk 대화를 중지했습니다.');
+        this.talkAbort.abort();
+        this.denyAllPending();
+        return true;
+      }
       if (!this.codexBridge.busy) return false;
       this.logger.log('사용자가 /codex 대화를 중지했습니다.');
       this.codexBridge.cancelDirect();
@@ -146,15 +195,116 @@ export class AgentRunnerService implements OnModuleDestroy {
   replyPermission(id: unknown, allowed: unknown, always: unknown) {
     const entry = typeof id === 'string' ? this.pending.get(id) : undefined;
     if (!entry) return false;
-    if (allowed === true && always === true && !ALWAYS_ASK_TOOLS.has(entry.tool)) {
-      this.sessionAllowed.add(entry.tool);
-    }
+    const scope: AlwaysScope = always === 'all' ? 'all' : always === true;
+    if (allowed === true && scope === 'all') this.allowAllThisRun = true;
+    else if (allowed === true && scope === true) this.sessionAllowed.add(entry.tool);
     entry.resolve(allowed === true);
+    // 같은 범위에 들어가는 다른 대기 요청도 함께 허용해 배너가 연달아 뜨지 않게 한다
+    if (allowed === true && scope) {
+      for (const [otherId, other] of [...this.pending.entries()]) {
+        if (otherId !== id && (scope === 'all' || other.tool === entry.tool)) other.resolve(true);
+      }
+    }
     return true;
   }
 
   onModuleDestroy() {
     this.abort?.abort();
+    this.talkAbort?.abort();
+  }
+
+  /**
+   * /talk — 사용자(Master)가 사무실에서 Claude 서브에이전트에게 직접 말을 건다.
+   * 그 에이전트의 프롬프트·도구로 한 번 실행(query)하고, 대시보드에는 그 에이전트가 말하고 일하는 것으로 보인다.
+   * 에이전트별로 세션을 이어가서(resume) 이전 대화를 기억한다. 총괄 실행과 동시에는 못 한다.
+   */
+  async talk(agent: AgentConfig, message: string): Promise<{ ok: boolean; text: string }> {
+    if (this.running) return { ok: false, text: '작업 실행 중에는 에이전트에게 직접 말할 수 없습니다. 끝나거나 중지한 뒤 다시 시도하세요.' };
+    if (this.talkAbort) return { ok: false, text: `${this.talkAgent ?? '다른 에이전트'}가 답하는 중입니다. 끝난 뒤 다시 말하세요.` };
+    if (!config.hasAuth()) return { ok: false, text: '아직 인증되지 않았습니다. 헤더에서 로그인하세요.' };
+
+    const workspaceDir = this.settings.workspaceDir;
+    const settings = this.settings.get();
+    const prev = this.talks.get(agent.id);
+    const resume = prev?.workspaceDir === workspaceDir ? prev.sessionId : undefined;
+    const abort = new AbortController();
+    this.talkAbort = abort;
+    this.talkAgent = agent.shortName;
+    this.sessionAllowed.clear();
+    this.allowAllThisRun = false;
+    const callId = `talk-${randomUUID()}`;
+    let result: { ok: boolean; text: string } | null = null;
+
+    const disallowed = [...TALK_ALWAYS_DISALLOWED, ...Object.entries(TALK_GATED_TOOLS).flatMap(([tool, names]) => (agent.tools.includes(tool as AgentConfig['tools'][number]) ? [] : names))];
+    const mapper = new MessageMapper(
+      (e) => {
+        if (e.type === 'session') {
+          this.talks.set(agent.id, { sessionId: e.sessionId, workspaceDir });
+          return;
+        }
+        if (e.type === 'run_done') {
+          result = { ok: e.ok, text: e.result };
+          this.emit({ type: 'agent_done', agent: agent.id, callId, ok: e.ok, summary: clip(e.result, 1200) });
+          return;
+        }
+        if (e.type === 'plan' || e.type === 'main_note') return;
+        this.emit(e);
+      },
+      workspaceDir,
+      (name) => this.registry.toUiAgentId(name),
+      (r) => void this.cost.record({ at: Date.now(), command: `/talk @${agent.sdkName} ${message}`, ...r }),
+      undefined,
+      agent.id,
+    );
+
+    this.emit({ type: 'direct_talk', active: true, agent: agent.id });
+    this.emit({ type: 'agent_message', from: 'user', to: agent.id, mode: 'discuss', text: clip(message, 1200) });
+    this.emit({ type: 'agent_start', agent: agent.id, callId, task: oneLine(message) });
+    this.logger.log(`/talk @${agent.sdkName}: ${oneLine(message, 80)}${resume ? ' (이어서)' : ''}`);
+
+    try {
+      const stream = query({
+        prompt: message,
+        options: {
+          abortController: abort,
+          cwd: workspaceDir,
+          model: settings.model,
+          effort: settings.effort,
+          maxTurns: Math.min(settings.maxTurns, 25),
+          maxBudgetUsd: settings.maxBudgetUsd,
+          permissionMode: settings.permissionMode,
+          disallowedTools: disallowed,
+          resume,
+          systemPrompt: { type: 'preset', preset: 'claude_code', append: talkPrompt(agent) },
+          settingSources: ['project'],
+          env: { ...process.env, CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' },
+          canUseTool: this.makePermissionHandler(mapper),
+          stderr: (data) => this.logger.debug(data.trim()),
+        },
+      });
+      for await (const msg of stream) mapper.handle(msg);
+      if (abort.signal.aborted) {
+        this.emit({ type: 'agent_done', agent: agent.id, callId, ok: false, summary: '중단됨' });
+        return { ok: false, text: '대화를 중단했습니다.' };
+      }
+      return result ?? { ok: false, text: '에이전트가 답 없이 끝났습니다.' };
+    } catch (err) {
+      if (abort.signal.aborted) {
+        this.emit({ type: 'agent_done', agent: agent.id, callId, ok: false, summary: '중단됨' });
+        return { ok: false, text: '대화를 중단했습니다.' };
+      }
+      const text = err instanceof Error ? err.message : String(err);
+      this.logger.error(text, err instanceof Error ? err.stack : undefined);
+      this.emit({ type: 'agent_done', agent: agent.id, callId, ok: false, summary: clip(text, 400) });
+      return { ok: false, text };
+    } finally {
+      this.denyAllPending();
+      if (this.talkAbort === abort) {
+        this.talkAbort = null;
+        this.talkAgent = null;
+      }
+      this.emit({ type: 'direct_talk', active: false, agent: agent.id });
+    }
   }
 
   private emit(body: UiEventBody) {
@@ -261,12 +411,12 @@ export class AgentRunnerService implements OnModuleDestroy {
 
   private makePermissionHandler(mapper: MessageMapper): CanUseTool {
     return (toolName, input, options) => {
-      if (AUTO_ALLOWED_TOOLS.has(toolName) || this.sessionAllowed.has(toolName)) {
+      if (this.allowAllThisRun || AUTO_ALLOWED_TOOLS.has(toolName) || this.sessionAllowed.has(toolName)) {
         return Promise.resolve<PermissionResult>({ behavior: 'allow', updatedInput: input });
       }
       // Codex와의 토론/리뷰는 읽기 전용이라 바로 허용. 구현 위임/이미지 생성(파일 쓰기)은 acceptEdits면 허용, default면 묻는다.
       // 주의: Codex의 workspace-write 샌드박스는 파일 수정뿐 아니라 샌드박스 안 명령 실행도 허용한다.
-      if (isCodexTool(toolName) && ((input.mode !== 'implement' && input.mode !== 'image') || this.settings.get().permissionMode === 'acceptEdits')) {
+      if (isCodexTool(toolName) && (!codexModeWrites(modeOf(input.mode)) || this.settings.get().permissionMode === 'acceptEdits')) {
         return Promise.resolve<PermissionResult>({ behavior: 'allow', updatedInput: input });
       }
 
@@ -296,7 +446,7 @@ export class AgentRunnerService implements OnModuleDestroy {
           tool: toolName,
           title: options.title ?? mapper.label(toolName, input),
           detail: mapper.describeForPermission(toolName, input),
-          canAlwaysAllow: !ALWAYS_ASK_TOOLS.has(toolName),
+          canAlwaysAllow: true,
         });
       });
     };

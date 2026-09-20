@@ -69,13 +69,18 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
     }
     // 에이전트 사이의 대화 (총괄 ↔ Codex, 사용자 → Codex). 보낸 쪽 로그로 남기고, 받는 쪽 말풍선은 뒤따르는 agent_start가 채운다
     case 'codex_direct':
+    case 'direct_talk':
       return [{ type: 'codex_direct', active: evt.active === true }];
     case 'agent_message': {
       const MODE: Record<string, string> = { discuss: '토론', review: '리뷰', implement: '구현 요청', image: '이미지 생성' };
       const from = evt.from === 'main' || evt.from === 'user' ? 'system' : isAgentRole(evt.from) ? evt.from : 'system';
-      const who = evt.from === 'user' ? '사용자' : evt.from === 'main' ? '총괄' : String(evt.from);
+      const who = evt.from === 'user' ? 'Master' : evt.from === 'main' ? '총괄' : String(evt.from);
       const to = evt.to === 'main' ? '총괄' : String(evt.to);
-      return [{ type: 'log', agent: from, text: `${who} → ${to} [${MODE[String(evt.mode)] ?? String(evt.mode)}]: ${String(evt.text ?? '')}` }];
+      const text = String(evt.text ?? '');
+      const out: AgentSimEvent[] = [{ type: 'log', agent: from, text: `${who} → ${to} [${MODE[String(evt.mode)] ?? String(evt.mode)}]: ${text}` }];
+      // 사용자가 직접 건 말은 사무실의 Master 말풍선으로도 보여준다
+      if (evt.from === 'user' && isAgentRole(evt.to)) out.push({ type: 'master_say', to: evt.to, text });
+      return out;
     }
     case 'agent_done': {
       if (!isAgentRole(evt.agent)) return [];
@@ -157,7 +162,17 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
       const costUsd = Number(evt.costUsd ?? 0);
       const turns = Number(evt.turns ?? 0);
       return [
-        { type: 'run_done', result: { ok, result: typeof evt.result === 'string' ? evt.result : '', costUsd, turns, durationMs } },
+        {
+          type: 'run_done',
+          result: {
+            ok,
+            result: typeof evt.result === 'string' ? evt.result : '',
+            costUsd,
+            turns,
+            durationMs,
+            suggestions: Array.isArray(evt.suggestions) ? (evt.suggestions as unknown[]).filter((s): s is string => typeof s === 'string') : undefined,
+          },
+        },
         {
           type: 'log',
           agent: 'system',
@@ -235,7 +250,7 @@ export class SocketIoEventSource implements AgentEventSource {
     this.socket?.emit('interrupt');
   }
 
-  replyPermission(id: string, allowed: boolean, always: boolean) {
+  replyPermission(id: string, allowed: boolean, always: boolean | 'all') {
     this.socket?.emit('permission-reply', { id, allowed, always });
   }
 

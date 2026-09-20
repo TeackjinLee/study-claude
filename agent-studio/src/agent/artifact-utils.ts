@@ -27,6 +27,22 @@ export const isImagePath = (path: string) => IMAGE_EXT.has(extname(path).toLower
 /** 대시보드가 작업 폴더의 이미지를 받아 보는 주소 (uploads.controller) */
 export const workspaceFileUrl = (rel: string) => `/api/workspace-files/${rel.split('/').map(encodeURIComponent).join('/')}`;
 
+/**
+ * 총괄 요약 끝의 <next-steps> 블록을 떼어낸다. 본문은 블록을 뺀 텍스트, suggestions는 '- ' 줄들(최대 5개).
+ * 블록이 없으면 원문 그대로, 빈 목록.
+ */
+export function splitNextSteps(text: string): { body: string; suggestions: string[] } {
+  const m = /<next-steps>([\s\S]*?)<\/next-steps>/i.exec(text);
+  if (!m) return { body: text, suggestions: [] };
+  const suggestions = m[1]
+    .split('\n')
+    .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+    .filter((l) => l.length > 0 && l.length <= 80)
+    .slice(0, 5);
+  const body = (text.slice(0, m.index) + text.slice(m.index + m[0].length)).replace(/\n{3,}/g, '\n\n').trim();
+  return { body, suggestions };
+}
+
 export const artifactKindOf = (path: string): ArtifactKind => (isImagePath(path) ? 'image' : DOC_EXT.has(extname(path).toLowerCase()) ? 'doc' : 'code');
 
 export const langOf = (path: string) => {

@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import {
   DEFAULT_AGENTS,
+  DEFAULT_MASTER,
   defaultAgentState,
+  type MasterDef,
   type AgentDef,
   type AgentRole,
   type AgentState,
@@ -85,11 +87,24 @@ interface AgentStoreState {
   repository: AgentRepository | null;
   init: () => void;
   sendCommand: (prompt: string, attachments?: Attachment[], mode?: RunMode) => void;
+  /** 마지막 실행이 끝나며 총괄이 제안한 다음 추천 명령. 없으면 예시 명령을 보여준다 */
+  suggestions: string[];
   /** 명령 입력의 채팅/Cowork 선택 (브라우저에 기억) */
   commandMode: RunMode;
   setCommandMode: (mode: RunMode) => void;
+  /** 사용자 자신(Master)의 사무실 캐릭터. 브라우저에 기억 */
+  master: MasterDef;
+  setMaster: (patch: Partial<MasterDef>) => void;
+  /** 명령 입력이 향하는 에이전트 (사무실에서 E/클릭으로 정함). null이면 총괄에게 */
+  talkTarget: AgentRole | null;
+  setTalkTarget: (id: AgentRole | null) => void;
+  /** Master 옆(대화 가능 거리)에 있는 에이전트 — 사무실 씬이 갱신 */
+  masterNearby: AgentRole | null;
+  setMasterNearby: (id: AgentRole | null) => void;
+  /** Master가 마지막으로 한 말 (사무실 말풍선용) */
+  masterSay: { to: AgentRole; text: string; at: number } | null;
   interrupt: () => void;
-  replyPermission: (id: string, allowed: boolean, always: boolean) => void;
+  replyPermission: (id: string, allowed: boolean, always: boolean | 'all') => void;
   selectAgent: (id: AgentRole) => void;
   openEditor: (target: Exclude<EditorTarget, null>) => void;
   closeEditor: () => void;
@@ -112,6 +127,23 @@ function statesFor(defs: AgentDef[], prev: Record<AgentRole, AgentState>): Recor
 
 function tasksFor(defs: AgentDef[], prev?: Record<AgentRole, TaskState>): Record<AgentRole, TaskState> {
   return Object.fromEntries(defs.map((d) => [d.id, prev?.[d.id] ?? { status: 'pending' }])) as Record<AgentRole, TaskState>;
+}
+
+const MASTER_KEY = 'agent-studio.master';
+function loadMaster(): MasterDef {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(MASTER_KEY) : null;
+    if (!raw) return DEFAULT_MASTER;
+    const v = JSON.parse(raw) as Partial<MasterDef>;
+    return {
+      name: typeof v.name === 'string' && v.name.trim() ? v.name.trim().slice(0, 16) : DEFAULT_MASTER.name,
+      pokemonId: Number.isInteger(v.pokemonId) && (v.pokemonId as number) > 0 ? (v.pokemonId as number) : DEFAULT_MASTER.pokemonId,
+      pokemonName: typeof v.pokemonName === 'string' ? v.pokemonName : DEFAULT_MASTER.pokemonName,
+      color: typeof v.color === 'string' && /^#[0-9a-f]{6}$/i.test(v.color) ? v.color : DEFAULT_MASTER.color,
+    };
+  } catch {
+    return DEFAULT_MASTER;
+  }
 }
 
 const COMMAND_MODE_KEY = 'agent-studio.commandMode';
@@ -200,6 +232,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
       get().source?.sendCommand(text, get().defs, attachments, mode ?? get().commandMode);
     },
 
+    suggestions: [],
     commandMode: loadCommandMode(),
     setCommandMode: (mode) => {
       set({ commandMode: mode });
@@ -210,12 +243,39 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
       }
     },
 
+    master: loadMaster(),
+    setMaster: (patch) => {
+      const master = { ...get().master, ...patch };
+      set({ master });
+      try {
+        localStorage.setItem(MASTER_KEY, JSON.stringify(master));
+      } catch {
+        // 저장 불가면 이번 세션만 유지
+      }
+    },
+    talkTarget: null,
+    setTalkTarget: (id) => set({ talkTarget: id }),
+    masterNearby: null,
+    setMasterNearby: (id) => {
+      if (get().masterNearby !== id) set({ masterNearby: id });
+    },
+    masterSay: null,
+
     interrupt: () => get().source?.interrupt(),
 
     replyPermission: (id, allowed, always) => {
       get().source?.replyPermission(id, allowed, always);
-      // 서버 응답(permission_resolved)이 오기 전에도 화면에서 바로 지운다
-      set((s) => ({ permissions: s.permissions.filter((p) => p.id !== id) }));
+      // 서버 응답(permission_resolved)이 오기 전에도 화면에서 바로 지운다. 범위 허용이면 같은 범위의 다른 배너도 함께 지운다
+      set((s) => {
+        const target = s.permissions.find((p) => p.id === id);
+        return {
+          permissions: s.permissions.filter((p) => {
+            if (p.id === id) return false;
+            if (!allowed || !always) return true;
+            return always === 'all' ? false : p.tool !== target?.tool;
+          }),
+        };
+      });
     },
 
     selectAgent: (id: AgentRole) => set({ selectedAgent: id }),
@@ -253,7 +313,10 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
     loadCommands: async () => {
       const cached = get().commands;
       if (cached) return cached;
-      const list = (await get().source?.listCommands().catch(() => [])) ?? [];
+      const list =
+        (await get()
+          .source?.listCommands()
+          .catch(() => [])) ?? [];
       set({ commands: list });
       return list;
     },
@@ -342,6 +405,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
             artifacts: initialArtifacts(),
             freshResults: {},
             run: null,
+            suggestions: [],
             tasks: tasksFor(s.defs),
             agents: statesFor(s.defs, {}),
           }));
@@ -368,6 +432,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
           set((s) => ({
             running: false,
             permissions: [],
+            suggestions: evt.result.suggestions?.length ? evt.result.suggestions : s.suggestions,
             freshResults: { ...s.freshResults, summary: true },
             run: s.run
               ? { ...s.run, endedAt: Date.now(), status: evt.result.ok ? 'done' : 'error', result: evt.result }
@@ -385,6 +450,10 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
 
         case 'codex_direct':
           set({ codexBusy: evt.active });
+          return;
+
+        case 'master_say':
+          set({ masterSay: { to: evt.to, text: evt.text, at: Date.now() } });
           return;
 
         case 'run_aborted':

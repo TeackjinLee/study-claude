@@ -1,7 +1,7 @@
 import { isAbsolute, relative } from 'node:path';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentRef, ArtifactKind, CodexMode, PlanItem, UiAgentId, UiEventBody } from './ui-events.js';
-import { TEST_COMMAND, artifactKindOf, clip, langOf, oneLine, str } from './artifact-utils.js';
+import { TEST_COMMAND, artifactKindOf, clip, langOf, oneLine, splitNextSteps, str } from './artifact-utils.js';
 
 type Emit = (event: UiEventBody) => void;
 
@@ -76,6 +76,8 @@ export class MessageMapper {
     private readonly onResult?: (result: NonNullable<MessageMapper['lastResult']>) => void,
     /** Codex 같은 외부 협업자 도구 (없으면 MCP 도구는 일반 동작으로 보인다) */
     private readonly external?: ExternalAgentHooks,
+    /** 최상위 메시지의 주인. 총괄 실행은 'main', /talk 직접 대화는 그 에이전트 id (텍스트가 agent_note로, 도구가 그 에이전트의 action으로 보인다) */
+    private readonly defaultOwner: AgentRef = 'main',
   ) {}
 
   get hasResult() {
@@ -84,7 +86,7 @@ export class MessageMapper {
 
   /** 권한 요청이 어느 에이전트에게서 왔는지 찾는다 */
   ownerOf(toolUseId: string | undefined): AgentRef {
-    return (toolUseId && this.calls.get(toolUseId)?.owner) || 'main';
+    return (toolUseId && this.calls.get(toolUseId)?.owner) || this.defaultOwner;
   }
 
   handle(msg: SDKMessage) {
@@ -139,13 +141,16 @@ export class MessageMapper {
           ),
         };
         this.onResult?.(this.lastResult);
+        // 요약 끝의 <next-steps>는 화면 버튼으로 쓰고 본문에서는 뗀다
+        const parsed = splitNextSteps(msg.subtype === 'success' ? msg.result : RESULT_ERROR_TEXT[msg.subtype] ?? (msg.errors.join('\n') || msg.subtype));
         this.emit({
           type: 'run_done',
           ok: msg.subtype === 'success' && !msg.is_error,
-          result: msg.subtype === 'success' ? msg.result : RESULT_ERROR_TEXT[msg.subtype] ?? (msg.errors.join('\n') || msg.subtype),
+          result: parsed.body,
           costUsd: msg.total_cost_usd,
           turns: msg.num_turns,
           durationMs: msg.duration_ms,
+          suggestions: parsed.suggestions.length ? parsed.suggestions : undefined,
         });
         break;
       default:
@@ -154,7 +159,7 @@ export class MessageMapper {
   }
 
   private ownerFromParent(parentToolUseId: string | null): AgentRef {
-    return (parentToolUseId && this.subagentCalls.get(parentToolUseId)) || 'main';
+    return (parentToolUseId && this.subagentCalls.get(parentToolUseId)) || this.defaultOwner;
   }
 
   private onAssistant(blocks: unknown[], parentToolUseId: string | null) {
@@ -164,7 +169,10 @@ export class MessageMapper {
       const block = raw as { type: string; text?: string; id?: string; name?: string; input?: unknown };
 
       if (block.type === 'text' && block.text?.trim()) {
-        if (owner === 'main') this.emit({ type: 'main_note', text: oneLine(block.text, 200) });
+        if (owner === 'main') {
+          const text = splitNextSteps(block.text).body;
+          if (text) this.emit({ type: 'main_note', text: oneLine(text, 200) });
+        }
         else this.emit({ type: 'agent_note', agent: owner, text: oneLine(block.text, 200) });
         continue;
       }
