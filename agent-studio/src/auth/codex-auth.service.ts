@@ -40,6 +40,16 @@ export interface CodexRateLimits {
   blocked: boolean;
 }
 
+/** `codex app-server` model/list 항목 중 대시보드가 쓰는 것 */
+export interface CodexModelInfo {
+  id: string;
+  displayName: string;
+  description: string;
+  isDefault: boolean;
+}
+
+const MODELS_CACHE_MS = 5 * 60_000;
+
 export interface CodexLoginState {
   status: 'idle' | 'running' | 'success' | 'error';
   method?: CodexLoginMethod;
@@ -86,6 +96,8 @@ export class CodexAuthService implements OnModuleDestroy {
   private loginState: CodexLoginState = { status: 'idle' };
   private rateCache: { at: number; value: CodexRateLimits | null } | null = null;
   private pendingRate: Promise<CodexRateLimits | null> | null = null;
+  private modelsCache: { at: number; value: CodexModelInfo[] } | null = null;
+  private pendingModels: Promise<CodexModelInfo[]> | null = null;
 
   /** 상태 확인은 프로세스를 하나 띄우므로 잠깐 캐시한다. 로그인/로그아웃 뒤엔 invalidate() */
   status(force = false): Promise<CodexAuthStatus> {
@@ -106,6 +118,26 @@ export class CodexAuthService implements OnModuleDestroy {
   invalidate() {
     this.cache = null;
     this.rateCache = null;
+    this.modelsCache = null;
+  }
+
+  /** Codex가 지금 계정으로 쓸 수 있는 모델 목록 (`model/list`). 로그인 안 됐거나 실패하면 빈 배열 */
+  models(force = false): Promise<CodexModelInfo[]> {
+    if (!force && this.modelsCache && Date.now() - this.modelsCache.at < MODELS_CACHE_MS) return Promise.resolve(this.modelsCache.value);
+    if (!this.pendingModels) {
+      this.pendingModels = this.status(force)
+        .then((s) => (s.hasAuth ? this.readModels() : []))
+        .catch((err) => {
+          this.logger.warn(`Codex 모델 목록 조회 실패: ${(err as Error).message}`);
+          return [] as CodexModelInfo[];
+        })
+        .then((value) => {
+          this.modelsCache = { at: Date.now(), value };
+          this.pendingModels = null;
+          return value;
+        });
+    }
+    return this.pendingModels;
   }
 
   /**
@@ -226,6 +258,42 @@ export class CodexAuthService implements OnModuleDestroy {
   }
 
   private readRateLimits(): Promise<CodexRateLimits | null> {
+    return this.appServerRequest<{
+      ordinaryUsageAllowed?: boolean | null;
+      rateLimits?: {
+        planType?: string | null;
+        primary?: { usedPercent: number; resetsAt: number | null; windowDurationMins: number | null } | null;
+        secondary?: { usedPercent: number; resetsAt: number | null; windowDurationMins: number | null } | null;
+        rateLimitReachedType?: string | null;
+      } | null;
+      rateLimitResetCredits?: { availableCount: number } | null;
+    }>('account/rateLimits/read', { excludeResetCreditDetails: true }).then((r) => {
+      const rl = r.rateLimits;
+      const windows = [toWindow(rl?.primary), toWindow(rl?.secondary)].filter((w): w is CodexRateWindow => w !== null);
+      return {
+        plan: rl?.planType ?? null,
+        windows,
+        resetCredits: r.rateLimitResetCredits?.availableCount ?? null,
+        blocked: r.ordinaryUsageAllowed === false || !!rl?.rateLimitReachedType,
+      };
+    });
+  }
+
+  private readModels(): Promise<CodexModelInfo[]> {
+    return this.appServerRequest<{
+      data?: { id: string; model?: string; displayName?: string; description?: string; hidden?: boolean; isDefault?: boolean }[];
+    }>('model/list', {}).then((r) =>
+      (r.data ?? [])
+        .filter((m) => !m.hidden)
+        .map((m) => ({ id: m.model ?? m.id, displayName: m.displayName ?? m.id, description: m.description ?? '', isDefault: !!m.isDefault })),
+    );
+  }
+
+  /**
+   * `codex app-server`를 잠깐 띄워 JSON-RPC 요청 하나를 보내고 결과를 받는다 (initialize → initialized → 요청).
+   * 응답을 받거나 시간이 지나면 프로세스를 죽인다.
+   */
+  private appServerRequest<T extends Record<string, unknown>>(method: string, params: Record<string, unknown>): Promise<T> {
     const { file, args } = resolveCodexCommand();
     return new Promise((resolve, reject) => {
       const child = spawn(file, [...args, 'app-server'], { env: process.env, stdio: ['pipe', 'pipe', 'ignore'] });
@@ -246,7 +314,7 @@ export class CodexAuthService implements OnModuleDestroy {
         const lines = buffer.split('\n');
         buffer = lines.pop() ?? '';
         for (const line of lines) {
-          let msg: { id?: number; result?: Record<string, unknown>; error?: { message?: string } };
+          let msg: { id?: number; result?: T; error?: { message?: string } };
           try {
             msg = JSON.parse(line);
           } catch {
@@ -257,33 +325,15 @@ export class CodexAuthService implements OnModuleDestroy {
             finish(() => reject(new Error(msg.error?.message ?? '알 수 없는 응답')));
             return;
           }
-          const r = msg.result as {
-            ordinaryUsageAllowed?: boolean | null;
-            rateLimits?: {
-              planType?: string | null;
-              primary?: { usedPercent: number; resetsAt: number | null; windowDurationMins: number | null } | null;
-              secondary?: { usedPercent: number; resetsAt: number | null; windowDurationMins: number | null } | null;
-              rateLimitReachedType?: string | null;
-            } | null;
-            rateLimitResetCredits?: { availableCount: number } | null;
-          };
-          const rl = r.rateLimits;
-          const windows = [toWindow(rl?.primary), toWindow(rl?.secondary)].filter((w): w is CodexRateWindow => w !== null);
-          finish(() =>
-            resolve({
-              plan: rl?.planType ?? null,
-              windows,
-              resetCredits: r.rateLimitResetCredits?.availableCount ?? null,
-              blocked: r.ordinaryUsageAllowed === false || !!rl?.rateLimitReachedType,
-            }),
-          );
+          const result = msg.result;
+          finish(() => resolve(result));
           return;
         }
       });
       const send = (o: object) => child.stdin?.write(`${JSON.stringify(o)}\n`);
       send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { clientInfo: { name: 'agent-studio', title: 'Agent Studio', version: '1.0.0' } } });
       send({ jsonrpc: '2.0', method: 'initialized' });
-      send({ jsonrpc: '2.0', id: 2, method: 'account/rateLimits/read', params: { excludeResetCreditDetails: true } });
+      send({ jsonrpc: '2.0', id: 2, method, params });
     });
   }
 

@@ -227,6 +227,13 @@ export const MicIcon = (p: P) => (
   </svg>
 );
 
+/** 코드 모드 아이콘 (</>) */
+export const CodeIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16" />
+  </svg>
+);
+
 /** 채팅 모드 아이콘 (말풍선) */
 export const ChatIcon = (p: P) => (
   <svg {...base(p)}>

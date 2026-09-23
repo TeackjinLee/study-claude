@@ -3,7 +3,6 @@
 import dynamic from 'next/dynamic';
 import { useAgentStore } from '@/store/agentStore';
 import { PinIcon, UserIcon } from '@/components/ui/icons';
-import { PermissionBanner } from './PermissionBanner';
 import { AttachmentChips } from './AttachmentChips';
 
 const OfficeCanvas = dynamic(() => import('./OfficeCanvas').then((m) => m.OfficeCanvas), {
@@ -27,7 +26,6 @@ export function OfficeStage() {
   return (
     <div className="relative h-full w-full overflow-hidden rounded-2xl border border-line bg-[#08101f] shadow-[0_10px_40px_rgba(0,0,0,0.4)]">
       <OfficeCanvas />
-      <PermissionBanner />
 
       <div className="pointer-events-none absolute left-3 top-3 flex items-start gap-2.5 rounded-xl border border-line-strong/70 bg-[#0a1428]/85 px-3.5 py-2.5 backdrop-blur">
         <span className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md bg-accent/20 text-blue-300">

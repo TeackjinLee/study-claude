@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import {
   DEFAULT_AGENTS,
+  DEFAULT_MASTER,
   defaultAgentState,
+  type MasterDef,
   type AgentDef,
   type AgentRole,
   type AgentState,
@@ -22,6 +24,7 @@ import {
   type RunResult,
   type RunSettings,
   type RunMode,
+  RUN_MODES,
 } from '@/lib/ws';
 import type { Attachment } from '@/lib/uploads';
 
@@ -37,6 +40,11 @@ export type ResultTab = ArtifactKind | 'summary';
 export interface RunInfo {
   command: string;
   mode?: RunMode;
+  /** 이전 대화를 이어서 실행했는지 */
+  continued?: boolean;
+  planFirst?: boolean;
+  /** 실행 도중 끼워 넣은 추가 지시 */
+  followUps: string[];
   attachments: Attachment[];
   workspace?: string;
   model?: string;
@@ -64,6 +72,12 @@ interface AgentStoreState {
   editor: EditorTarget;
   /** 가장 최근 실행 정보 (명령, 시작/종료 시각, 비용, 최종 요약) */
   run: RunInfo | null;
+  /** 이어지는 대화(코드·채팅)에서 run 이전의 실행들. 새 대화면 비운다 */
+  thread: RunInfo[];
+  /** 모드별로 서버에 이어갈 대화(세션)가 있는지 */
+  conversations: Partial<Record<RunMode, boolean>>;
+  /** 실행이 끝날 때마다 올라간다 — 변경사항(git diff) 탭이 다시 불러오는 신호 */
+  changesVersion: number;
   /** 에이전트가 만든 결과물. kind별로 key(파일 경로 등) → Artifact */
   artifacts: Record<ArtifactKind, Record<string, Artifact>>;
   /** 응답을 기다리는 승인 요청 */
@@ -85,11 +99,30 @@ interface AgentStoreState {
   repository: AgentRepository | null;
   init: () => void;
   sendCommand: (prompt: string, attachments?: Attachment[], mode?: RunMode) => void;
-  /** 명령 입력의 채팅/Cowork 선택 (브라우저에 기억) */
+  /** 실행 도중 추가 지시 */
+  sendFollowUp: (prompt: string) => void;
+  newConversation: (mode?: RunMode) => void;
+  /** 코드 모드에서 계획을 먼저 승인받고 수정할지 (브라우저에 기억) */
+  planFirst: boolean;
+  setPlanFirst: (on: boolean) => void;
+  /** 마지막 실행이 끝나며 총괄이 제안한 다음 추천 명령. 없으면 예시 명령을 보여준다 */
+  suggestions: string[];
+  /** 명령 입력의 코드/채팅/Cowork 선택 (브라우저에 기억) */
   commandMode: RunMode;
   setCommandMode: (mode: RunMode) => void;
+  /** 사용자 자신(Master)의 사무실 캐릭터. 브라우저에 기억 */
+  master: MasterDef;
+  setMaster: (patch: Partial<MasterDef>) => void;
+  /** 명령 입력이 향하는 에이전트 (사무실에서 E/클릭으로 정함). null이면 총괄에게 */
+  talkTarget: AgentRole | null;
+  setTalkTarget: (id: AgentRole | null) => void;
+  /** Master 옆(대화 가능 거리)에 있는 에이전트 — 사무실 씬이 갱신 */
+  masterNearby: AgentRole | null;
+  setMasterNearby: (id: AgentRole | null) => void;
+  /** Master가 마지막으로 한 말 (사무실 말풍선용) */
+  masterSay: { to: AgentRole; text: string; at: number } | null;
   interrupt: () => void;
-  replyPermission: (id: string, allowed: boolean, always: boolean) => void;
+  replyPermission: (id: string, allowed: boolean, always: boolean | 'all') => void;
   selectAgent: (id: AgentRole) => void;
   openEditor: (target: Exclude<EditorTarget, null>) => void;
   closeEditor: () => void;
@@ -114,12 +147,39 @@ function tasksFor(defs: AgentDef[], prev?: Record<AgentRole, TaskState>): Record
   return Object.fromEntries(defs.map((d) => [d.id, prev?.[d.id] ?? { status: 'pending' }])) as Record<AgentRole, TaskState>;
 }
 
+const MASTER_KEY = 'agent-studio.master';
+function loadMaster(): MasterDef {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(MASTER_KEY) : null;
+    if (!raw) return DEFAULT_MASTER;
+    const v = JSON.parse(raw) as Partial<MasterDef>;
+    return {
+      name: typeof v.name === 'string' && v.name.trim() ? v.name.trim().slice(0, 16) : DEFAULT_MASTER.name,
+      pokemonId: Number.isInteger(v.pokemonId) && (v.pokemonId as number) > 0 ? (v.pokemonId as number) : DEFAULT_MASTER.pokemonId,
+      pokemonName: typeof v.pokemonName === 'string' ? v.pokemonName : DEFAULT_MASTER.pokemonName,
+      color: typeof v.color === 'string' && /^#[0-9a-f]{6}$/i.test(v.color) ? v.color : DEFAULT_MASTER.color,
+    };
+  } catch {
+    return DEFAULT_MASTER;
+  }
+}
+
 const COMMAND_MODE_KEY = 'agent-studio.commandMode';
 function loadCommandMode(): RunMode {
   try {
-    return typeof window !== 'undefined' && localStorage.getItem(COMMAND_MODE_KEY) === 'chat' ? 'chat' : 'cowork';
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(COMMAND_MODE_KEY) : null;
+    return RUN_MODES.find((m) => m === saved) ?? 'code';
   } catch {
-    return 'cowork';
+    return 'code';
+  }
+}
+
+const PLAN_FIRST_KEY = 'agent-studio.planFirst';
+function loadPlanFirst(): boolean {
+  try {
+    return typeof window !== 'undefined' && localStorage.getItem(PLAN_FIRST_KEY) === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -165,6 +225,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
     selectedAgent: DEFAULT_AGENTS[0]?.id ?? null,
     editor: null,
     run: null,
+    thread: [],
+    conversations: {},
+    changesVersion: 0,
     artifacts: initialArtifacts(),
     permissions: [],
     freshResults: {},
@@ -197,9 +260,30 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
     sendCommand: (prompt: string, attachments: Attachment[] = [], mode?: RunMode) => {
       const text = prompt.trim();
       if (!text && attachments.length === 0) return;
-      get().source?.sendCommand(text, get().defs, attachments, mode ?? get().commandMode);
+      const m = mode ?? get().commandMode;
+      // 계획 먼저는 코드 모드의 일반 명령에만 (슬래시 명령·/talk 제외)
+      const planFirst = m === 'code' && get().planFirst && !text.startsWith('/');
+      get().source?.sendCommand(text, get().defs, attachments, m, { planFirst });
     },
 
+    sendFollowUp: (prompt) => {
+      const text = prompt.trim();
+      if (text) get().source?.followUp(text);
+    },
+
+    newConversation: (mode) => get().source?.newConversation(mode),
+
+    planFirst: loadPlanFirst(),
+    setPlanFirst: (on) => {
+      set({ planFirst: on });
+      try {
+        localStorage.setItem(PLAN_FIRST_KEY, on ? '1' : '0');
+      } catch {
+        // 저장 불가면 이번 세션만 유지
+      }
+    },
+
+    suggestions: [],
     commandMode: loadCommandMode(),
     setCommandMode: (mode) => {
       set({ commandMode: mode });
@@ -210,12 +294,39 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
       }
     },
 
+    master: loadMaster(),
+    setMaster: (patch) => {
+      const master = { ...get().master, ...patch };
+      set({ master });
+      try {
+        localStorage.setItem(MASTER_KEY, JSON.stringify(master));
+      } catch {
+        // 저장 불가면 이번 세션만 유지
+      }
+    },
+    talkTarget: null,
+    setTalkTarget: (id) => set({ talkTarget: id }),
+    masterNearby: null,
+    setMasterNearby: (id) => {
+      if (get().masterNearby !== id) set({ masterNearby: id });
+    },
+    masterSay: null,
+
     interrupt: () => get().source?.interrupt(),
 
     replyPermission: (id, allowed, always) => {
       get().source?.replyPermission(id, allowed, always);
-      // 서버 응답(permission_resolved)이 오기 전에도 화면에서 바로 지운다
-      set((s) => ({ permissions: s.permissions.filter((p) => p.id !== id) }));
+      // 서버 응답(permission_resolved)이 오기 전에도 화면에서 바로 지운다. 범위 허용이면 같은 범위의 다른 배너도 함께 지운다
+      set((s) => {
+        const target = s.permissions.find((p) => p.id === id);
+        return {
+          permissions: s.permissions.filter((p) => {
+            if (p.id === id) return false;
+            if (!allowed || !always) return true;
+            return always === 'all' ? false : p.tool !== target?.tool;
+          }),
+        };
+      });
     },
 
     selectAgent: (id: AgentRole) => set({ selectedAgent: id }),
@@ -253,7 +364,10 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
     loadCommands: async () => {
       const cached = get().commands;
       if (cached) return cached;
-      const list = (await get().source?.listCommands().catch(() => [])) ?? [];
+      const list =
+        (await get()
+          .source?.listCommands()
+          .catch(() => [])) ?? [];
       set({ commands: list });
       return list;
     },
@@ -275,15 +389,47 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
           return;
 
         case 'run_start':
+          set((s) => {
+            // 같은 대화를 이어가면 앞의 실행을 대화 목록에 쌓고 결과물도 그대로 둔다
+            const continues = !!evt.continued && !!s.run && s.run.mode === evt.mode;
+            return {
+              running: true,
+              agents: statesFor(s.defs, {}),
+              tasks: tasksFor(s.defs),
+              artifacts: continues ? s.artifacts : initialArtifacts(),
+              thread: continues && s.run ? [...s.thread, s.run] : [],
+              permissions: [],
+              freshResults: {},
+              run: {
+                command: evt.command,
+                mode: evt.mode,
+                continued: evt.continued,
+                planFirst: evt.planFirst,
+                followUps: [],
+                attachments: evt.attachments ?? [],
+                workspace: evt.workspace,
+                startedAt: Date.now(),
+                status: 'running',
+              },
+            };
+          });
+          return;
+
+        case 'follow_up':
+          set((s) => (s.run ? { run: { ...s.run, followUps: [...s.run.followUps, evt.text] } } : {}));
+          return;
+
+        case 'conversation':
           set((s) => ({
-            running: true,
-            agents: statesFor(s.defs, {}),
-            tasks: tasksFor(s.defs),
-            artifacts: initialArtifacts(),
-            permissions: [],
-            freshResults: {},
-            run: { command: evt.command, mode: evt.mode, attachments: evt.attachments ?? [], workspace: evt.workspace, startedAt: Date.now(), status: 'running' },
+            conversations: { ...s.conversations, [evt.mode]: evt.active },
+            // 새 대화: 화면의 대화 목록도 비운다 (마지막 실행 결과는 남겨 둔다)
+            thread: !evt.active && s.run?.mode === evt.mode ? [] : s.thread,
+            run: !evt.active && s.run?.mode === evt.mode && !s.running ? { ...s.run, continued: false } : s.run,
           }));
+          return;
+
+        case 'conversations':
+          set({ conversations: evt.all });
           return;
 
         case 'agent_status': {
@@ -333,7 +479,12 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
         }
 
         case 'settings':
-          set({ settings: evt.settings });
+          // 작업 폴더가 바뀌면 서버는 이전 대화를 이어가지 않는다
+          set((s) => ({
+            settings: evt.settings,
+            conversations: s.settings && s.settings.workspaceDir !== evt.settings.workspaceDir ? {} : s.conversations,
+            changesVersion: s.settings && s.settings.workspaceDir !== evt.settings.workspaceDir ? s.changesVersion + 1 : s.changesVersion,
+          }));
           return;
 
         case 'cleared':
@@ -342,6 +493,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
             artifacts: initialArtifacts(),
             freshResults: {},
             run: null,
+            thread: [],
+            conversations: {},
+            suggestions: [],
             tasks: tasksFor(s.defs),
             agents: statesFor(s.defs, {}),
           }));
@@ -368,10 +522,12 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
           set((s) => ({
             running: false,
             permissions: [],
+            changesVersion: s.changesVersion + 1,
+            suggestions: evt.result.suggestions?.length ? evt.result.suggestions : s.suggestions,
             freshResults: { ...s.freshResults, summary: true },
             run: s.run
               ? { ...s.run, endedAt: Date.now(), status: evt.result.ok ? 'done' : 'error', result: evt.result }
-              : { command: '', attachments: [], startedAt: Date.now(), endedAt: Date.now(), status: evt.result.ok ? 'done' : 'error', result: evt.result },
+              : { command: '', followUps: [], attachments: [], startedAt: Date.now(), endedAt: Date.now(), status: evt.result.ok ? 'done' : 'error', result: evt.result },
           }));
           return;
 
@@ -379,6 +535,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
           set((s) => ({
             running: false,
             permissions: [],
+            changesVersion: s.changesVersion + 1,
             run: s.run ? { ...s.run, endedAt: Date.now(), status: 'error', errorMessage: evt.message } : s.run,
           }));
           return;
@@ -387,10 +544,15 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
           set({ codexBusy: evt.active });
           return;
 
+        case 'master_say':
+          set({ masterSay: { to: evt.to, text: evt.text, at: Date.now() } });
+          return;
+
         case 'run_aborted':
           set((s) => ({
             running: false,
             permissions: [],
+            changesVersion: s.changesVersion + 1,
             agents: statesFor(s.defs, {}),
             run: s.run ? { ...s.run, endedAt: Date.now(), status: 'aborted' } : s.run,
           }));

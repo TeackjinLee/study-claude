@@ -11,6 +11,7 @@ import { LogPanel } from '@/components/agent-office/LogPanel';
 import { TaskProgressPanel } from '@/components/agent-office/TaskProgressPanel';
 import { TaskGraphPanel } from '@/components/agent-office/TaskGraphPanel';
 import { ResultsPanel } from '@/components/agent-office/ResultsPanel';
+import { PermissionBanner } from '@/components/agent-office/PermissionBanner';
 import { CenterViewTabs } from '@/components/agent-office/CenterViewTabs';
 import { AgentEditorDialog } from '@/components/agent-office/AgentEditorDialog';
 import { ChoiceDialog } from '@/components/agent-office/ChoiceDialog';
@@ -52,8 +53,10 @@ export default function AgentManagementPage() {
               <OfficeStage />
             </div>
             {centerView === 'results' && <ResultsPanel />}
+            {/* 승인 요청(계획 승인 포함)은 사무실·결과 화면 어디서든 보이게 맨 위에 얹는다 */}
+            <PermissionBanner />
           </div>
-          <div className="grid shrink-0 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:h-[272px]">
+          <div className="grid shrink-0 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:h-[296px]">
             <CommandBar />
             <SelectedAgentPanel />
           </div>

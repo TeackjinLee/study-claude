@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useAgentStore } from '@/store/agentStore';
-import { ChevronDownIcon, CpuIcon, GaugeIcon, ShieldIcon } from '@/components/ui/icons';
+import { ChevronDownIcon, CodexMarkIcon, CpuIcon, GaugeIcon, ShieldIcon } from '@/components/ui/icons';
 import { WorkspaceChip } from '@/components/layout/WorkspaceChip';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
@@ -133,16 +133,17 @@ const PERMISSION_OPTIONS: Option[] = [
 ];
 
 type ModelInfo = { value: string; displayName: string; description?: string; resolvedModel?: string };
+type CommandsPayload = { models?: ModelInfo[]; commands?: { name: string; scope?: string; choices?: Option[] }[] };
 
-/** /api/commands 의 models (Claude Code가 아는 모델 목록). 한 번만 받아서 재사용 */
-let modelsCache: Promise<ModelInfo[]> | null = null;
-function loadModels(): Promise<ModelInfo[]> {
-  if (!modelsCache) {
-    modelsCache = fetch(`${BACKEND_URL}/api/commands`)
-      .then(async (res) => ((await res.json()) as { models?: ModelInfo[] }).models ?? [])
-      .catch(() => []);
+/** /api/commands 의 models(Claude Code 모델 목록)와 /codex-model 선택지(Codex 모델 목록). 한 번만 받아서 재사용 */
+let payloadCache: Promise<CommandsPayload> | null = null;
+function loadPayload(): Promise<CommandsPayload> {
+  if (!payloadCache) {
+    payloadCache = fetch(`${BACKEND_URL}/api/commands`)
+      .then(async (res) => (await res.json()) as CommandsPayload)
+      .catch(() => ({}));
   }
-  return modelsCache;
+  return payloadCache;
 }
 
 /**
@@ -154,9 +155,14 @@ export function CommandControls() {
   const running = useAgentStore((s) => s.running);
   const sendCommand = useAgentStore((s) => s.sendCommand);
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [codexModels, setCodexModels] = useState<Option[]>([]);
+  const hasCodex = useAgentStore((s) => s.defs.some((d) => d.provider === 'codex'));
 
   useEffect(() => {
-    void loadModels().then(setModels);
+    void loadPayload().then((p) => {
+      setModels(p.models ?? []);
+      setCodexModels(p.commands?.find((c) => c.name === 'codex-model' && !c.scope)?.choices ?? []);
+    });
   }, []);
 
   // Claude Code 목록에 'default'가 이미 있으면 그걸 쓰고, 없을 때만 우리 기본값 항목을 앞에 둔다
@@ -186,6 +192,17 @@ export function CommandControls() {
         disabled={running}
         title="총괄 에이전트 모델 (/model)"
       />
+      {hasCodex && (
+        <ControlMenu
+          icon={<CodexMarkIcon className="h-3.5 w-3.5" />}
+          label="Codex"
+          value={codexModels.find((o) => o.value === (settings?.codexModel ?? 'default'))?.label ?? settings?.codexModel ?? '기본값'}
+          options={codexModels.length ? codexModels : [{ value: 'default', label: '기본값', description: '~/.codex/config.toml 설정을 따름' }]}
+          onPick={(v) => sendCommand(`/codex-model ${v}`)}
+          disabled={running}
+          title="Codex 모델 (/codex-model)"
+        />
+      )}
       <ControlMenu
         icon={<GaugeIcon className="h-3.5 w-3.5" />}
         label="노력"

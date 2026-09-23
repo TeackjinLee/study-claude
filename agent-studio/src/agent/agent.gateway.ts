@@ -16,7 +16,9 @@ const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 /**
  * 화면 → 서버
- *   command            { prompt }            작업 시작 (ack로 성공/실패 응답)
+ *   command            { prompt, mode, planFirst, attachments }  작업 시작 (ack로 성공/실패 응답)
+ *   follow-up          { prompt }            실행 도중 추가 지시 끼워 넣기
+ *   new-conversation   { mode? }             코드·채팅의 이어갈 대화를 비우고 새로 시작
  *   interrupt                                  작업 중지
  *   permission-reply   { id, allowed, always } 권한 요청에 대한 답
  *
@@ -52,8 +54,18 @@ export class AgentGateway implements OnGatewayInit, OnGatewayConnection {
   }
 
   @SubscribeMessage('command')
-  handleCommand(@MessageBody() body: { prompt?: unknown; attachments?: unknown; mode?: unknown } | undefined) {
-    return this.runner.start(body?.prompt, body?.attachments, body?.mode);
+  handleCommand(@MessageBody() body: { prompt?: unknown; attachments?: unknown; mode?: unknown; planFirst?: unknown } | undefined) {
+    return this.runner.start(body?.prompt, body?.attachments, body?.mode, body?.planFirst);
+  }
+
+  @SubscribeMessage('follow-up')
+  handleFollowUp(@MessageBody() body: { prompt?: unknown } | undefined) {
+    return this.runner.followUp(body?.prompt);
+  }
+
+  @SubscribeMessage('new-conversation')
+  handleNewConversation(@MessageBody() body: { mode?: unknown } | undefined) {
+    return this.runner.newConversation(body?.mode);
   }
 
   @SubscribeMessage('interrupt')

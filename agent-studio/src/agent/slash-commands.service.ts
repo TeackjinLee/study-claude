@@ -10,7 +10,8 @@ import {
   type SDKControlGetUsageResponse,
   type SlashCommand,
 } from '@anthropic-ai/claude-agent-sdk';
-import { buildOrchestratorPrompt } from './agents.config.js';
+import { buildOrchestratorPrompt, type AgentConfig } from './agents.config.js';
+import type { Attachment } from './attachments.js';
 import { config } from '../config.js';
 import { AgentRegistryService } from './agent-registry.service.js';
 import { EFFORT_LEVELS, PERMISSION_MODES, SettingsService, type EffortLevel, type RunSettings } from './settings.service.js';
@@ -26,6 +27,10 @@ export interface CommandInfo {
   argumentHint: string;
   /** builtin: 서버가 직접 처리 / sdk: Claude Code(작업 폴더의 .claude/commands, 스킬 등)로 넘김 */
   source: 'builtin' | 'sdk';
+  /** codex: `/codex /<name>` 형태로만 쓰는 Codex 하위 명령 (입력창이 Codex 대상일 때 메뉴에 뜬다) */
+  scope?: 'codex';
+  /** 인자를 목록에서 고를 수 있는 명령 (/model, /codex /model, /effort ...)의 선택지 */
+  choices?: CommandChoice[];
 }
 
 /** 대시보드가 선택지 UI로 보여줄 항목. 고르면 `${command} ${value}`를 다시 보낸다 */
@@ -60,6 +65,10 @@ export interface SlashContext {
   clearHistory: () => void;
   /** /codex 처럼 처리 중에 대시보드 이벤트를 흘려보내야 하는 명령용 */
   emit: (event: UiEventBody) => void;
+  /** /talk — Claude 서브에이전트에게 직접 말하기 (AgentRunnerService.talk) */
+  talk: (agent: AgentConfig, message: string, attachments: Attachment[]) => Promise<{ ok: boolean; text: string }>;
+  /** 명령과 함께 첨부된 파일 (검증 완료, 작업 폴더 기준 경로). /codex, /talk 가 같이 보낸다 */
+  attachments: Attachment[];
 }
 
 const CODEX_MODES: CodexMode[] = ['discuss', 'review', 'implement', 'image'];
@@ -82,10 +91,23 @@ const USAGE_CACHE_MS = 60_000;
 /** 모델 별칭 (Claude Code CLI가 받아들이는 이름) */
 const MODEL_ALIASES = ['sonnet', 'opus', 'haiku', 'default'];
 
+/** 입력창이 Codex 대상(/codex ...)일 때 `/`를 치면 뜨는 하위 명령. 서버는 `/codex /<name> ...`으로 받는다 */
+const CODEX_SUB: CommandInfo[] = [
+  { name: 'discuss', description: 'Codex와 대화·작업 요청 (기본). 파일 수정을 요청하면 고칠 수 있음', argumentHint: '<메시지>', source: 'builtin', scope: 'codex' },
+  { name: 'review', description: '코드 리뷰 (읽기 전용). 파일 경로를 적어주세요', argumentHint: '<메시지>', source: 'builtin', scope: 'codex' },
+  { name: 'implement', description: '구현 요청 (작업 폴더 안 파일 수정)', argumentHint: '<메시지>', source: 'builtin', scope: 'codex' },
+  { name: 'image', description: '이미지 생성 (예: /codex /image >assets/logo.png flat vector fox logo)', argumentHint: '[>저장경로] <프롬프트>', source: 'builtin', scope: 'codex' },
+  { name: 'model', description: 'Codex 모델 보기/변경 (= /codex-model)', argumentHint: '[model|default]', source: 'builtin', scope: 'codex' },
+  { name: 'status', description: 'Codex 상태 (로그인, 모델, 구독 한도, 등록된 에이전트)', argumentHint: '', source: 'builtin', scope: 'codex' },
+  { name: 'reset', description: 'Codex 직접 대화 기억 초기화', argumentHint: '', source: 'builtin', scope: 'codex' },
+  { name: 'help', description: '/codex 사용법', argumentHint: '', source: 'builtin', scope: 'codex' },
+];
+
 const BUILTIN: CommandInfo[] = [
   { name: 'help', description: '사용할 수 있는 명령 목록', argumentHint: '', source: 'builtin' },
   { name: 'model', description: '실행에 쓸 모델 보기/변경 (예: /model opus)', argumentHint: '[model]', source: 'builtin' },
-  { name: 'codex', description: 'Codex 에이전트에게 직접 말하기 (예: /codex 이 설계 어때?, /codex review src/app.ts 봐줘)', argumentHint: '[discuss|review|implement|image] [@에이전트] [>저장경로] <메시지> | reset', source: 'builtin' },
+  { name: 'codex', description: 'Codex 에이전트에게 직접 말하기 (예: /codex 이 설계 어때?, /codex review src/app.ts 봐줘)', argumentHint: '[discuss|review|implement|image] [@에이전트] [>저장경로] <메시지> | /명령', source: 'builtin' },
+  { name: 'talk', description: '사무실에서 에이전트에게 직접 말하기 (Master 대화). 예: /talk @gameplay-coder 트럭 그립 어때?', argumentHint: '@<에이전트> <메시지>', source: 'builtin' },
   { name: 'codex-model', description: 'Codex 협업자가 쓸 모델 보기/변경 (예: /codex-model gpt-5-codex)', argumentHint: '[model|default]', source: 'builtin' },
   { name: 'workspace', description: '에이전트가 작업할 폴더 보기/변경 (예: /workspace ~/projects/my-app)', argumentHint: '[path|default]', source: 'builtin' },
   { name: 'effort', description: '추론 노력 수준 보기/변경', argumentHint: `[${EFFORT_LEVELS.join('|')}|off]`, source: 'builtin' },
@@ -134,7 +156,36 @@ export class SlashCommandsService {
     const extra: CommandInfo[] = sdk.commands
       .filter((c) => !builtinNames.has(c.name) && !INTERACTIVE_ONLY.has(c.name) && !c.name.startsWith('__'))
       .map((c) => ({ name: c.name, description: c.description, argumentHint: c.argumentHint ?? '', source: 'sdk' as const }));
-    return [...BUILTIN, ...extra];
+    const choices = await this.choices(sdk.models);
+    const withChoices = (c: CommandInfo): CommandInfo => {
+      const key = c.scope === 'codex' ? `codex:${c.name}` : c.name;
+      return choices[key] ? { ...c, choices: choices[key] } : c;
+    };
+    return [...BUILTIN, ...extra, ...CODEX_SUB].map(withChoices);
+  }
+
+  /** 인자를 메뉴에서 고르는 명령들의 선택지. Codex 모델은 `codex app-server`의 model/list */
+  private async choices(claudeModels: ModelInfo[]): Promise<Record<string, CommandChoice[]>> {
+    const codexModels = await this.codexAuth.models().catch(() => []);
+    const codex: CommandChoice[] = [
+      { value: 'default', label: '기본값', description: '~/.codex/config.toml 설정을 따름' },
+      ...codexModels.map((m) => ({ value: m.id, label: m.displayName, description: `${m.description}${m.isDefault ? ' (Codex 기본)' : ''}` })),
+    ];
+    const claude: CommandChoice[] = claudeModels.map((m) => ({
+      value: m.value,
+      label: m.value === 'default' ? `기본값 · ${m.displayName}` : m.displayName,
+      description: m.description,
+    }));
+    if (!claude.some((c) => c.value === 'default')) claude.unshift({ value: 'default', label: '기본값', description: 'Claude Code 설정을 따름' });
+    const effort: CommandChoice[] = [
+      { value: 'off', label: '기본값', description: '모델 기본 설정' },
+      ...EFFORT_LEVELS.map((e) => ({ value: e, label: e })),
+    ];
+    const permission: CommandChoice[] = [
+      { value: 'acceptEdits', label: '자동', description: '작업 폴더 안 파일 수정은 자동 허용. 명령 실행만 확인' },
+      { value: 'default', label: '확인', description: '파일 수정도 매번 승인' },
+    ];
+    return { model: claude, 'codex-model': codex, 'codex:model': codex, effort, 'permission-mode': permission };
   }
 
   async models(): Promise<ModelInfo[]> {
@@ -155,7 +206,7 @@ export class SlashCommandsService {
     switch (name) {
       case 'help':
       case '?': {
-        const list = await this.list();
+        const list = (await this.list()).filter((c) => c.scope !== 'codex');
         const lines = list.map((c) => `/${c.name}${c.argumentHint ? ` ${c.argumentHint}` : ''} — ${c.description}${c.source === 'sdk' ? ' (Claude Code)' : ''}`);
         return { ok: true, text: ['사용할 수 있는 명령:', ...lines, '', '그 밖의 /명령은 Claude Code에 그대로 전달됩니다.'].join('\n') };
       }
@@ -309,6 +360,21 @@ export class SlashCommandsService {
 
       case 'codex': {
         const agents = this.registry.codexAgents();
+        // `/codex /model gpt-5` 처럼 하위 명령으로 들어오면 풀어서 처리한다
+        const sub = /^\/([a-zA-Z][\w-]*)\s*([\s\S]*)$/.exec(arg);
+        if (sub) {
+          const subName = sub[1].toLowerCase();
+          const subArg = sub[2].trim();
+          if (CODEX_MODES.includes(subName as CodexMode)) return this.handle(`/codex ${subName} ${subArg}`, ctx);
+          if (subName === 'model') return this.handle(`/codex-model ${subArg}`, ctx);
+          if (subName === 'reset') return this.handle('/codex reset', ctx);
+          if (subName === 'help' || subName === '?') return this.handle('/codex', ctx);
+          if (subName === 'status') return { ok: true, text: await this.describeCodex(agents, s.codexModel) };
+          return {
+            ok: false,
+            text: `모르는 Codex 명령입니다: /${subName}\n사용 가능: ${CODEX_SUB.map((c) => `/${c.name}`).join(', ')}`,
+          };
+        }
         if (!arg) {
           const rows = agents.map((a) => `- @${a.sdkName} (${a.name})`);
           return {
@@ -316,12 +382,13 @@ export class SlashCommandsService {
             text: [
               'Codex 에이전트에게 직접 메시지를 보냅니다. Claude를 거치지 않고 Codex 의견을 바로 들을 수 있습니다.',
               '',
-              '/codex <메시지>                    — 첫 Codex 에이전트에게 토론(discuss) 모드로',
+              '/codex <메시지>                    — 첫 Codex 에이전트에게 대화·작업 요청 (파일 수정을 부탁하면 고칠 수 있음)',
               '/codex review <메시지>             — 코드 리뷰 (읽기 전용). 파일 경로를 적어주세요',
-              '/codex implement <메시지>          — 구현 요청 (작업 폴더 안 파일 수정 가능)',
+              '/codex implement <메시지>          — 구현 요청 (작업 폴더 안 파일 수정)',
               '/codex image [>경로] <프롬프트>     — 이미지 생성 (예: /codex image >assets/logo.png flat vector fox logo). 경로를 안 주면 generated/ 아래에 저장',
               '/codex @<에이전트> <메시지>          — 특정 Codex 에이전트에게',
               '/codex reset                       — 직접 대화 기억 초기화',
+              '/codex /model, /status, /help      — Codex 설정·상태 (입력창이 Codex 대상일 때 / 를 치면 메뉴가 뜹니다)',
               '',
               agents.length ? `등록된 Codex 에이전트:\n${rows.join('\n')}` : '등록된 Codex 에이전트가 없습니다. 에이전트 추가에서 제공자를 Codex로 선택하세요.',
             ].join('\n'),
@@ -351,22 +418,65 @@ export class SlashCommandsService {
           tokens.shift();
         }
         const message = tokens.join(' ').trim();
-        if (!message) return { ok: false, text: 'Codex에게 보낼 메시지를 적어주세요.' };
+        if (!message && ctx.attachments.length === 0) return { ok: false, text: 'Codex에게 보낼 메시지를 적어주세요.' };
 
         const auth = await this.codexAuth.status();
         if (!auth.available) return { ok: false, text: auth.message ?? 'Codex CLI를 찾을 수 없습니다.' };
         if (!auth.hasAuth) return { ok: false, text: 'Codex에 로그인되어 있지 않습니다. 헤더의 Codex 칩에서 로그인하세요.' };
 
         try {
-          const reply = await this.codexBridge.askDirect(agent, message, mode, { emit: ctx.emit, workspaceDir: s.workspaceDir, model: s.codexModel }, savePath);
+          const reply = await this.codexBridge.askDirect(agent, message || '첨부한 파일을 확인하고 의견을 말해줘.', mode, { emit: ctx.emit, workspaceDir: s.workspaceDir, model: s.codexModel }, savePath, undefined, ctx.attachments);
           return { ok: true, text: `${agent.shortName}:\n${reply}` };
         } catch (err) {
           return { ok: false, text: `Codex 응답 실패: ${(err as Error).message}` };
         }
       }
 
+      case 'talk': {
+        const all = this.registry.list();
+        const m = /^@([\w-]+)\s*([\s\S]*)$/.exec(arg);
+        if (!m) {
+          return {
+            ok: !arg,
+            text: [
+              '에이전트에게 직접 말합니다 (총괄을 거치지 않음). 사무실에서 Master를 에이전트 옆으로 옮겨 E 키를 누르거나, 아래처럼 입력하세요.',
+              '/talk @<에이전트> <메시지>',
+              '',
+              '에이전트:',
+              ...all.map((a) => `- @${a.sdkName} (${a.name})${a.provider === 'codex' ? ' [Codex]' : ''}`),
+            ].join('\n'),
+          };
+        }
+        const agent = all.find((a) => a.sdkName === m[1] || a.id === m[1]);
+        if (!agent) return { ok: false, text: `에이전트를 찾을 수 없습니다: @${m[1]}\n사용 가능: ${all.map((a) => `@${a.sdkName}`).join(', ')}` };
+        const message = m[2].trim() || (ctx.attachments.length ? '첨부한 파일을 확인하고 의견을 말해줘.' : '');
+        if (!message) return { ok: false, text: `${agent.shortName}에게 할 말을 적어주세요.` };
+        if (agent.provider === 'codex') return this.handle(`/codex @${agent.sdkName} ${message}`, ctx);
+        if (ctx.running) return { ok: false, text: '작업 실행 중에는 에이전트에게 직접 말할 수 없습니다.' };
+        const reply = await ctx.talk(agent, message, ctx.attachments);
+        return { ok: reply.ok, text: reply.ok ? `${agent.shortName}:\n${reply.text}` : reply.text };
+      }
+
       case 'codex-model': {
-        if (!arg) return { ok: true, text: `현재 Codex 모델: ${s.codexModel ?? '기본값 (~/.codex/config.toml)'}\n바꾸려면 /codex-model <이름>, 기본값으로 되돌리려면 /codex-model default` };
+        if (!arg) {
+          const models = await this.codexAuth.models().catch(() => []);
+          const rows = models.map((m) => `- ${m.id}${m.isDefault ? ' (Codex 기본)' : ''}${s.codexModel === m.id ? '  ← 현재' : ''}: ${m.displayName} — ${m.description}`);
+          const current = s.codexModel ?? 'default';
+          const options: CommandChoice[] = [
+            { value: 'default', label: '기본값 (~/.codex/config.toml)', current: current === 'default' },
+            ...models.map((m) => ({ value: m.id, label: `${m.displayName}${m.isDefault ? ' · Codex 기본' : ''}`, description: m.description, current: current === m.id })),
+          ];
+          return {
+            ok: true,
+            choices: { command: '/codex-model', title: 'Codex 모델 선택', options },
+            text: [
+              `현재 Codex 모델: ${s.codexModel ?? '기본값 (~/.codex/config.toml)'}`,
+              ...(rows.length ? ['', '쓸 수 있는 모델:', ...rows] : []),
+              '',
+              '바꾸려면 /codex-model <이름> (입력창 대상이 Codex면 /codex /model 뒤에서 고를 수 있습니다), 기본값으로 되돌리려면 /codex-model default',
+            ].join('\n'),
+          };
+        }
         if (arg === 'default' || arg === 'reset') {
           const next = await this.settings.update({ codexModel: undefined });
           return { ok: true, text: 'Codex 모델을 기본값으로 되돌렸습니다.', settings: next };
@@ -499,6 +609,27 @@ export class SlashCommandsService {
       });
     }
     return this.probe;
+  }
+
+  /** `/codex /status` — 로그인, 모델, 구독 한도, 등록된 Codex 에이전트 */
+  private async describeCodex(agents: ReturnType<AgentRegistryService['codexAgents']>, model: string | undefined): Promise<string> {
+    const auth = await this.codexAuth.status();
+    const lines = [
+      `Codex 인증: ${!auth.available ? 'CLI 없음' : auth.hasAuth ? `로그인됨 (${auth.method})` : '로그인 안 됨'}`,
+      `Codex 모델: ${model ?? `기본값 (${auth.defaultModel ?? '~/.codex/config.toml'})`}`,
+      `직접 대화: ${this.codexBridge.busy ? '응답 중' : '대기 중'}`,
+    ];
+    const limits = auth.hasAuth ? await this.codexAuth.rateLimits().catch(() => null) : null;
+    if (limits) {
+      if (limits.plan) lines.push(`구독: ${limits.plan}`);
+      for (const w of limits.windows) {
+        const reset = w.resetsAt ? ` (초기화 ${new Date(w.resetsAt).toLocaleString('ko-KR')})` : '';
+        lines.push(`- ${w.label}: ${Math.round(w.utilization)}% 사용${reset}`);
+      }
+      if (limits.blocked) lines.push('⚠ 한도에 걸려 있습니다.');
+    }
+    lines.push(agents.length ? `등록된 Codex 에이전트: ${agents.map((a) => `@${a.sdkName}`).join(', ')}` : '등록된 Codex 에이전트가 없습니다.');
+    return lines.join('\n');
   }
 
   private async runProbe() {

@@ -24,8 +24,9 @@ export interface PermissionRequest {
   canAlwaysAllow: boolean;
 }
 
-/** 명령 종류: chat=대화만(읽기 전용, 이전 대화 이어감) / cowork=총괄+서브에이전트+Codex로 실제 작업 */
-export type RunMode = 'chat' | 'cowork';
+/** 명령 종류: code=Claude Code처럼 혼자 직접 코딩(기본, 이전 대화 이어감) / chat=대화만(읽기 전용) / cowork=총괄+서브에이전트+Codex로 팀 작업 */
+export type RunMode = 'code' | 'chat' | 'cowork';
+export const RUN_MODES: readonly RunMode[] = ['code', 'chat', 'cowork'];
 
 /** /model 등으로 바꾸는 서버 실행 설정 (백엔드 RunSettings와 같은 모양) */
 export interface RunSettings {
@@ -59,6 +60,10 @@ export interface CommandInfo {
   description: string;
   argumentHint: string;
   source: 'builtin' | 'sdk';
+  /** codex: 입력창이 Codex 대상(/codex ...)일 때만 뜨는 하위 명령 (`/codex /<name>`) */
+  scope?: 'codex';
+  /** 인자를 메뉴에서 고를 수 있는 명령의 선택지 (/model, /codex /model, /effort ...) */
+  choices?: CommandChoice[];
 }
 
 export interface RunResult {
@@ -67,6 +72,8 @@ export interface RunResult {
   costUsd?: number;
   turns?: number;
   durationMs?: number;
+  /** 총괄이 제안한 다음 추천 명령 (명령 입력창 버튼) */
+  suggestions?: string[];
 }
 
 /**
@@ -78,7 +85,13 @@ export type AgentSimEvent =
   /** 서버(또는 다른 화면)에서 에이전트 목록이 바뀌었을 때 */
   | { type: 'agents_changed'; agents: AgentDef[] }
   | { type: 'session'; model: string }
-  | { type: 'run_start'; command: string; workspace?: string; attachments?: Attachment[]; mode?: RunMode }
+  /** continued: 같은 모드의 이전 대화를 이어서 실행 / planFirst: 계획을 먼저 승인받고 수정 */
+  | { type: 'run_start'; command: string; workspace?: string; attachments?: Attachment[]; mode?: RunMode; continued?: boolean; planFirst?: boolean }
+  /** 실행 도중 사용자가 끼워 넣은 추가 지시 */
+  | { type: 'follow_up'; text: string }
+  /** 코드·채팅의 이어갈 대화가 생기거나(active) 새 대화로 비워짐. all은 접속 직후 전체 상태 */
+  | { type: 'conversation'; mode: RunMode; active: boolean }
+  | { type: 'conversations'; all: Partial<Record<RunMode, boolean>> }
   /** room: 'work'는 "그 에이전트의 담당 작업실"(에이전트 정의의 room)로, 스토어가 실제 방으로 바꾼다 */
   | { type: 'agent_status'; agent: AgentRole; status: AgentStatus; room?: RoomId | 'work'; message?: string; progress?: number }
   | { type: 'log'; agent: AgentRole | 'system'; text: string }
@@ -94,18 +107,25 @@ export type AgentSimEvent =
   | { type: 'run_error'; message: string }
   | { type: 'run_aborted' }
   /** /codex 직접 대화 진행 중 (실행이 아니어도 중지 버튼을 보여준다) */
-  | { type: 'codex_direct'; active: boolean };
+  | { type: 'codex_direct'; active: boolean }
+  /** 사용자(Master)가 에이전트에게 한 말 — 사무실에서 Master 말풍선으로 보여준다 */
+  | { type: 'master_say'; to: AgentRole; text: string };
 
 /** Mock/실제 소스가 공통으로 구현하는 추상화 인터페이스. */
 export interface AgentEventSource {
   connect(onEvent: (evt: AgentSimEvent) => void): void;
   disconnect(): void;
   /** agents: 현재 등록된 에이전트 목록 (Mock이 사용자 정의 에이전트도 움직이게 하려고 받는다) */
-  sendCommand(prompt: string, agents: AgentDef[], attachments?: Attachment[], mode?: RunMode): void;
+  sendCommand(prompt: string, agents: AgentDef[], attachments?: Attachment[], mode?: RunMode, opts?: { planFirst?: boolean }): void;
+  /** 실행 도중 추가 지시 (다음 도구 호출 사이에 끼워 넣는다) */
+  followUp(prompt: string): void;
+  /** 코드·채팅의 이어갈 대화를 비우고 새로 시작. mode가 없으면 모두 */
+  newConversation(mode?: RunMode): void;
   /** 실행 중인 작업 중단 */
   interrupt(): void;
   /** 승인 요청에 응답 (always = 이번 세션 동안 같은 요청은 자동 허용) */
-  replyPermission(id: string, allowed: boolean, always: boolean): void;
+  /** always: true=이 도구를 이번 실행 동안 허용, 'all'=모든 도구를 이번 실행 동안 허용 */
+  replyPermission(id: string, allowed: boolean, always: boolean | 'all'): void;
   /** 자동완성용 슬래시 명령 목록 */
   listCommands(): Promise<CommandInfo[]>;
 }

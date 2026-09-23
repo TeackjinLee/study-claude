@@ -3,16 +3,19 @@ import { readFile, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
 import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
-import { Codex, type ThreadEvent, type ThreadItem, type ThreadOptions } from '@openai/codex-sdk';
+import { Codex, type Input, type ThreadEvent, type ThreadItem, type ThreadOptions, type UserInput } from '@openai/codex-sdk';
 import { z } from 'zod';
 import { CodexAuthService } from '../auth/codex-auth.service.js';
 import { resolveCodexBinary } from '../auth/codex-cli.js';
-import { CODEX_MCP_SERVER, codexMcpToolName, codexToolName, type AgentConfig } from './agents.config.js';
+import { CODEX_MCP_SERVER, codexAccessNote, codexCanWrite, codexMcpToolName, codexToolName, type AgentConfig } from './agents.config.js';
+import { type Attachment } from './attachments.js';
 import { ARTIFACT_MAX_CHARS, TEST_COMMAND, artifactKindOf, clip, isImagePath, langOf, oneLine, workspaceFileUrl } from './artifact-utils.js';
 import type { CodexMode, UiAgentId, UiEventBody } from './ui-events.js';
 
 export const isCodexTool = (name: string) => name.startsWith(`mcp__${CODEX_MCP_SERVER}__ask_`);
-export const sandboxFor = (mode: CodexMode): ThreadOptions['sandboxMode'] => (mode === 'implement' || mode === 'image' ? 'workspace-write' : 'read-only');
+/** 에이전트 설정에서 권한(Edit/Write/Bash)을 하나라도 켰고 review가 아니면 workspace-write, 아니면 read-only */
+export const codexWrites = (agent: Pick<AgentConfig, 'tools'>, mode: CodexMode) => mode !== 'review' && codexCanWrite(agent);
+export const sandboxFor = (agent: Pick<AgentConfig, 'tools'>, mode: CodexMode): ThreadOptions['sandboxMode'] => (codexWrites(agent, mode) ? 'workspace-write' : 'read-only');
 
 /** 총괄 도구가 돌려받는 Codex 답변 최대 길이 (총괄의 컨텍스트 보호) */
 const REPLY_MAX_CHARS = 12000;
@@ -29,7 +32,7 @@ export interface CodexSessionCtx {
 type AgentThread = { threadId: string | null; introduced: boolean; queue: Promise<unknown> };
 
 const MODE_NOTE: Record<CodexMode, string> = {
-  discuss: '설계/방향 토론이다. 파일은 읽기만 하고 수정하지 마라.',
+  discuss: '대화/작업 요청이다. 질문이면 답하고, 파일 수정을 요청받았으면 작업 폴더 안에서 필요한 최소 범위로 고친 뒤 바꾼 파일 경로를 보고해라. 요청받지 않은 파일은 건드리지 마라.',
   review: '코드 리뷰 요청이다. 파일은 읽기만 하고 수정하지 마라. 문제를 심각도 순으로 정리해라.',
   implement: '구현 요청이다. 필요한 최소 범위로 파일을 수정하고, 바꾼 파일 경로와 내용을 보고해라.',
   image:
@@ -78,6 +81,7 @@ export class CodexBridgeService {
     ctx: Omit<CodexSessionCtx, 'signal' | 'agents'>,
     savePath?: string,
     timeoutMs = 180_000,
+    attachments: Attachment[] = [],
   ): Promise<string> {
     if (this.directAbort) throw new Error('Codex가 아직 이전 /codex 메시지에 답하는 중입니다.');
     const abort = new AbortController();
@@ -89,10 +93,11 @@ export class CodexBridgeService {
     const state = this.directThreads.get(agent.id) ?? { threadId: null, introduced: false, queue: Promise.resolve() };
     this.directThreads.set(agent.id, state);
     ctx.emit({ type: 'codex_direct', active: true });
-    ctx.emit({ type: 'agent_message', from: 'user', to: agent.id, mode, text: clip(message, 1200) });
-    ctx.emit({ type: 'agent_start', agent: agent.id, callId, task: `[${mode}] ${oneLine(message)}` });
+    const shown = attachments.length ? `${message} (첨부 ${attachments.map((a) => a.name).join(', ')})` : message;
+    ctx.emit({ type: 'agent_message', from: 'user', to: agent.id, mode, text: clip(shown, 1200) });
+    ctx.emit({ type: 'agent_start', agent: agent.id, callId, task: `[${mode}] ${oneLine(shown)}` });
     try {
-      const result = await this.ask(agent, state, message, mode, callId, { ...ctx, signal: abort.signal, agents: [agent] }, savePath);
+      const result = await this.ask(agent, state, message, mode, callId, { ...ctx, signal: abort.signal, agents: [agent] }, savePath, attachments);
       ctx.emit({ type: 'agent_done', agent: agent.id, callId, ok: result.ok, summary: clip(result.text, 1200) });
       if (!result.ok) throw new Error(result.text);
       return result.text;
@@ -123,6 +128,7 @@ export class CodexBridgeService {
     callId: string,
     ctx: CodexSessionCtx,
     savePath?: string,
+    attachments: Attachment[] = [],
   ): Promise<{ ok: boolean; text: string }> {
     const run = async () => {
       const auth = await this.codexAuth.status();
@@ -140,7 +146,7 @@ export class CodexBridgeService {
       const opts: ThreadOptions = {
         workingDirectory: ctx.workspaceDir,
         skipGitRepoCheck: true,
-        sandboxMode: sandboxFor(mode),
+        sandboxMode: sandboxFor(agent, mode),
         approvalPolicy: 'never',
         model: ctx.model,
       };
@@ -149,14 +155,27 @@ export class CodexBridgeService {
       // 이미지 생성이면 저장 경로를 정해 메시지에 붙인다 (작업 폴더 밖 경로는 기본 위치로 대체)
       const imagePath = mode === 'image' ? (savePath && this.rel(ctx.workspaceDir, savePath)) || defaultImagePath() : null;
       const body = imagePath ? `[저장 경로] ${imagePath}\n\n[이미지 프롬프트]\n${message}` : message;
+      // 권한이 없는 에이전트는 어떤 모드든 읽기 전용이라고 알려준다 (샌드박스도 read-only)
+      const note = codexWrites(agent, mode) ? `${MODE_NOTE[mode]} ${codexAccessNote(agent)}` : mode === 'review' ? MODE_NOTE.review : `${MODE_NOTE[mode]} 단, 이 에이전트는 ${codexAccessNote(agent)}`;
       const input = state.introduced
-        ? `[mode=${mode}] ${MODE_NOTE[mode]}\n\n${body}`
-        : [`[역할]`, agent.prompt, '', '[협업 규칙]', '상대는 Claude 총괄 에이전트(또는 사용자)다. 한국어로 핵심부터 간결하게 답한다.', MODE_NOTE[mode], '', '[메시지]', body].join('\n');
+        ? `[mode=${mode}] ${note}\n\n${body}`
+        : [`[역할]`, agent.prompt, '', '[협업 규칙]', '상대는 Claude 총괄 에이전트(또는 사용자)다. 한국어로 핵심부터 간결하게 답한다.', note, '', '[메시지]', body].join('\n');
+
+      // 첨부: 이미지는 Codex가 직접 보게 local_image로, 나머지는 경로를 알려줘 읽게 한다
+      let turnInput: Input = input;
+      if (attachments.length > 0) {
+        const lines = attachments.map((a) => `- ${a.path} (${a.kind === 'image' ? '이미지' : a.mime}, ${Math.round(a.size / 1024)}KB)`);
+        const parts: UserInput[] = [
+          { type: 'text', text: `${input}\n\n[첨부 파일]\n사용자가 함께 첨부한 파일이다. 작업 폴더 기준 경로이며 필요하면 읽어라.\n${lines.join('\n')}` },
+          ...attachments.filter((a) => a.kind === 'image').map((a): UserInput => ({ type: 'local_image', path: join(ctx.workspaceDir, a.path) })),
+        ];
+        turnInput = parts;
+      }
 
       let lastText = '';
       let failure: string | null = null;
       try {
-        const { events } = await thread.runStreamed(input, { signal: ctx.signal });
+        const { events } = await thread.runStreamed(turnInput, { signal: ctx.signal });
         for await (const event of events) {
           const stop = await this.handleEvent(event, agent.id, callId, ctx, state, (t) => (lastText = t));
           if (stop) {
@@ -336,7 +355,8 @@ export class CodexSession {
       tool(
         codexToolName(agent),
         `${agent.name} (OpenAI Codex)에게 메시지를 보내고 답을 받는다. ${agent.sdkDescription} ` +
-          'mode: discuss=설계/의견 토론(읽기 전용), review=코드 리뷰(읽기 전용, 파일 경로를 적을 것), implement=구현 위임(파일 수정 가능), ' +
+          `[권한: ${codexCanWrite(agent) ? agent.tools.join(', ') : '읽기 전용'}] ` +
+          'mode: discuss=설계/의견 토론·작업 부탁, review=코드 리뷰(항상 읽기 전용, 파일 경로를 적을 것), implement=구현 위임(권한이 있을 때만 파일 수정/생성), ' +
           'image=이미지 생성(message에 상세한 영어 이미지 프롬프트, savePath에 저장 경로). 같은 실행 안에서는 이전 대화를 기억한다.',
         {
           message: z.string().min(1).describe('Codex에게 보낼 메시지. image 모드면 이미지 프롬프트(주제·스타일·구도·색·배경·용도).'),

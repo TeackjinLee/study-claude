@@ -7,13 +7,15 @@ import { CheckIcon } from './StatusBadge';
 import { formatTime } from '@/lib/format';
 import { AttachmentChips } from './AttachmentChips';
 import { LogFilterSelect, LogList, type LogFilter } from './LogList';
+import { ChangesPanel } from './ChangesPanel';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
 
-/** 결과물 탭 + 사이드 패널의 실시간 로그를 넓게 보는 탭 */
-type PanelTab = ResultTab | 'log';
+/** 결과물 탭 + 작업 폴더의 git 변경사항 + 사이드 패널의 실시간 로그를 넓게 보는 탭 */
+type PanelTab = ResultTab | 'changes' | 'log';
 
 const TABS: { id: PanelTab; label: string }[] = [
+  { id: 'changes', label: '변경사항' },
   { id: 'code', label: '코드' },
   { id: 'test', label: '테스트 결과' },
   { id: 'doc', label: '문서' },
@@ -27,7 +29,7 @@ const EMPTY: Record<ResultTab, string> = {
   test: '테스트를 실행하면 결과가 여기에 표시됩니다.',
   doc: 'Markdown 문서가 만들어지면 여기에 표시됩니다.',
   image: 'Codex가 이미지를 만들면 여기에 표시됩니다. (총괄이 프롬프트를 쓰고 Codex가 그립니다 — /codex image <프롬프트> 로 직접 요청할 수도 있습니다)',
-  summary: '작업이 끝나면 총괄 에이전트의 최종 요약이 여기에 표시됩니다.',
+  summary: '작업이 끝나면 최종 요약이 여기에 표시됩니다. 이어지는 대화(코드·채팅)는 명령마다 한 항목씩 쌓입니다.',
 };
 
 const RUN_STATUS = {
@@ -61,40 +63,41 @@ function useElapsed(startedAt?: number, endedAt?: number) {
  */
 export function ResultsPanel() {
   const run = useAgentStore((s) => s.run);
+  const thread = useAgentStore((s) => s.thread);
   const artifacts = useAgentStore((s) => s.artifacts);
   const fresh = useAgentStore((s) => s.freshResults);
   const markSeen = useAgentStore((s) => s.markResultsSeen);
   const logCount = useAgentStore((s) => s.logs.length);
-  const [tab, setTab] = useState<PanelTab>('code');
+  const [tab, setTab] = useState<PanelTab>('changes');
   const [logFilter, setLogFilter] = useState<LogFilter>('all');
   const [picked, setPicked] = useState<Partial<Record<ResultTab, string>>>({});
 
   const elapsed = useElapsed(run?.startedAt, run?.endedAt);
 
   const items = useMemo<Artifact[]>(() => {
-    if (tab === 'log') return [];
+    if (tab === 'log' || tab === 'changes') return [];
     if (tab === 'summary') {
-      if (!run?.result) return [];
-      return [
-        {
-          kind: 'doc',
-          key: 'summary',
-          title: '최종 요약',
-          lang: '결과',
-          text: run.result.result || '(요약 없음)',
-          at: run.endedAt ?? 0,
-        },
-      ];
+      // 이어지는 대화면 앞의 명령들까지 한 항목씩 (명령 → 추가 지시 → 답)
+      return [...thread, ...(run ? [run] : [])]
+        .filter((r) => r.result || r.errorMessage)
+        .map((r, i, all) => ({
+          kind: 'doc' as const,
+          key: `summary-${r.startedAt}`,
+          title: all.length > 1 ? `${i + 1}. ${r.command}` : '최종 요약',
+          lang: r.status === 'error' ? '실패' : '결과',
+          text: [`▶ ${r.command}`, ...r.followUps.map((f) => `▶ (추가 지시) ${f}`), '', r.result?.result || r.errorMessage || '(요약 없음)'].join('\n'),
+          at: r.endedAt ?? 0,
+        }));
     }
     return Object.values(artifacts[tab]).sort((a, b) => a.at - b.at);
-  }, [tab, artifacts, run]);
+  }, [tab, artifacts, run, thread]);
 
   // 탭을 열면 "새 결과" 표시를 지우고, 새 결과물이 들어오면 자동으로 최신 항목을 고른다
   useEffect(() => {
-    if (tab !== 'log') markSeen(tab);
+    if (tab !== 'log' && tab !== 'changes') markSeen(tab);
   }, [tab, items.length, markSeen]);
 
-  const current = tab === 'log' ? undefined : (items.find((a) => a.key === picked[tab]) ?? items[items.length - 1]);
+  const current = tab === 'log' || tab === 'changes' ? undefined : (items.find((a) => a.key === picked[tab]) ?? items[items.length - 1]);
 
   // 실행 시작 시 이전 선택 초기화
   useEffect(() => {
@@ -102,6 +105,7 @@ export function ResultsPanel() {
   }, [run?.startedAt]);
 
   const status = run ? RUN_STATUS[run.status] : null;
+  const summaryCount = [...thread, run].filter((r) => r?.result || r?.errorMessage).length;
 
   return (
     <section className="panel flex h-full min-h-0 flex-col overflow-hidden">
@@ -123,8 +127,10 @@ export function ResultsPanel() {
             <span className="rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-muted">대기</span>
           )}
           {run && (
-            <span className="shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] font-semibold text-slate-300" title={run.mode === 'chat' ? '채팅: 대화만' : 'Cowork: 실제 작업'}>
-              {run.mode === 'chat' ? '채팅' : 'Cowork'}
+            <span className="shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] font-semibold text-slate-300" title={run.mode === 'chat' ? '채팅: 대화만' : run.mode === 'cowork' ? 'Cowork: 팀 작업' : '코드: 직접 코딩'}>
+              {run.mode === 'chat' ? '채팅' : run.mode === 'cowork' ? 'Cowork' : '코드'}
+              {run.continued && <span className="text-emerald-300"> · 이어서 {thread.length + 1}번째</span>}
+              {run.planFirst && <span className="text-amber-200"> · 계획 먼저</span>}
             </span>
           )}
           <span className="truncate text-[13px] font-bold text-white">{run?.command ?? '아직 실행한 명령이 없습니다'}</span>
@@ -148,7 +154,7 @@ export function ResultsPanel() {
 
       <div className="flex gap-1 border-b border-line px-3 pt-2" role="tablist" aria-label="결과 종류">
         {TABS.map((t) => {
-          const count = t.id === 'log' ? logCount : t.id === 'summary' ? (run?.result ? 1 : 0) : Object.keys(artifacts[t.id]).length;
+          const count = t.id === 'log' ? logCount : t.id === 'changes' ? 0 : t.id === 'summary' ? summaryCount : Object.keys(artifacts[t.id]).length;
           const active = tab === t.id;
           return (
             <button
@@ -163,13 +169,15 @@ export function ResultsPanel() {
             >
               {t.label}
               {count > 0 && <span className={`rounded-full px-1.5 text-[10px] ${active ? 'bg-accent/30 text-blue-200' : 'bg-white/10 text-slate-300'}`}>{count}</span>}
-              {t.id !== 'log' && fresh[t.id] && !active && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+              {t.id !== 'log' && t.id !== 'changes' && fresh[t.id] && !active && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />}
             </button>
           );
         })}
       </div>
 
-      {tab === 'log' ? (
+      {tab === 'changes' ? (
+        <ChangesPanel />
+      ) : tab === 'log' ? (
         <div className="flex min-h-0 flex-1 flex-col bg-[#08101f]">
           <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-1.5">
             <span className="text-[12px] text-muted">사이드 패널의 실시간 로그와 같은 내용입니다. 에이전트별로 걸러 볼 수 있습니다.</span>

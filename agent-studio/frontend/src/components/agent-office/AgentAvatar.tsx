@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- 외부(PokeAPI) 스프라이트라 next/image 최적화 대상이 아니다 */
 import { useState } from 'react';
-import type { AgentDef, AgentRole } from '@/types/agent';
+import { MASTER_ID, type AgentDef, type AgentRole } from '@/types/agent';
 import { useAgentStore } from '@/store/agentStore';
 import { pokemonSpriteUrl } from '@/game/pokemon/fetchSprite';
 
@@ -18,7 +18,9 @@ interface Props {
 /** 에이전트 색 배경 위에 포켓몬 스프라이트를 올린 썸네일. 이미지를 못 받으면 이니셜을 보여준다. */
 export function AgentAvatar({ role, def, size = 48, className = '' }: Props) {
   const fromStore = useAgentStore((s) => (role ? s.defsById[role] : undefined));
-  const meta = def ?? fromStore;
+  // 'master'는 에이전트 목록이 아니라 사용자 자신의 캐릭터
+  const master = useAgentStore((s) => s.master);
+  const meta = def ?? (role === MASTER_ID ? { name: master.name, shortName: master.name, color: master.color, pokemonId: master.pokemonId } : fromStore);
   const [failed, setFailed] = useState(false);
   const radius = size >= 40 ? 12 : 8;
 

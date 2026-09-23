@@ -10,7 +10,8 @@
     "dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node scripts/fix-node-pty-perms.mjs"
+    "postinstall": "node scripts/fix-node-pty-perms.mjs",
+    "test": "tsc -p tsconfig.spec.json && node --test 'dist-test/test/**/*.test.js'"
   },
   "engines": {
     "node": ">=22"

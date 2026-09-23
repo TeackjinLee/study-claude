@@ -30,10 +30,23 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
           command: String(evt.command ?? ''),
           workspace: typeof evt.workspace === 'string' ? evt.workspace : undefined,
           attachments: withUrls(Array.isArray(evt.attachments) ? (evt.attachments as Attachment[]) : undefined),
-          mode: evt.mode === 'chat' ? 'chat' : 'cowork',
+          mode: evt.mode === 'chat' || evt.mode === 'cowork' ? evt.mode : 'code',
+          continued: evt.continued === true,
+          planFirst: evt.planFirst === true,
         },
-        { type: 'log', agent: 'system', text: `${evt.mode === 'chat' ? '채팅' : '명령'} 접수: ${String(evt.command ?? '')}` },
+        { type: 'log', agent: 'system', text: `${evt.mode === 'chat' ? '채팅' : evt.mode === 'cowork' ? 'Cowork 명령' : '코드 명령'} 접수: ${String(evt.command ?? '')}` },
       ];
+    }
+    case 'follow_up': {
+      const text = String(evt.text ?? '');
+      return [
+        { type: 'follow_up', text },
+        { type: 'log', agent: 'system', text: `추가 지시: ${text}` },
+      ];
+    }
+    case 'conversation': {
+      const mode = evt.mode === 'chat' || evt.mode === 'cowork' ? evt.mode : 'code';
+      return [{ type: 'conversation', mode, active: Boolean(evt.active) }];
     }
     case 'agent_start': {
       if (!isAgentRole(evt.agent)) return [];
@@ -69,13 +82,18 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
     }
     // 에이전트 사이의 대화 (총괄 ↔ Codex, 사용자 → Codex). 보낸 쪽 로그로 남기고, 받는 쪽 말풍선은 뒤따르는 agent_start가 채운다
     case 'codex_direct':
+    case 'direct_talk':
       return [{ type: 'codex_direct', active: evt.active === true }];
     case 'agent_message': {
       const MODE: Record<string, string> = { discuss: '토론', review: '리뷰', implement: '구현 요청', image: '이미지 생성' };
       const from = evt.from === 'main' || evt.from === 'user' ? 'system' : isAgentRole(evt.from) ? evt.from : 'system';
-      const who = evt.from === 'user' ? '사용자' : evt.from === 'main' ? '총괄' : String(evt.from);
+      const who = evt.from === 'user' ? 'Master' : evt.from === 'main' ? '총괄' : String(evt.from);
       const to = evt.to === 'main' ? '총괄' : String(evt.to);
-      return [{ type: 'log', agent: from, text: `${who} → ${to} [${MODE[String(evt.mode)] ?? String(evt.mode)}]: ${String(evt.text ?? '')}` }];
+      const text = String(evt.text ?? '');
+      const out: AgentSimEvent[] = [{ type: 'log', agent: from, text: `${who} → ${to} [${MODE[String(evt.mode)] ?? String(evt.mode)}]: ${text}` }];
+      // 사용자가 직접 건 말은 사무실의 Master 말풍선으로도 보여준다
+      if (evt.from === 'user' && isAgentRole(evt.to)) out.push({ type: 'master_say', to: evt.to, text });
+      return out;
     }
     case 'agent_done': {
       if (!isAgentRole(evt.agent)) return [];
@@ -157,7 +175,17 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
       const costUsd = Number(evt.costUsd ?? 0);
       const turns = Number(evt.turns ?? 0);
       return [
-        { type: 'run_done', result: { ok, result: typeof evt.result === 'string' ? evt.result : '', costUsd, turns, durationMs } },
+        {
+          type: 'run_done',
+          result: {
+            ok,
+            result: typeof evt.result === 'string' ? evt.result : '',
+            costUsd,
+            turns,
+            durationMs,
+            suggestions: Array.isArray(evt.suggestions) ? (evt.suggestions as unknown[]).filter((s): s is string => typeof s === 'string') : undefined,
+          },
+        },
         {
           type: 'log',
           agent: 'system',
@@ -194,7 +222,7 @@ export class SocketIoEventSource implements AgentEventSource {
     socket.on('connect', () => onEvent({ type: 'connection', status: 'connected' }));
     socket.on('disconnect', () => onEvent({ type: 'connection', status: 'disconnected' }));
 
-    socket.on('hello', (snapshot: { events?: BackendUiEvent[]; agents?: AgentDef[]; settings?: RunSettings }) => {
+    socket.on('hello', (snapshot: { events?: BackendUiEvent[]; agents?: AgentDef[]; settings?: RunSettings; conversations?: Partial<Record<RunMode, boolean>> }) => {
       if (Array.isArray(snapshot.agents)) onEvent({ type: 'agents_changed', agents: snapshot.agents });
       if (snapshot.settings) onEvent({ type: 'settings', settings: snapshot.settings });
       for (const evt of snapshot.events ?? []) {
@@ -203,6 +231,8 @@ export class SocketIoEventSource implements AgentEventSource {
           onEvent(simEvt.type === 'command_result' ? { ...simEvt, choices: undefined } : simEvt);
         }
       }
+      // 이어갈 대화 여부는 재생한 이벤트보다 서버의 현재 상태가 정확하다
+      if (snapshot.conversations) onEvent({ type: 'conversations', all: snapshot.conversations });
     });
 
     socket.on('agents-changed', (payload: { agents?: AgentDef[] }) => {
@@ -219,10 +249,10 @@ export class SocketIoEventSource implements AgentEventSource {
     this.socket = null;
   }
 
-  sendCommand(prompt: string, _agents: AgentDef[], attachments: Attachment[] = [], mode: RunMode = 'cowork') {
+  sendCommand(prompt: string, _agents: AgentDef[], attachments: Attachment[] = [], mode: RunMode = 'code', opts: { planFirst?: boolean } = {}) {
     // 에이전트 목록은 서버가 이미 알고 있으므로 prompt와 첨부(경로), 모드만 보낸다.
     // 게이트웨이는 ack로 { ok, error }를 돌려준다 (이미 실행 중, 인증 없음 등).
-    const payload = { prompt, mode, attachments: attachments.map(({ path, name, mime, size, kind }) => ({ path, name, mime, size, kind })) };
+    const payload = { prompt, mode, planFirst: opts.planFirst === true, attachments: attachments.map(({ path, name, mime, size, kind }) => ({ path, name, mime, size, kind })) };
     this.socket?.emit('command', payload, (res: { ok?: boolean; error?: string } | undefined) => {
       if (res && res.ok === false) {
         this.onEvent?.({ type: 'run_error', message: res.error ?? '명령을 시작하지 못했습니다.' });
@@ -231,11 +261,24 @@ export class SocketIoEventSource implements AgentEventSource {
     });
   }
 
+  followUp(prompt: string) {
+    this.socket?.emit('follow-up', { prompt }, (res: { ok?: boolean; error?: string } | undefined) => {
+      if (res && res.ok === false) this.onEvent?.({ type: 'log', agent: 'system', text: `추가 지시 실패: ${res.error ?? '실행 중인 작업이 없습니다.'}` });
+    });
+  }
+
+  newConversation(mode?: RunMode) {
+    this.socket?.emit('new-conversation', { mode }, (res: { ok?: boolean; error?: string } | undefined) => {
+      if (res && res.ok === false) this.onEvent?.({ type: 'log', agent: 'system', text: `새 대화 실패: ${res.error ?? ''}` });
+    });
+  }
+
+
   interrupt() {
     this.socket?.emit('interrupt');
   }
 
-  replyPermission(id: string, allowed: boolean, always: boolean) {
+  replyPermission(id: string, allowed: boolean, always: boolean | 'all') {
     this.socket?.emit('permission-reply', { id, allowed, always });
   }
 

@@ -12,9 +12,13 @@ export function PermissionBanner() {
   if (permissions.length === 0) return null;
 
   return (
-    <div className="absolute inset-x-3 top-3 z-20 flex flex-col gap-2 md:left-auto md:right-3 md:w-[380px]">
+    <div
+      className={`absolute inset-x-3 top-3 z-20 flex flex-col gap-2 md:left-auto md:right-3 ${permissions.some((p) => p.tool === 'ExitPlanMode') ? 'md:w-[560px]' : 'md:w-[380px]'}`}
+    >
       {permissions.map((p) => {
         const meta = p.agent === 'system' ? null : (defsById[p.agent] ?? null);
+        // "계획 먼저": Claude가 세운 계획을 넓게 보여주고 승인/거절만 고른다
+        const plan = p.tool === 'ExitPlanMode';
         return (
           <div
             key={p.id}
@@ -37,7 +41,11 @@ export function PermissionBanner() {
                 </p>
                 <p className="mt-0.5 text-[13px] font-bold text-white">{p.title}</p>
                 {p.detail && (
-                  <pre className="mt-1 max-h-20 overflow-auto rounded-md bg-black/40 px-2 py-1.5 font-mono text-[11px] text-slate-300">
+                  <pre
+                    className={`mt-1 overflow-auto rounded-md bg-black/40 px-2 py-1.5 text-slate-300 ${
+                      plan ? 'max-h-[45vh] whitespace-pre-wrap font-sans text-[12px] leading-relaxed' : 'max-h-20 font-mono text-[11px]'
+                    }`}
+                  >
                     {p.detail}
                   </pre>
                 )}
@@ -49,23 +57,34 @@ export function PermissionBanner() {
                 onClick={() => reply(p.id, false, false)}
                 className="rounded-md border border-line px-3 py-1 text-[12px] font-semibold text-slate-300 hover:border-red-400/60 hover:text-red-300"
               >
-                거부
+                {plan ? '계획 거절' : '거부'}
               </button>
               {p.canAlwaysAllow && (
-                <button
-                  type="button"
-                  onClick={() => reply(p.id, true, true)}
-                  className="rounded-md border border-line px-3 py-1 text-[12px] font-semibold text-slate-200 hover:border-accent/60 hover:text-white"
-                >
-                  항상 허용
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => reply(p.id, true, 'all')}
+                    title="이번 명령이 끝날 때까지 어떤 도구든 다시 묻지 않습니다"
+                    className="rounded-md border border-line px-3 py-1 text-[12px] font-semibold text-slate-200 hover:border-accent/60 hover:text-white"
+                  >
+                    이번 실행 모두 허용
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => reply(p.id, true, true)}
+                    title={`이번 명령이 끝날 때까지 ${p.tool} 은(는) 다시 묻지 않습니다`}
+                    className="rounded-md border border-line px-3 py-1 text-[12px] font-semibold text-slate-200 hover:border-accent/60 hover:text-white"
+                  >
+                    {p.tool} 계속 허용
+                  </button>
+                </>
               )}
               <button
                 type="button"
                 onClick={() => reply(p.id, true, false)}
                 className="rounded-md bg-amber-400 px-3 py-1 text-[12px] font-bold text-[#0a1428] hover:bg-amber-300"
               >
-                허용
+                {plan ? '계획대로 진행' : '허용'}
               </button>
             </div>
           </div>
