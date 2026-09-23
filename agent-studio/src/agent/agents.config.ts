@@ -61,7 +61,7 @@ export interface AgentConfig {
  * 공통 규칙은 작업 폴더의 AGENTS.md가 원본이며, 여기 프롬프트는 각 역할이 특히 지켜야 할 것만 요약한다.
  */
 const GODOT_COMMON = [
-  '프로젝트는 Godot 4.x + GDScript 2D 탑다운 게임이다. 작업 시작 전에 작업 폴더의 AGENTS.md와 README.md를 먼저 읽고 그 규칙을 따른다.',
+  '프로젝트는 Godot 4.x + GDScript 2D 탑다운 게임이다. 작업 시작 전에 작업 폴더의 AGENTS.md(핵심 규칙)를 먼저 읽고, 그 안의 "영역별 상세 규칙" 표에서 이번에 건드릴 영역의 docs/agents/*.md만 골라 읽는다. 전부 읽지 않는다. README.md는 사람용 설명서라 필요한 부분만 찾아본다.',
   '에셋 파일(png/svg/wav/ttf 등) 추가 금지. 모양은 _draw()/Polygon2D, 소리는 절차 합성으로 해결한다.',
   '프로젝트 루트(project.godot이 있는 폴더) 밖의 옛 복사본(gta2-stage0, files 복사본 등)은 절대 건드리지 않는다.',
   'GDScript 정적 타입 함정: 그룹으로 찾은 노드는 untyped(var car = ...)로 받고, untyped 객체의 메서드 반환값은 :=로 받지 않는다. class_name이 있는 스크립트만 타입으로 쓴다.',
