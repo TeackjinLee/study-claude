@@ -400,8 +400,9 @@ export function CommandBar() {
         )}
         {error && <p className="text-[11px] text-red-300">{error}</p>}
 
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+        {/* 좁은 패널에서는 첨부·음성을 아이콘만, 줄바꿈 안내는 숨긴다 */}
+        <div className="@container flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
             <input
               ref={fileInput}
               type="file"
@@ -417,10 +418,11 @@ export function CommandBar() {
               type="button"
               onClick={() => fileInput.current?.click()}
               title="이미지 / 파일 첨부"
-              className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-[11px] font-semibold text-slate-300 hover:border-accent/60 hover:text-white"
+              aria-label="첨부"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-line px-2 py-1 text-[11px] font-semibold text-slate-300 hover:border-accent/60 hover:text-white"
             >
               <PaperclipIcon className="h-3.5 w-3.5" />
-              첨부
+              <span className="hidden @[360px]:inline">첨부</span>
               {pending.length > 0 && <span className="rounded-full bg-accent/30 px-1.5 text-[10px] text-blue-100">{pending.length}</span>}
             </button>
             {speech.supported && (
@@ -429,35 +431,38 @@ export function CommandBar() {
                 onClick={speech.toggle}
                 title={speech.listening ? '음성 입력 중지' : '음성으로 입력 (한국어)'}
                 aria-pressed={speech.listening}
-                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${
+                aria-label={speech.listening ? '음성 입력 중지' : '음성 입력'}
+                className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${
                   speech.listening ? 'border-red-400/60 bg-red-500/15 text-red-200' : 'border-line text-slate-300 hover:border-accent/60 hover:text-white'
                 }`}
               >
                 <MicIcon className={`h-3.5 w-3.5 ${speech.listening ? 'pulse-dot' : ''}`} />
-                {speech.listening ? '듣는 중' : '음성'}
+                <span className="hidden @[360px]:inline">{speech.listening ? '듣는 중' : '음성'}</span>
               </button>
             )}
-            <p className="truncate text-[11px] text-muted">{speech.listening ? speech.interim || '말씀하세요…' : (speech.error ?? 'Shift + Enter 로 줄바꿈')}</p>
+            <p className={`min-w-0 truncate text-[11px] text-muted ${speech.listening || speech.error ? '' : 'hidden @[420px]:block'}`}>{speech.listening ? speech.interim || '말씀하세요…' : (speech.error ?? 'Shift + Enter 로 줄바꿈')}</p>
           </div>
           <button
             type="button"
             onClick={() => void submit()}
             disabled={uploading}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-4 py-1.5 text-[13px] font-semibold text-white disabled:opacity-60 ${style.send}`}
+            className={`inline-flex min-w-0 shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[13px] font-semibold text-white disabled:opacity-60 ${style.send}`}
             title={style.hint}
           >
             <SendIcon className="h-4 w-4" />
-            {uploading
-              ? '업로드 중...'
-              : talking && talkDef
-                ? `${talkDef.shortName}에게 말하기`
-                : followingUp
-                  ? '추가 지시'
-                  : target === 'claude' && commandMode === 'chat'
-                    ? 'Claude에게 질문'
-                    : target === 'claude' && commandMode === 'code'
-                      ? 'Claude Code 실행'
-                      : `${style.label}에게 전송`}
+            <span className="max-w-[9rem] truncate">
+              {uploading
+                ? '업로드 중...'
+                : talking && talkDef
+                  ? `${talkDef.shortName}에게 말하기`
+                  : followingUp
+                    ? '추가 지시'
+                    : target === 'claude' && commandMode === 'chat'
+                      ? '질문하기'
+                      : target === 'claude' && commandMode === 'code'
+                        ? '실행'
+                        : `${style.label}에게 전송`}
+            </span>
           </button>
         </div>
 

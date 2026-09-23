@@ -10,3 +10,5 @@ data/cost.json
 .DS_Store
 .idea/
 dist-test
+data/conversations/
+data/checkpoints.json

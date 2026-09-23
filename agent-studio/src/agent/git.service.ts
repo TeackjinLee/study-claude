@@ -6,8 +6,9 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { SettingsService } from './settings.service.js';
 import { CostTrackerService } from './cost-tracker.service.js';
 import { clip } from './artifact-utils.js';
-import { countDiff, looksLikeBranchName, newFileDiff, parsePorcelainZ, stripPrefix, type ChangeStatus, type StatusEntry } from './git-utils.js';
+import { countLines, looksLikeBranchName, newFileDiff, parseNumstatZ, parsePorcelainZ, stripPrefix, type ChangeStatus, type StatusEntry } from './git-utils.js';
 
+/** 변경 목록의 파일 하나. diff 본문은 파일을 고를 때 diff()로 따로 받는다 (목록이 가볍고 빠르게) */
 export interface FileChange {
   /** 작업 폴더 기준 경로 (화면 표시 + 되돌리기 요청용) */
   path: string;
@@ -16,6 +17,11 @@ export interface FileChange {
   additions: number;
   deletions: number;
   binary: boolean;
+}
+
+export interface FileDiff {
+  ok: boolean;
+  error?: string;
   /** unified diff (너무 크면 잘림) */
   diff: string;
   truncated: boolean;
@@ -25,9 +31,11 @@ export type ChangesResult =
   | { repo: false; workspace: string; message: string }
   | { repo: true; workspace: string; branch: string; hasHead: boolean; files: FileChange[]; omitted: number };
 
-const MAX_FILES = 200;
+const MAX_FILES = 2000;
 const MAX_DIFF_CHARS = 60_000;
 const MAX_NEW_FILE_BYTES = 200_000;
+/** 새 파일 줄 수를 셀 때 한 번에 여는 파일 수 */
+const UNTRACKED_BATCH = 32;
 /** 명령에 붙인 첨부 파일이 들어가는 폴더. 변경사항 목록에서 뺀다 */
 const IGNORED_PREFIXES = ['uploads/'];
 
@@ -46,9 +54,11 @@ export class GitService {
     private readonly cost: CostTrackerService,
   ) {}
 
-  private run(args: string[], cwd: string, timeout = 20_000): Promise<string> {
+  /** git 명령 실행. env로 GIT_INDEX_FILE 등을 덧붙일 수 있다 (실행 되돌리기의 임시 인덱스) */
+  exec(args: string[], cwd: string, opts: { timeout?: number; env?: Record<string, string> } = {}): Promise<string> {
     return new Promise((resolve, reject) => {
-      execFile('git', args, { cwd, timeout, maxBuffer: 32 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' } }, (err, stdout, stderr) => {
+      const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C', ...opts.env };
+      execFile('git', args, { cwd, timeout: opts.timeout ?? 20_000, maxBuffer: 32 * 1024 * 1024, env }, (err, stdout, stderr) => {
         if (err) reject(new GitError((stderr || err.message).trim()));
         else resolve(stdout);
       });
@@ -56,11 +66,11 @@ export class GitService {
   }
 
   /** 저장소 루트와, 루트 기준 작업 폴더 경로(prefix). 저장소가 아니면 null */
-  private async locate(): Promise<{ workspace: string; root: string; prefix: string } | null> {
+  async locate(): Promise<{ workspace: string; root: string; prefix: string } | null> {
     const workspace = this.settings.workspaceDir;
     try {
-      const root = (await this.run(['rev-parse', '--show-toplevel'], workspace)).trim();
-      const prefix = (await this.run(['rev-parse', '--show-prefix'], workspace)).trim();
+      const root = (await this.exec(['rev-parse', '--show-toplevel'], workspace)).trim();
+      const prefix = (await this.exec(['rev-parse', '--show-prefix'], workspace)).trim();
       return { workspace, root, prefix };
     } catch {
       return null;
@@ -68,7 +78,7 @@ export class GitService {
   }
 
   /** 명령의 범위: 작업 폴더 전체 */
-  private scope(prefix: string) {
+  scope(prefix: string) {
     return prefix ? prefix : '.';
   }
 
@@ -76,39 +86,78 @@ export class GitService {
     const loc = await this.locate();
     if (!loc) return { repo: false, workspace: this.settings.workspaceDir, message: '작업 폴더가 git 저장소가 아닙니다. 변경사항을 보려면 작업 폴더에서 git init 하세요.' };
     const { workspace, root, prefix } = loc;
-    const hasHead = await this.run(['rev-parse', '--verify', '--quiet', 'HEAD'], root).then(() => true, () => false);
-    const branch = (await this.run(['symbolic-ref', '--short', '-q', 'HEAD'], root).catch(() => 'HEAD (detached)')).trim() || 'HEAD';
+    const [hasHead, branch, statusOut] = await Promise.all([
+      this.hasHead(root),
+      this.exec(['symbolic-ref', '--short', '-q', 'HEAD'], root).then((b) => b.trim() || 'HEAD', () => 'HEAD (detached)'),
+      this.exec(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', this.scope(prefix)], root),
+    ]);
+    const entries = parsePorcelainZ(statusOut).filter((e) => !IGNORED_PREFIXES.some((p) => stripPrefix(e.path, prefix).startsWith(p)));
+    const shown = entries.slice(0, MAX_FILES);
 
-    const entries = parsePorcelainZ(await this.run(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', this.scope(prefix)], root)).filter(
-      (e) => !IGNORED_PREFIXES.some((p) => stripPrefix(e.path, prefix).startsWith(p)),
-    );
-    const files = await Promise.all(entries.slice(0, MAX_FILES).map((e) => this.fileChange(root, prefix, e, hasHead)));
+    // 추적 중인 파일의 추가/삭제 줄 수는 git 한 번으로 (파일마다 git을 부르지 않는다)
+    const numstat = new Map<string, { additions: number; deletions: number; binary: boolean }>();
+    if (shown.some((e) => e.status !== 'untracked')) {
+      const out = await this.exec([...this.diffBase(hasHead, prefix), '--numstat', '-z', '--', this.scope(prefix)], root).catch(() => '');
+      for (const n of parseNumstatZ(out)) numstat.set(n.path, n);
+    }
+    // 새 파일은 git이 모르니 직접 줄 수를 센다 (동시에 너무 많이 열지 않게 나눠서)
+    const untracked = new Map<string, { additions: number; binary: boolean }>();
+    const news = shown.filter((e) => e.status === 'untracked');
+    for (let i = 0; i < news.length; i += UNTRACKED_BATCH) {
+      await Promise.all(news.slice(i, i + UNTRACKED_BATCH).map(async (e) => untracked.set(e.path, await this.untrackedCount(root, e.path))));
+    }
+
+    const files = shown.map((e): FileChange => {
+      const path = stripPrefix(e.path, prefix);
+      const counts = e.status === 'untracked' ? { deletions: 0, ...untracked.get(e.path)! } : (numstat.get(path) ?? { additions: 0, deletions: 0, binary: false });
+      return { path, from: e.from ? stripPrefix(e.from, prefix) : undefined, status: e.status, additions: counts.additions, deletions: counts.deletions, binary: counts.binary };
+    });
     return { repo: true, workspace, branch, hasHead, files, omitted: Math.max(0, entries.length - MAX_FILES) };
   }
 
-  private async fileChange(root: string, prefix: string, e: StatusEntry, hasHead: boolean): Promise<FileChange> {
-    let diff = '';
-    if (e.status === 'untracked') {
-      diff = await this.untrackedDiff(root, e.path, stripPrefix(e.path, prefix));
+  /** 파일 하나의 diff (변경 목록에서 고를 때). 목록에 있는 파일만 받는다 */
+  async diff(pathInput: unknown): Promise<FileDiff> {
+    const path = typeof pathInput === 'string' ? pathInput : '';
+    const fail = (error: string): FileDiff => ({ ok: false, error, diff: '', truncated: false });
+    const loc = await this.locate();
+    if (!loc) return fail('git 저장소가 아닙니다.');
+    const { root, prefix } = loc;
+    const entries = parsePorcelainZ(await this.exec(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', this.scope(prefix)], root));
+    const entry = entries.find((e) => stripPrefix(e.path, prefix) === path);
+    if (!entry) return fail('변경 목록에 없는 파일입니다. 새로고침 후 다시 시도하세요.');
+    let diff: string;
+    if (entry.status === 'untracked') {
+      diff = await this.untrackedDiff(root, entry.path, path);
     } else {
-      const paths = e.from ? [e.from, e.path] : [e.path];
-      // HEAD가 없으면(첫 커밋 전) 스테이지된 내용과 비교
-      // --relative: diff 머리글의 경로도 작업 폴더 기준으로
-      const flags = ['-M', '--no-color', '--no-ext-diff', ...(prefix ? [`--relative=${prefix}`] : [])];
-      const base = hasHead ? ['diff', 'HEAD', ...flags] : ['diff', '--cached', ...flags];
-      diff = await this.run([...base, '--', ...paths], root).catch((err: Error) => `(diff를 읽지 못했습니다: ${err.message})`);
+      const paths = entry.from ? [entry.from, entry.path] : [entry.path];
+      diff = await this.exec([...this.diffBase(await this.hasHead(root), prefix), '--', ...paths], root).catch((err: Error) => `(diff를 읽지 못했습니다: ${err.message})`);
     }
-    const binary = /^Binary files .* differ$/m.test(diff) || diff.startsWith('(바이너리');
-    const counts = binary ? { additions: 0, deletions: 0 } : countDiff(diff);
-    return {
-      path: stripPrefix(e.path, prefix),
-      from: e.from ? stripPrefix(e.from, prefix) : undefined,
-      status: e.status,
-      ...counts,
-      binary,
-      diff: clip(diff, MAX_DIFF_CHARS),
-      truncated: diff.length > MAX_DIFF_CHARS,
-    };
+    return { ok: true, diff: clip(diff, MAX_DIFF_CHARS), truncated: diff.length > MAX_DIFF_CHARS };
+  }
+
+  private hasHead(root: string) {
+    return this.exec(['rev-parse', '--verify', '--quiet', 'HEAD'], root).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  /** HEAD와 비교하는 diff 명령 앞부분. HEAD가 없으면(첫 커밋 전) 스테이지된 내용과 비교. --relative: 경로를 작업 폴더 기준으로 */
+  private diffBase(hasHead: boolean, prefix: string) {
+    const flags = ['-M', '--no-color', '--no-ext-diff', ...(prefix ? [`--relative=${prefix}`] : [])];
+    return hasHead ? ['diff', 'HEAD', ...flags] : ['diff', '--cached', ...flags];
+  }
+
+  private async untrackedCount(root: string, path: string): Promise<{ additions: number; binary: boolean }> {
+    try {
+      const abs = join(root, path);
+      if ((await stat(abs)).size > MAX_NEW_FILE_BYTES) return { additions: 0, binary: false };
+      const buf = await readFile(abs);
+      if (buf.includes(0)) return { additions: 0, binary: true };
+      return { additions: countLines(buf.toString('utf8')), binary: false };
+    } catch {
+      return { additions: 0, binary: false };
+    }
   }
 
   private async untrackedDiff(root: string, path: string, shown: string) {
@@ -131,21 +180,21 @@ export class GitService {
     if (!loc) return { ok: false, error: 'git 저장소가 아닙니다.' };
     const { root, prefix } = loc;
     // 요청 경로는 지금 변경 목록에 있는 것만 받는다 (임의 경로 삭제 방지)
-    const entries = parsePorcelainZ(await this.run(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', this.scope(prefix)], root));
+    const entries = parsePorcelainZ(await this.exec(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', this.scope(prefix)], root));
     const entry = entries.find((e) => stripPrefix(e.path, prefix) === path);
     if (!entry) return { ok: false, error: '변경 목록에 없는 파일입니다. 새로고침 후 다시 시도하세요.' };
-    const hasHead = await this.run(['rev-parse', '--verify', '--quiet', 'HEAD'], root).then(() => true, () => false);
+    const hasHead = await this.exec(['rev-parse', '--verify', '--quiet', 'HEAD'], root).then(() => true, () => false);
 
     try {
       if (entry.status === 'untracked') {
         await rm(join(root, entry.path), { force: true });
       } else if (entry.status === 'added' || !hasHead) {
-        await this.run(['rm', '-f', '--', entry.path], root);
+        await this.exec(['rm', '-f', '--', entry.path], root);
       } else if (entry.status === 'renamed' && entry.from) {
-        await this.run(['rm', '-f', '--', entry.path], root);
-        await this.run(['restore', '--source=HEAD', '--staged', '--worktree', '--', entry.from], root);
+        await this.exec(['rm', '-f', '--', entry.path], root);
+        await this.exec(['restore', '--source=HEAD', '--staged', '--worktree', '--', entry.from], root);
       } else {
-        await this.run(['restore', '--source=HEAD', '--staged', '--worktree', '--', entry.path], root);
+        await this.exec(['restore', '--source=HEAD', '--staged', '--worktree', '--', entry.path], root);
       }
       this.logger.log(`되돌림: ${path}`);
       return { ok: true };
@@ -166,7 +215,7 @@ export class GitService {
     let paths = [this.scope(prefix)];
     if (Array.isArray(body.paths) && body.paths.length > 0) {
       const wanted = new Set(body.paths.filter((p): p is string => typeof p === 'string'));
-      const entries = parsePorcelainZ(await this.run(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', this.scope(prefix)], root));
+      const entries = parsePorcelainZ(await this.exec(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', this.scope(prefix)], root));
       paths = entries.filter((e) => wanted.has(stripPrefix(e.path, prefix))).flatMap((e) => (e.from ? [e.path, e.from] : [e.path]));
       if (paths.length === 0) return { ok: false, error: '커밋할 파일이 변경 목록에 없습니다.' };
     }
@@ -174,13 +223,13 @@ export class GitService {
     try {
       if (branch) {
         if (!looksLikeBranchName(branch)) return { ok: false, error: '브랜치 이름에 쓸 수 없는 문자가 있습니다.' };
-        await this.run(['check-ref-format', '--branch', branch], root);
-        await this.run(['switch', '-c', branch], root);
+        await this.exec(['check-ref-format', '--branch', branch], root);
+        await this.exec(['switch', '-c', branch], root);
       }
-      await this.run(['add', '-A', '--', ...paths], root);
-      await this.run(['commit', '-m', message, '--', ...paths], root);
-      const hash = (await this.run(['rev-parse', '--short', 'HEAD'], root)).trim();
-      const current = (await this.run(['symbolic-ref', '--short', '-q', 'HEAD'], root).catch(() => '')).trim();
+      await this.exec(['add', '-A', '--', ...paths], root);
+      await this.exec(['commit', '-m', message, '--', ...paths], root);
+      const hash = (await this.exec(['rev-parse', '--short', 'HEAD'], root)).trim();
+      const current = (await this.exec(['symbolic-ref', '--short', '-q', 'HEAD'], root).catch(() => '')).trim();
       this.logger.log(`커밋 ${hash} (${current}): ${message.split('\n')[0]}`);
       return { ok: true, hash, branch: current };
     } catch (err) {
@@ -188,13 +237,28 @@ export class GitService {
     }
   }
 
+  /** 커밋 메시지용: 추적 중인 파일은 git diff 한 번, 새 파일은 앞부분만 */
+  private async combinedDiff(files: FileChange[]): Promise<string> {
+    const loc = await this.locate();
+    if (!loc) return '';
+    const { root, prefix } = loc;
+    const tracked = await this.exec([...this.diffBase(await this.hasHead(root), prefix), '--', this.scope(prefix)], root).catch(() => '');
+    const news = await Promise.all(
+      files
+        .filter((f) => f.status === 'untracked')
+        .slice(0, 30)
+        .map(async (f) => (f.binary ? `# 새 파일 ${f.path} (binary)` : clip(await this.untrackedDiff(root, prefix + f.path, f.path), 3000))),
+    );
+    return [tracked, ...news].filter(Boolean).join('\n\n');
+  }
+
   /** 지금 변경사항을 보고 Claude가 커밋 메시지를 쓴다 (도구 없이 한 번 답하기) */
   async suggestCommitMessage(): Promise<{ ok: boolean; message?: string; error?: string }> {
     const changes = await this.changes();
     if (!changes.repo) return { ok: false, error: changes.message };
     if (changes.files.length === 0) return { ok: false, error: '커밋할 변경사항이 없습니다.' };
-    const log = await this.run(['log', '-8', '--pretty=format:%s'], this.settings.workspaceDir).catch(() => '');
-    const diff = clip(changes.files.map((f) => `# ${f.status} ${f.path}\n${f.binary ? '(binary)' : f.diff}`).join('\n\n'), 40_000);
+    const log = await this.exec(['log', '-8', '--pretty=format:%s'], this.settings.workspaceDir).catch(() => '');
+    const diff = clip(await this.combinedDiff(changes.files), 40_000);
     const settings = this.settings.get();
     const prompt = `아래 git 변경사항에 맞는 커밋 메시지를 써라.
 - 첫 줄: 72자 이내 요약. 최근 커밋들의 언어와 형식을 따른다 (없으면 한국어).

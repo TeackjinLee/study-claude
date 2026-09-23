@@ -24,6 +24,44 @@ export interface PermissionRequest {
   canAlwaysAllow: boolean;
 }
 
+/** 대화 화면에서 펼쳐 볼 도구 입력 (백엔드 ToolDetail과 같은 모양) */
+export type ToolDetail =
+  | { kind: 'bash'; command: string; description?: string }
+  | { kind: 'edit'; path: string; edits: { oldText: string; newText: string }[] }
+  | { kind: 'write'; path: string; content: string }
+  | { kind: 'read'; path: string }
+  | { kind: 'search'; pattern: string; path?: string }
+  | { kind: 'other'; input: string };
+
+/** 실행 하나가 바꾼 파일 (작업 폴더 기준 경로) */
+export type CheckpointFile = { path: string; status: 'added' | 'modified' | 'deleted' };
+
+/** 실행 되돌리기 결과 */
+export interface UndoResult {
+  ok: boolean;
+  error?: string;
+  restored: string[];
+  skipped: { path: string; reason: string }[];
+  complete: boolean;
+}
+
+/** 에이전트 id 또는 'main'(총괄/코드 모드의 Claude) */
+export type TxAgent = AgentRole | 'main';
+
+/** 대화 화면(Claude Code처럼 글·도구 호출이 이어지는 화면)을 그리는 이벤트 */
+export type TxEvent =
+  | { t: 'text'; agent: TxAgent; text: string }
+  | { t: 'tool_start'; id: string; agent: TxAgent; tool: string; label: string; detail?: ToolDetail }
+  | { t: 'tool_done'; id: string; ok: boolean; output?: string }
+  | { t: 'agent_start'; id: string; agent: AgentRole; task: string }
+  | { t: 'agent_done'; id: string; ok: boolean; summary: string }
+  | { t: 'plan'; items: { text: string; status: 'pending' | 'in_progress' | 'completed' }[] }
+  /** 사무실에서 에이전트에게 직접 한 말 (/talk, /codex) */
+  | { t: 'user_to'; agent: AgentRole; text: string }
+  /** 실행이 파일을 바꿨음 → "이 실행 되돌리기" */
+  | { t: 'checkpoint'; id: string; files: CheckpointFile[] }
+  | { t: 'checkpoint_undone'; id: string; restored: string[]; skipped: { path: string; reason: string }[]; complete: boolean };
+
 /** 명령 종류: code=Claude Code처럼 혼자 직접 코딩(기본, 이전 대화 이어감) / chat=대화만(읽기 전용) / cowork=총괄+서브에이전트+Codex로 팀 작업 */
 export type RunMode = 'code' | 'chat' | 'cowork';
 export const RUN_MODES: readonly RunMode[] = ['code', 'chat', 'cowork'];
@@ -90,8 +128,10 @@ export type AgentSimEvent =
   /** 실행 도중 사용자가 끼워 넣은 추가 지시 */
   | { type: 'follow_up'; text: string }
   /** 코드·채팅의 이어갈 대화가 생기거나(active) 새 대화로 비워짐. all은 접속 직후 전체 상태 */
-  | { type: 'conversation'; mode: RunMode; active: boolean }
-  | { type: 'conversations'; all: Partial<Record<RunMode, boolean>> }
+  | { type: 'conversation'; mode: RunMode; active: boolean; id?: string; title?: string }
+  | { type: 'conversations'; all: Partial<Record<RunMode, boolean>>; titles?: Partial<Record<RunMode, { id: string; title: string }>> }
+  /** 지난 대화를 열었음 (기록 재생이 끝난 뒤 온다) */
+  | { type: 'conversation_loaded'; mode: RunMode; id: string; title: string }
   /** room: 'work'는 "그 에이전트의 담당 작업실"(에이전트 정의의 room)로, 스토어가 실제 방으로 바꾼다 */
   | { type: 'agent_status'; agent: AgentRole; status: AgentStatus; room?: RoomId | 'work'; message?: string; progress?: number }
   | { type: 'log'; agent: AgentRole | 'system'; text: string }
@@ -109,7 +149,9 @@ export type AgentSimEvent =
   /** /codex 직접 대화 진행 중 (실행이 아니어도 중지 버튼을 보여준다) */
   | { type: 'codex_direct'; active: boolean }
   /** 사용자(Master)가 에이전트에게 한 말 — 사무실에서 Master 말풍선으로 보여준다 */
-  | { type: 'master_say'; to: AgentRole; text: string };
+  | { type: 'master_say'; to: AgentRole; text: string }
+  /** 대화 화면 */
+  | { type: 'tx'; event: TxEvent };
 
 /** Mock/실제 소스가 공통으로 구현하는 추상화 인터페이스. */
 export interface AgentEventSource {
@@ -121,6 +163,8 @@ export interface AgentEventSource {
   followUp(prompt: string): void;
   /** 코드·채팅의 이어갈 대화를 비우고 새로 시작. mode가 없으면 모두 */
   newConversation(mode?: RunMode): void;
+  /** 실행 되돌리기. force면 실행 뒤에 다시 바뀐 파일도 덮어쓴다 */
+  undoCheckpoint(id: string, force?: boolean): Promise<UndoResult>;
   /** 실행 중인 작업 중단 */
   interrupt(): void;
   /** 승인 요청에 응답 (always = 이번 세션 동안 같은 요청은 자동 허용) */

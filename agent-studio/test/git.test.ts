@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { countDiff, looksLikeBranchName, newFileDiff, parsePorcelainZ, stripPrefix } from '../src/agent/git-utils.js';
+import { countDiff, countLines, looksLikeBranchName, newFileDiff, parseNumstatZ, parsePorcelainZ, stripPrefix } from '../src/agent/git-utils.js';
 import { GitService } from '../src/agent/git.service.js';
 import type { SettingsService } from '../src/agent/settings.service.js';
 import type { CostTrackerService } from '../src/agent/cost-tracker.service.js';
@@ -25,6 +25,17 @@ test('countDiff: 머리글(+++/---)은 세지 않는다', () => {
   const diff = ['diff --git a/x b/x', '--- a/x', '+++ b/x', '@@ -1,2 +1,2 @@', ' same', '-old', '+new', '+more'].join('\n');
   assert.deepEqual(countDiff(diff), { additions: 2, deletions: 1 });
   assert.deepEqual(countDiff(newFileDiff('n.txt', 'a\nb\n')), { additions: 2, deletions: 0 });
+});
+
+test('parseNumstatZ: 일반·바이너리·이름 바꿈', () => {
+  const out = ['3\t1\tsrc/a.ts', '-\t-\timg.png', '2\t0\t', 'old.ts', 'new.ts', ''].join('\0');
+  assert.deepEqual(parseNumstatZ(out), [
+    { path: 'src/a.ts', additions: 3, deletions: 1, binary: false },
+    { path: 'img.png', additions: 0, deletions: 0, binary: true },
+    { from: 'old.ts', path: 'new.ts', additions: 2, deletions: 0, binary: false },
+  ]);
+  assert.equal(countLines('a\nb\n'), 2);
+  assert.equal(countLines(''), 0);
 });
 
 test('stripPrefix / looksLikeBranchName', () => {
@@ -77,6 +88,17 @@ test('GitService: 작업 폴더 안의 변경만, 작업 폴더 기준 경로로
   assert.deepEqual([byPath['a.txt'].additions, byPath['a.txt'].deletions], [1, 1]);
   assert.equal(byPath['b.txt'].status, 'untracked');
   assert.equal(byPath['b.txt'].additions, 1);
+});
+
+test('GitService: diff는 고른 파일 하나만, 목록에 없는 경로는 거절', async () => {
+  const a = await git.diff('a.txt');
+  assert.equal(a.ok, true);
+  assert.match(a.diff, /^-two$/m);
+  assert.match(a.diff, /^\+TWO$/m);
+  assert.match(a.diff, /^--- a\/a\.txt$/m, '머리글 경로도 작업 폴더 기준');
+  const b = await git.diff('b.txt');
+  assert.match(b.diff, /^\+new$/m);
+  assert.equal((await git.diff('../outside.txt')).ok, false);
 });
 
 test('GitService: 되돌리기 — 수정은 복원, 새 파일은 삭제, 목록에 없는 경로는 거절', async () => {

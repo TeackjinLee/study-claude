@@ -24,9 +24,11 @@ import {
   type RunResult,
   type RunSettings,
   type RunMode,
+  type UndoResult,
   RUN_MODES,
 } from '@/lib/ws';
 import type { Attachment } from '@/lib/uploads';
+import { applyTx, txNotice, txResult, txUser, type TxItem } from './transcript';
 
 const MAX_LOGS = 300;
 /** completed/error 상태를 잠깐 보여준 뒤 휴게실로 돌려보내기까지의 시간(ms) */
@@ -34,7 +36,7 @@ const SETTLE_DELAY = 4000;
 
 let nextLogId = 0;
 
-export type CenterView = 'office' | 'results';
+export type CenterView = 'conversation' | 'office' | 'results';
 export type ResultTab = ArtifactKind | 'summary';
 
 export interface RunInfo {
@@ -72,10 +74,16 @@ interface AgentStoreState {
   editor: EditorTarget;
   /** 가장 최근 실행 정보 (명령, 시작/종료 시각, 비용, 최종 요약) */
   run: RunInfo | null;
+  /** 대화 화면 항목 (명령 → 글 → 도구 호출 → 결과). 이어지는 대화 동안 쌓인다 */
+  transcript: TxItem[];
   /** 이어지는 대화(코드·채팅)에서 run 이전의 실행들. 새 대화면 비운다 */
   thread: RunInfo[];
   /** 모드별로 서버에 이어갈 대화(세션)가 있는지 */
   conversations: Partial<Record<RunMode, boolean>>;
+  /** 모드별 이어가는 대화의 id·제목 (대화 화면 제목) */
+  conversationTitles: Partial<Record<RunMode, { id: string; title: string }>>;
+  /** 지난 대화 목록을 다시 불러오라는 신호 (대화가 생기거나 바뀔 때 올라간다) */
+  conversationsVersion: number;
   /** 실행이 끝날 때마다 올라간다 — 변경사항(git diff) 탭이 다시 불러오는 신호 */
   changesVersion: number;
   /** 에이전트가 만든 결과물. kind별로 key(파일 경로 등) → Artifact */
@@ -102,6 +110,7 @@ interface AgentStoreState {
   /** 실행 도중 추가 지시 */
   sendFollowUp: (prompt: string) => void;
   newConversation: (mode?: RunMode) => void;
+  undoCheckpoint: (id: string, force?: boolean) => Promise<UndoResult>;
   /** 코드 모드에서 계획을 먼저 승인받고 수정할지 (브라우저에 기억) */
   planFirst: boolean;
   setPlanFirst: (on: boolean) => void;
@@ -226,7 +235,10 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
     editor: null,
     run: null,
     thread: [],
+    transcript: [],
     conversations: {},
+    conversationTitles: {},
+    conversationsVersion: 0,
     changesVersion: 0,
     artifacts: initialArtifacts(),
     permissions: [],
@@ -272,6 +284,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
     },
 
     newConversation: (mode) => get().source?.newConversation(mode),
+
+    undoCheckpoint: async (id, force) =>
+      (await get().source?.undoCheckpoint(id, force)) ?? { ok: false, error: '연결되지 않았습니다.', restored: [], skipped: [], complete: false },
 
     planFirst: loadPlanFirst(),
     setPlanFirst: (on) => {
@@ -398,6 +413,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
               tasks: tasksFor(s.defs),
               artifacts: continues ? s.artifacts : initialArtifacts(),
               thread: continues && s.run ? [...s.thread, s.run] : [],
+              transcript: txUser(s.transcript, evt.command, { mode: evt.mode, attachments: evt.attachments?.length, reset: !continues }),
+              // 코드·채팅은 대화 화면이 중심. 사무실 맵을 보고 있었으면 대화 화면으로 넘긴다
+              centerView: evt.mode !== 'cowork' && s.centerView === 'office' ? 'conversation' : s.centerView,
               permissions: [],
               freshResults: {},
               run: {
@@ -416,20 +434,44 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
           return;
 
         case 'follow_up':
-          set((s) => (s.run ? { run: { ...s.run, followUps: [...s.run.followUps, evt.text] } } : {}));
+          set((s) => ({
+            run: s.run ? { ...s.run, followUps: [...s.run.followUps, evt.text] } : s.run,
+            transcript: txUser(s.transcript, evt.text, { followUp: true }),
+          }));
+          return;
+
+        case 'tx':
+          set((s) => ({
+            transcript: applyTx(s.transcript, evt.event),
+            // 되돌리면 작업 폴더가 바뀌었으니 변경사항 탭을 다시 불러온다
+            changesVersion: evt.event.t === 'checkpoint_undone' ? s.changesVersion + 1 : s.changesVersion,
+          }));
           return;
 
         case 'conversation':
           set((s) => ({
             conversations: { ...s.conversations, [evt.mode]: evt.active },
+            conversationTitles: evt.active && evt.id && evt.title ? { ...s.conversationTitles, [evt.mode]: { id: evt.id, title: evt.title } } : evt.active ? s.conversationTitles : { ...s.conversationTitles, [evt.mode]: undefined },
+            conversationsVersion: s.conversationsVersion + 1,
             // 새 대화: 화면의 대화 목록도 비운다 (마지막 실행 결과는 남겨 둔다)
             thread: !evt.active && s.run?.mode === evt.mode ? [] : s.thread,
+            transcript: !evt.active && s.run?.mode === evt.mode ? [] : s.transcript,
             run: !evt.active && s.run?.mode === evt.mode && !s.running ? { ...s.run, continued: false } : s.run,
           }));
           return;
 
         case 'conversations':
-          set({ conversations: evt.all });
+          set({ conversations: evt.all, conversationTitles: evt.titles ?? {} });
+          return;
+
+        case 'conversation_loaded':
+          get().setCommandMode(evt.mode);
+          set((s) => ({
+            conversations: { ...s.conversations, [evt.mode]: true },
+            conversationTitles: { ...s.conversationTitles, [evt.mode]: { id: evt.id, title: evt.title } },
+            conversationsVersion: s.conversationsVersion + 1,
+            centerView: 'conversation',
+          }));
           return;
 
         case 'agent_status': {
@@ -494,7 +536,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
             freshResults: {},
             run: null,
             thread: [],
+            transcript: [],
             conversations: {},
+            conversationTitles: {},
             suggestions: [],
             tasks: tasksFor(s.defs),
             agents: statesFor(s.defs, {}),
@@ -523,6 +567,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
             running: false,
             permissions: [],
             changesVersion: s.changesVersion + 1,
+            conversationsVersion: s.conversationsVersion + 1,
+            transcript: txResult(s.transcript, evt.result),
             suggestions: evt.result.suggestions?.length ? evt.result.suggestions : s.suggestions,
             freshResults: { ...s.freshResults, summary: true },
             run: s.run
@@ -536,6 +582,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
             running: false,
             permissions: [],
             changesVersion: s.changesVersion + 1,
+            transcript: txNotice(s.transcript, 'error', evt.message),
             run: s.run ? { ...s.run, endedAt: Date.now(), status: 'error', errorMessage: evt.message } : s.run,
           }));
           return;
@@ -553,6 +600,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
             running: false,
             permissions: [],
             changesVersion: s.changesVersion + 1,
+            transcript: txNotice(s.transcript, 'warn', '사용자가 중단했습니다.'),
             agents: statesFor(s.defs, {}),
             run: s.run ? { ...s.run, endedAt: Date.now(), status: 'aborted' } : s.run,
           }));

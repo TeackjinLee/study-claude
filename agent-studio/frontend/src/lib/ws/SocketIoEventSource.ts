@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-import type { AgentEventSource, AgentSimEvent, ArtifactKind, CommandChoices, CommandInfo, RunMode, RunSettings } from './types';
+import type { AgentEventSource, AgentSimEvent, ArtifactKind, CheckpointFile, CommandChoices, CommandInfo, RunMode, RunSettings, ToolDetail, TxAgent, UndoResult } from './types';
 import type { AgentDef, AgentRole, AgentStatus } from '@/types/agent';
 import { withUrls, type Attachment } from '@/lib/uploads';
 
@@ -13,6 +13,9 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:300
 
 /** 백엔드가 에이전트 id를 문자열로 보낸다. 등록 여부는 스토어가 판단한다. */
 const isAgentRole = (v: unknown): v is AgentRole => typeof v === 'string' && v.length > 0 && v !== 'main';
+
+/** 대화 화면에 올릴 주인: 총괄(main) 또는 등록된 에이전트 */
+const txAgentOf = (v: unknown): TxAgent | null => (v === 'main' ? 'main' : isAgentRole(v) ? v : null);
 
 /** test/deploy 에이전트가 도구를 실행 중일 때는 Testing/Deploying으로 보여준다. */
 function workingStatusFor(agent: AgentRole): AgentStatus {
@@ -46,7 +49,7 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
     }
     case 'conversation': {
       const mode = evt.mode === 'chat' || evt.mode === 'cowork' ? evt.mode : 'code';
-      return [{ type: 'conversation', mode, active: Boolean(evt.active) }];
+      return [{ type: 'conversation', mode, active: Boolean(evt.active), id: typeof evt.id === 'string' ? evt.id : undefined, title: typeof evt.title === 'string' ? evt.title : undefined }];
     }
     case 'agent_start': {
       if (!isAgentRole(evt.agent)) return [];
@@ -54,7 +57,17 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
       return [
         { type: 'agent_status', agent: evt.agent, status: 'thinking', room: 'work', message: task },
         { type: 'log', agent: evt.agent, text: task },
+        { type: 'tx', event: { t: 'agent_start', id: String(evt.callId ?? ''), agent: evt.agent, task } },
       ];
+    }
+    case 'assistant_text': {
+      const agent = txAgentOf(evt.agent);
+      const text = String(evt.text ?? '');
+      return agent && text ? [{ type: 'tx', event: { t: 'text', agent, text } }] : [];
+    }
+    case 'plan': {
+      const items = Array.isArray(evt.items) ? (evt.items as { text: string; status: 'pending' | 'in_progress' | 'completed' }[]) : [];
+      return [{ type: 'tx', event: { t: 'plan', items } }];
     }
     case 'agent_progress': {
       if (!isAgentRole(evt.agent)) return [];
@@ -69,16 +82,25 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
       return [{ type: 'log', agent: evt.agent, text: String(evt.text ?? '') }];
     }
     case 'action_start': {
-      if (!isAgentRole(evt.agent)) return [];
       const label = String(evt.label ?? evt.tool ?? '작업 실행');
+      const agent = txAgentOf(evt.agent);
+      const tx: AgentSimEvent[] = agent
+        ? [{ type: 'tx', event: { t: 'tool_start', id: String(evt.actionId ?? ''), agent, tool: String(evt.tool ?? ''), label, detail: evt.detail as ToolDetail | undefined } }]
+        : [];
+      if (!isAgentRole(evt.agent)) return tx;
       return [
         { type: 'agent_status', agent: evt.agent, status: workingStatusFor(evt.agent), message: label },
         { type: 'log', agent: evt.agent, text: label },
+        ...tx,
       ];
     }
     case 'action_done': {
-      if (!isAgentRole(evt.agent)) return [];
-      return [{ type: 'log', agent: evt.agent, text: evt.ok ? '완료' : '실패' }];
+      const tx: AgentSimEvent = {
+        type: 'tx',
+        event: { t: 'tool_done', id: String(evt.actionId ?? ''), ok: Boolean(evt.ok), output: typeof evt.output === 'string' ? evt.output : undefined },
+      };
+      if (!isAgentRole(evt.agent)) return [tx];
+      return [{ type: 'log', agent: evt.agent, text: evt.ok ? '완료' : '실패' }, tx];
     }
     // 에이전트 사이의 대화 (총괄 ↔ Codex, 사용자 → Codex). 보낸 쪽 로그로 남기고, 받는 쪽 말풍선은 뒤따르는 agent_start가 채운다
     case 'codex_direct':
@@ -92,7 +114,10 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
       const text = String(evt.text ?? '');
       const out: AgentSimEvent[] = [{ type: 'log', agent: from, text: `${who} → ${to} [${MODE[String(evt.mode)] ?? String(evt.mode)}]: ${text}` }];
       // 사용자가 직접 건 말은 사무실의 Master 말풍선으로도 보여준다
-      if (evt.from === 'user' && isAgentRole(evt.to)) out.push({ type: 'master_say', to: evt.to, text });
+      if (evt.from === 'user' && isAgentRole(evt.to)) {
+        out.push({ type: 'master_say', to: evt.to, text });
+        out.push({ type: 'tx', event: { t: 'user_to', agent: evt.to, text } });
+      }
       return out;
     }
     case 'agent_done': {
@@ -102,6 +127,7 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
       return [
         { type: 'agent_status', agent: evt.agent, status: ok ? 'completed' : 'error', message: summary, progress: 100 },
         { type: 'log', agent: evt.agent, text: summary },
+        { type: 'tx', event: { t: 'agent_done', id: String(evt.callId ?? ''), ok, summary } },
       ];
     }
     case 'command_result': {
@@ -199,12 +225,36 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
         { type: 'log', agent: 'system', text: `오류: ${String(evt.message ?? '')}` },
       ];
     }
+    case 'checkpoint': {
+      const files = Array.isArray(evt.files) ? (evt.files as CheckpointFile[]) : [];
+      return [
+        { type: 'tx', event: { t: 'checkpoint', id: String(evt.id ?? ''), files } },
+        { type: 'log', agent: 'system', text: `이 실행에서 바뀐 파일 ${files.length}개 (대화 화면에서 되돌릴 수 있습니다)` },
+      ];
+    }
+    case 'checkpoint_undone': {
+      const restored = Array.isArray(evt.restored) ? (evt.restored as string[]) : [];
+      const skipped = Array.isArray(evt.skipped) ? (evt.skipped as { path: string; reason: string }[]) : [];
+      return [
+        { type: 'tx', event: { t: 'checkpoint_undone', id: String(evt.id ?? ''), restored, skipped, complete: evt.complete === true } },
+        { type: 'log', agent: 'system', text: `실행 되돌리기: ${restored.length}개 복원${skipped.length ? `, ${skipped.length}개 건너뜀` : ''}` },
+      ];
+    }
     case 'run_aborted': {
       return [{ type: 'run_aborted' }, { type: 'log', agent: 'system', text: '작업이 중단되었습니다.' }];
     }
     default:
       return [];
   }
+}
+
+/** 접속 직후 서버가 보내는 현재 상태 (AgentRunnerService.snapshot) */
+interface HelloSnapshot {
+  events?: BackendUiEvent[];
+  agents?: AgentDef[];
+  settings?: RunSettings;
+  conversations?: Partial<Record<RunMode, boolean>>;
+  activeConversations?: Partial<Record<RunMode, { id: string; title: string }>>;
 }
 
 /** 기존 NestJS Socket.IO 게이트웨이(src/agent/agent.gateway.ts)에 실제로 연결하는 소스. */
@@ -222,7 +272,9 @@ export class SocketIoEventSource implements AgentEventSource {
     socket.on('connect', () => onEvent({ type: 'connection', status: 'connected' }));
     socket.on('disconnect', () => onEvent({ type: 'connection', status: 'disconnected' }));
 
-    socket.on('hello', (snapshot: { events?: BackendUiEvent[]; agents?: AgentDef[]; settings?: RunSettings; conversations?: Partial<Record<RunMode, boolean>> }) => {
+    socket.on('hello', (snapshot: HelloSnapshot) => {
+      // 다시 접속했을 때(서버 재시작 등) 같은 기록이 두 번 쌓이지 않게 비우고 다시 그린다
+      onEvent({ type: 'cleared' });
       if (Array.isArray(snapshot.agents)) onEvent({ type: 'agents_changed', agents: snapshot.agents });
       if (snapshot.settings) onEvent({ type: 'settings', settings: snapshot.settings });
       for (const evt of snapshot.events ?? []) {
@@ -232,7 +284,7 @@ export class SocketIoEventSource implements AgentEventSource {
         }
       }
       // 이어갈 대화 여부는 재생한 이벤트보다 서버의 현재 상태가 정확하다
-      if (snapshot.conversations) onEvent({ type: 'conversations', all: snapshot.conversations });
+      if (snapshot.conversations) onEvent({ type: 'conversations', all: snapshot.conversations, titles: snapshot.activeConversations });
     });
 
     socket.on('agents-changed', (payload: { agents?: AgentDef[] }) => {
@@ -240,6 +292,14 @@ export class SocketIoEventSource implements AgentEventSource {
     });
 
     socket.on('agent-event', (evt: BackendUiEvent) => {
+      // 지난 대화 열기: 화면을 비우고 저장된 기록을 처음부터 다시 흘려 대화 화면을 그린다
+      if (evt.type === 'conversation_loaded') {
+        onEvent({ type: 'cleared' });
+        for (const e of Array.isArray(evt.events) ? (evt.events as BackendUiEvent[]) : []) for (const simEvt of mapUiEvent(e)) onEvent(simEvt);
+        const mode = evt.mode === 'chat' || evt.mode === 'cowork' ? evt.mode : 'code';
+        onEvent({ type: 'conversation_loaded', mode, id: String(evt.conversationId ?? ''), title: String(evt.title ?? '') });
+        return;
+      }
       for (const simEvt of mapUiEvent(evt)) onEvent(simEvt);
     });
   }
@@ -264,6 +324,18 @@ export class SocketIoEventSource implements AgentEventSource {
   followUp(prompt: string) {
     this.socket?.emit('follow-up', { prompt }, (res: { ok?: boolean; error?: string } | undefined) => {
       if (res && res.ok === false) this.onEvent?.({ type: 'log', agent: 'system', text: `추가 지시 실패: ${res.error ?? '실행 중인 작업이 없습니다.'}` });
+    });
+  }
+
+  undoCheckpoint(id: string, force = false): Promise<UndoResult> {
+    return new Promise((resolve) => {
+      if (!this.socket?.connected) {
+        resolve({ ok: false, error: '서버에 연결돼 있지 않습니다.', restored: [], skipped: [], complete: false });
+        return;
+      }
+      this.socket.emit('undo-checkpoint', { id, force }, (res: UndoResult | undefined) =>
+        resolve(res ?? { ok: false, error: '응답이 없습니다.', restored: [], skipped: [], complete: false }),
+      );
     });
   }
 

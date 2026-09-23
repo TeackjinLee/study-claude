@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { query, type CanUseTool, type PermissionMode, type PermissionResult, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { config } from '../config.js';
 import { AgentRegistryService } from './agent-registry.service.js';
@@ -16,6 +16,8 @@ import { MessageMapper } from './message-mapper.js';
 import { RUN_MODES, type CodexMode, type RunMode, type UiEvent, type UiEventBody } from './ui-events.js';
 import { parseRunMode, runModeProfile } from './run-modes.js';
 import { InputQueue, RunCompletion } from './input-queue.js';
+import { ConversationStoreService, type ConversationMeta } from './conversation-store.service.js';
+import { CheckpointService, type Snapshot } from './checkpoint.service.js';
 
 const modeOf = (v: unknown): CodexMode => (v === 'review' || v === 'implement' || v === 'image' ? v : 'discuss');
 
@@ -93,7 +95,7 @@ const PLAN_FIRST_PROMPT = `
 const MODE_LOG: Record<RunMode, string> = { code: '코드', chat: '채팅', cowork: '작업' };
 
 @Injectable()
-export class AgentRunnerService implements OnModuleDestroy {
+export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AgentRunnerService.name);
   private readonly listeners = new Set<Listener>();
   private readonly pending = new Map<string, PendingPermission>();
@@ -102,8 +104,8 @@ export class AgentRunnerService implements OnModuleDestroy {
   private allowAllThisRun = false;
   private history: UiEvent[] = [];
   private abort: AbortController | null = null;
-  /** 채팅·코드 모드는 이전 대화를 이어가기 위해 모드별로 Claude Code 세션을 기억한다 (/clear 나 작업 폴더가 바뀌면 새로 시작) */
-  private sessions = new Map<RunMode, { sessionId: string; workspaceDir: string }>();
+  /** 지금 실행의 이벤트를 기록하는 대화 (코드·채팅). 이어가는 세션 자체는 ConversationStore가 모드별로 기억한다 */
+  private recording: string | null = null;
   /** 실행 중인 명령의 입력 큐와 종료 판정. 추가 지시(followUp)를 여기로 끼워 넣는다 */
   private live: { input: InputQueue<SDKUserMessage>; completion: RunCompletion; query: Query | null } | null = null;
   /** 지금 실행 중인 명령이 쓰는 첨부 파일 (자동 정리에서 제외하려고 기억) */
@@ -120,7 +122,16 @@ export class AgentRunnerService implements OnModuleDestroy {
     private readonly cost: CostTrackerService,
     private readonly codexBridge: CodexBridgeService,
     private readonly codexAuth: CodexAuthService,
+    private readonly store: ConversationStoreService,
+    private readonly checkpoints: CheckpointService,
   ) {}
+
+  /** 서버를 켜면 마지막으로 이어가던 대화를 화면 기록으로 되살린다 */
+  async onModuleInit() {
+    await this.store.ready;
+    const latest = this.store.latestActive(this.settings.workspaceDir);
+    if (latest) this.history = withTerminalEvent(await this.store.loadEvents(latest.id));
+  }
 
   get running() {
     return this.abort !== null;
@@ -143,13 +154,51 @@ export class AgentRunnerService implements OnModuleDestroy {
       agents: this.registry.list(),
       settings: this.settings.get(),
       conversations: this.conversations(),
+      activeConversations: this.activeConversations(),
     };
+  }
+
+  /** 모드별 이어가는 대화의 id·제목 (대화 화면 제목 표시용) */
+  activeConversations(): Partial<Record<RunMode, { id: string; title: string }>> {
+    const dir = this.settings.workspaceDir;
+    const out: Partial<Record<RunMode, { id: string; title: string }>> = {};
+    for (const m of RUN_MODES) {
+      const meta = this.store.activeFor(m, dir);
+      if (meta) out[m] = { id: meta.id, title: meta.title };
+    }
+    return out;
+  }
+
+  /** 지난 대화를 다시 연다: 이 대화를 모드의 이어가는 대화로 정하고, 화면에 기록을 다시 그리게 한다 */
+  async openConversation(idInput: unknown): Promise<{ ok: boolean; error?: string }> {
+    if (this.running) return { ok: false, error: '실행 중에는 다른 대화를 열 수 없습니다. 끝나거나 중지한 뒤 다시 시도하세요.' };
+    const meta = typeof idInput === 'string' ? this.store.get(idInput) : undefined;
+    if (!meta) return { ok: false, error: '대화를 찾을 수 없습니다.' };
+    if (meta.workspaceDir !== this.settings.workspaceDir) return { ok: false, error: `다른 작업 폴더(${meta.workspaceDir})의 대화입니다. /workspace 로 그 폴더로 바꾼 뒤 여세요.` };
+    this.store.setActive(meta.mode, meta.id);
+    const events = withTerminalEvent(await this.store.loadEvents(meta.id));
+    this.history = events;
+    // 기록 자체는 화면 기록(history)으로 이미 넣었으니 이 알림은 기록하지 않고 보낸다
+    this.broadcast({ type: 'conversation_loaded', mode: meta.mode, conversationId: meta.id, title: meta.title, events, at: Date.now() });
+    this.logger.log(`대화 열기: ${meta.title} (${meta.mode})`);
+    return { ok: true };
+  }
+
+  /** 지난 대화 지우기. 이어가던 대화였으면 그 모드는 새 대화가 된다 */
+  async deleteConversation(idInput: unknown): Promise<{ ok: boolean; error?: string }> {
+    const meta = typeof idInput === 'string' ? this.store.get(idInput) : undefined;
+    if (!meta) return { ok: false, error: '대화를 찾을 수 없습니다.' };
+    if (this.running && this.recording === meta.id) return { ok: false, error: '실행 중인 대화는 지울 수 없습니다.' };
+    const wasActive = this.store.activeFor(meta.mode, meta.workspaceDir)?.id === meta.id;
+    await this.store.remove(meta.id);
+    if (wasActive) this.emit({ type: 'conversation', mode: meta.mode, active: false });
+    return { ok: true };
   }
 
   /** 모드별로 지금 작업 폴더에서 이어갈 대화가 있는지 */
   conversations(): Record<RunMode, boolean> {
     const dir = this.settings.workspaceDir;
-    return Object.fromEntries(RUN_MODES.map((m) => [m, this.sessions.get(m)?.workspaceDir === dir])) as Record<RunMode, boolean>;
+    return Object.fromEntries(RUN_MODES.map((m) => [m, !!this.store.activeFor(m, dir)])) as Record<RunMode, boolean>;
   }
 
   /** 새 대화: 이 모드(없으면 코드·채팅 모두)의 이어갈 세션을 잊는다 */
@@ -157,7 +206,8 @@ export class AgentRunnerService implements OnModuleDestroy {
     if (this.running) return { ok: false, error: '실행 중에는 새 대화를 시작할 수 없습니다. 끝나거나 중지한 뒤 다시 시도하세요.' };
     const modes = modeInput === undefined ? RUN_MODES : [parseRunMode(modeInput)];
     for (const m of modes) {
-      this.sessions.delete(m);
+      // 대화 자체는 지난 대화 목록에 남는다
+      this.store.setActive(m, undefined);
       this.emit({ type: 'conversation', mode: m, active: false });
     }
     this.logger.log(`새 대화: ${modes.join(', ')}`);
@@ -195,7 +245,7 @@ export class AgentRunnerService implements OnModuleDestroy {
         running: this.running,
         clearHistory: () => {
           this.history = [];
-          this.sessions.clear();
+          for (const m of RUN_MODES) this.store.setActive(m, undefined);
           this.talks.clear();
         },
         emit: (e) => this.emit(e),
@@ -215,17 +265,21 @@ export class AgentRunnerService implements OnModuleDestroy {
     if (!config.hasAuth()) return { ok: false, error: '아직 인증되지 않았습니다. 대시보드 상단의 "로그인 필요" 버튼을 눌러 로그인하거나 .env에 ANTHROPIC_API_KEY를 넣으세요.' };
 
     const profile = runModeProfile(mode);
-    // 이어가는 대화면 화면 기록도 이어 붙인다 (새로 접속한 화면이 앞의 대화까지 복원하도록)
-    const prev = profile.resumable ? this.sessions.get(mode) : undefined;
-    const resume = prev?.workspaceDir === this.settings.workspaceDir ? prev.sessionId : undefined;
+    // 기다리는(await) 동안 다른 명령이 끼어들지 않게 먼저 "실행 중"으로 표시한다
+    const abort = new AbortController();
+    this.abort = abort;
+    const conversation = profile.resumable ? this.store.activeFor(mode, this.settings.workspaceDir) : undefined;
+    const resume = conversation?.sessionId;
+    // 이어 쓰기 전에 기존 기록을 불러 둔다 (안 그러면 새 기록만 남아 앞의 대화가 지워진다)
+    const saved = conversation ? await this.store.loadEvents(conversation.id) : [];
+    // 이어가는 대화면 화면 기록도 이어 붙인다. 다른 대화를 보고 있었으면 이 대화의 기록으로 바꾼다
     if (!resume) this.history = [];
+    else if (!this.history.some((e) => e.type === 'run_start' && e.mode === mode)) this.history = withTerminalEvent(saved);
     this.sessionAllowed.clear();
     this.allowAllThisRun = false;
     this.currentAttachments = files;
-    const abort = new AbortController();
-    this.abort = abort;
     const planFirst = planFirstInput === true && profile.canPlan;
-    void this.run(text || '첨부한 파일을 확인하고 적절히 처리해줘.', files, abort, mode, { resume, planFirst });
+    void this.run(text || '첨부한 파일을 확인하고 적절히 처리해줘.', files, abort, mode, { resume, planFirst, conversation });
     return { ok: true };
   }
 
@@ -375,15 +429,24 @@ export class AgentRunnerService implements OnModuleDestroy {
     const event = { ...body, at: Date.now() } as UiEvent;
     this.history.push(event);
     if (this.history.length > MAX_HISTORY) this.history.splice(0, this.history.length - MAX_HISTORY);
+    if (this.recording) this.store.append(this.recording, event);
+    this.broadcast(event);
+  }
+
+  /** 화면 기록·대화 저장 없이 화면에만 보낸다 */
+  private broadcast(event: UiEvent) {
     for (const listener of this.listeners) listener(event);
   }
 
-  private async run(prompt: string, attachments: Attachment[], abort: AbortController, mode: RunMode, opts: { resume?: string; planFirst: boolean }) {
+  private async run(prompt: string, attachments: Attachment[], abort: AbortController, mode: RunMode, opts: { resume?: string; planFirst: boolean; conversation?: ConversationMeta }) {
     // 실행 도중 /workspace 로 바뀌어도 이번 실행은 시작 시점의 폴더를 끝까지 쓴다
     const workspaceDir = this.settings.workspaceDir;
     const settings = this.settings.get();
     const profile = runModeProfile(mode);
     const { resume, planFirst } = opts;
+    // 코드·채팅은 대화로 저장한다 (없으면 이 명령으로 새 대화를 만든다)
+    const conversation = profile.resumable ? (opts.conversation ?? this.store.create(mode, workspaceDir, prompt)) : undefined;
+    this.recording = conversation?.id ?? null;
 
     // Codex 협업자: 등록돼 있고 로그인돼 있을 때만 총괄에게 도구로 붙인다 (Cowork 모드에서만 쓴다)
     const codexAgents = profile.codex ? this.registry.codexAgents() : [];
@@ -395,21 +458,32 @@ export class AgentRunnerService implements OnModuleDestroy {
     // 스트리밍 입력: 첫 명령을 넣고 시작한 뒤, 실행 도중의 추가 지시를 끼워 넣는다. 끝나면 입력을 닫아 세션을 닫는다
     const input = new InputQueue<SDKUserMessage>();
     let heldDone: Extract<UiEventBody, { type: 'run_done' }> | null = null;
+    /** 실행 전 작업 폴더 (실행 되돌리기용). run_start를 보낸 뒤 찍는다 */
+    let before: Snapshot | null = null;
+    let finishing: Promise<void> | null = null;
     const completion = new RunCompletion(() => {
-      input.close();
-      // 결과가 나오면 스트림이 닫히기 전이라도 다음 명령을 받을 수 있게 먼저 "실행 중"을 푼다 (채팅·코드에서 바로 이어 묻는 경우)
-      if (this.abort === abort) this.abort = null;
-      if (heldDone) this.emit(heldDone);
+      finishing = (async () => {
+        input.close();
+        // 실행 후 스냅샷을 찍은 뒤에 "실행 중"을 푼다 (다음 실행이 먼저 시작되면 그 변경까지 섞인다)
+        const checkpoint = before ? await this.recordCheckpoint(before, prompt, conversation?.id) : null;
+        // 결과가 나오면 스트림이 닫히기 전이라도 다음 명령을 받을 수 있게 먼저 "실행 중"을 푼다 (채팅·코드에서 바로 이어 묻는 경우)
+        if (this.abort === abort) this.abort = null;
+        if (heldDone) this.emit(heldDone);
+        if (checkpoint) this.emit({ type: 'checkpoint', ...checkpoint });
+        // 결과까지 기록했으면 이 실행의 대화 기록은 끝. 바로 파일에 쓴다
+        if (conversation && this.recording === conversation.id) this.recording = null;
+        void this.store.flush();
+      })();
     });
     const live = { input, completion, query: null as Query | null };
     this.live = live;
 
     const mapper = new MessageMapper(
       (e) => {
-        if (profile.resumable && e.type === 'session') {
-          const fresh = !this.sessions.has(mode);
-          this.sessions.set(mode, { sessionId: e.sessionId, workspaceDir });
-          if (fresh) this.emit({ type: 'conversation', mode, active: true });
+        if (conversation && e.type === 'session') {
+          const fresh = !conversation.sessionId;
+          this.store.setSession(conversation.id, e.sessionId);
+          if (fresh) this.emit({ type: 'conversation', mode, active: true, id: conversation.id, title: conversation.title });
         }
         // 결과는 추가 지시까지 다 끝났을 때 한 번만 내보낸다 (RunCompletion이 판단)
         if (e.type === 'run_done') {
@@ -433,6 +507,8 @@ export class AgentRunnerService implements OnModuleDestroy {
     );
     this.emit({ type: 'run_start', command: prompt, workspace: workspaceDir, attachments, mode, continued: Boolean(resume), planFirst });
     this.logger.log(`${MODE_LOG[mode]} 시작: ${prompt}${attachments.length ? ` (첨부 ${attachments.length}개)` : ''}${resume ? ' (이어서)' : ''}${planFirst ? ' (계획 먼저)' : ''}`);
+    // 실행 되돌리기: 파일을 고칠 수 있는 모드면 실행 전 작업 폴더를 찍어 둔다 (git 저장소일 때만)
+    if (mode !== 'chat') before = await this.checkpoints.capture();
     if (codexAgents.length > 0 && !codexAvailable) {
       this.emit({ type: 'main_note', text: '⚠ Codex 협업자가 로그인되지 않아 이번 실행에서는 제외됩니다. 헤더의 Codex 칩에서 로그인하세요.' });
     }
@@ -475,11 +551,10 @@ export class AgentRunnerService implements OnModuleDestroy {
         else if (message.type === 'system' && message.subtype === 'session_state_changed' && message.state === 'idle') completion.idle();
         mapper.handle(message);
       }
-      // 스트림이 먼저 끝났으면(오류, 중단) 여기서 마무리한다
-      completion.finish();
-
+      // 스트림이 먼저 끝났으면(오류, 중단) 끝맺음을 기록한 뒤 마무리한다
       if (abort.signal.aborted) this.emit({ type: 'run_aborted' });
       else if (!mapper.hasResult) this.emit({ type: 'run_error', message: '에이전트가 결과 없이 종료되었습니다.' });
+      completion.finish();
     } catch (err) {
       input.close();
       if (abort.signal.aborted) {
@@ -490,12 +565,46 @@ export class AgentRunnerService implements OnModuleDestroy {
         this.emit({ type: 'run_error', message });
       }
     } finally {
+      // 오류로 끝났어도 그때까지 바뀐 파일은 되돌릴 수 있게 체크포인트를 남긴다
+      completion.finish();
+      await finishing;
       if (this.live === live) this.live = null;
+      if (conversation && this.recording === conversation.id) this.recording = null;
+      void this.store.flush();
       // 이미 다음 실행이 시작됐으면(run_done 직후) 그쪽의 승인 대기는 건드리지 않는다
       if (this.abort === abort || this.abort === null) this.denyAllPending();
       if (this.abort === abort) this.abort = null;
       this.logger.log('작업 종료');
     }
+  }
+
+  private async recordCheckpoint(before: Snapshot, command: string, conversationId?: string) {
+    const after = await this.checkpoints.capture();
+    if (!after) return null;
+    try {
+      return await this.checkpoints.record(before, after, { command, conversationId });
+    } catch (err) {
+      this.logger.warn(`체크포인트 기록 실패: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** 실행 되돌리기. force면 실행 뒤에 다시 바뀐 파일도 실행 전 내용으로 덮어쓴다 */
+  async undoCheckpoint(idInput: unknown, forceInput?: unknown) {
+    if (this.running || this.talkAbort) return { ok: false, error: '실행 중에는 되돌릴 수 없습니다. 끝나거나 중지한 뒤 다시 시도하세요.' };
+    const id = typeof idInput === 'string' ? idInput : '';
+    const res = await this.checkpoints.undo(id, forceInput === true);
+    if (!res.ok) return res;
+    const event: UiEventBody = { type: 'checkpoint_undone', id, restored: res.restored, skipped: res.skipped, complete: res.complete };
+    this.emit(event);
+    // 대화를 다시 열어도 되돌린 상태가 보이게 그 대화 기록에도 남긴다
+    const conversationId = this.checkpoints.get(id)?.conversationId;
+    if (conversationId && this.store.get(conversationId)) {
+      await this.store.loadEvents(conversationId);
+      this.store.append(conversationId, { ...event, at: Date.now() } as UiEvent);
+      void this.store.flush();
+    }
+    return res;
   }
 
   /** onPlanApproved: "계획 먼저" 실행에서 사용자가 계획(ExitPlanMode)을 승인했을 때 */
@@ -587,4 +696,18 @@ export class AgentRunnerService implements OnModuleDestroy {
   private denyAllPending() {
     for (const entry of [...this.pending.values()]) entry.resolve(false);
   }
+}
+
+/**
+ * 저장된 기록을 화면 기록(history)으로 쓸 복사본. 저장소의 배열을 그대로 쓰면 이후 이벤트가 두 번 저장된다.
+ * 서버가 실행 도중 꺼졌으면 기록이 run_start로 끝나므로, "실행 중"에 멈추지 않게 끝맺음을 붙인다.
+ */
+function withTerminalEvent(saved: UiEvent[]): UiEvent[] {
+  const events = [...saved];
+  const lastStart = events.map((e) => e.type).lastIndexOf('run_start');
+  if (lastStart < 0) return events;
+  const ended = events.slice(lastStart).some((e) => e.type === 'run_done' || e.type === 'run_error' || e.type === 'run_aborted');
+  if (ended) return events;
+  const at = events[events.length - 1].at;
+  return [...events, { type: 'run_error', message: '서버가 다시 시작되어 이 실행은 중간에 끊겼습니다.', at }];
 }

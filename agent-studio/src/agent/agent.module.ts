@@ -12,12 +12,15 @@ import { SlashCommandsService } from './slash-commands.service.js';
 import { CommandsController } from './commands.controller.js';
 import { CostTrackerService } from './cost-tracker.service.js';
 import { GitService } from './git.service.js';
+import { CheckpointService } from './checkpoint.service.js';
+import { ConversationStoreService } from './conversation-store.service.js';
+import { ConversationsController } from './conversations.controller.js';
 import { GitController } from './git.controller.js';
 
 @Module({
   // AuthModule: Codex 협업 브리지가 Codex 로그인 상태를 확인한다
   imports: [AuthModule],
-  controllers: [AgentsController, UploadsController, UploadFilesController, WorkspaceFilesController, CommandsController, GitController],
-  providers: [SettingsService, CostTrackerService, SlashCommandsService, AgentRegistryService, AgentRunnerService, AgentGateway, UploadCleanupService, CodexBridgeService, GitService],
+  controllers: [AgentsController, UploadsController, UploadFilesController, WorkspaceFilesController, CommandsController, GitController, ConversationsController],
+  providers: [SettingsService, CostTrackerService, SlashCommandsService, AgentRegistryService, AgentRunnerService, AgentGateway, UploadCleanupService, CodexBridgeService, GitService, ConversationStoreService, CheckpointService],
 })
 export class AgentModule {}

@@ -3,6 +3,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:300
 
 export type ChangeStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflicted';
 
+/** 변경 목록의 파일 하나 (diff 본문은 gitApi.diff로 따로 받는다) */
 export interface FileChange {
   path: string;
   from?: string;
@@ -10,6 +11,11 @@ export interface FileChange {
   additions: number;
   deletions: number;
   binary: boolean;
+}
+
+export interface FileDiff {
+  ok: boolean;
+  error?: string;
   diff: string;
   truncated: boolean;
 }
@@ -32,6 +38,7 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 
 export const gitApi = {
   changes: () => call<ChangesResult>('changes'),
+  diff: (path: string) => call<FileDiff>(`diff?path=${encodeURIComponent(path)}`),
   revert: (path: string) => call<GitResult>('revert', { path }),
   commit: (message: string, opts: { branch?: string; paths?: string[] } = {}) => call<GitResult & { hash?: string; branch?: string }>('commit', { message, ...opts }),
   suggestMessage: () => call<GitResult & { message?: string }>('commit-message', {}),

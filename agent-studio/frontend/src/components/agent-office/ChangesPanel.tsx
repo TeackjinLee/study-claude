@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAgentStore } from '@/store/agentStore';
-import { gitApi, type ChangeStatus, type ChangesResult, type FileChange } from '@/lib/git';
+import { gitApi, type ChangeStatus, type ChangesResult, type FileChange, type FileDiff } from '@/lib/git';
 import { BranchIcon } from '@/components/ui/icons';
 
 const STATUS: Record<ChangeStatus, { letter: string; label: string; color: string }> = {
@@ -32,11 +32,26 @@ export function ChangesPanel() {
   const [branch, setBranch] = useState('');
   const [busy, setBusy] = useState<'revert' | 'commit' | 'message' | null>(null);
 
+  /** 받은 diff 캐시. 목록을 다시 불러오면(파일이 바뀌었을 수 있으니) 비운다 */
+  const diffCache = useRef(new Map<string, Promise<FileDiff>>());
+  const [stamp, setStamp] = useState(0);
+  const loadDiff = useCallback((path: string) => {
+    let p = diffCache.current.get(path);
+    if (!p) {
+      p = gitApi.diff(path).catch((err: unknown) => ({ ok: false, error: err instanceof Error ? err.message : 'diff를 불러오지 못했습니다.', diff: '', truncated: false }));
+      diffCache.current.set(path, p);
+    }
+    return p;
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setData(await gitApi.changes());
+      const next = await gitApi.changes();
+      diffCache.current = new Map();
+      setStamp((n) => n + 1);
+      setData(next);
     } catch (err) {
       setError(err instanceof Error ? `변경사항을 불러오지 못했습니다: ${err.message}` : '변경사항을 불러오지 못했습니다.');
     } finally {
@@ -187,7 +202,7 @@ export function ChangesPanel() {
               );
             })}
           </ul>
-          {current && <DiffView file={current} disabled={running || busy !== null} onRevert={() => void revert(current)} />}
+          {current && <DiffView key={`${stamp}:${current.path}`} file={current} load={loadDiff} disabled={running || busy !== null} onRevert={() => void revert(current)} />}
         </div>
       )}
 
@@ -243,8 +258,17 @@ function lineClass(line: string) {
   return 'text-slate-300';
 }
 
-function DiffView({ file, disabled, onRevert }: { file: FileChange; disabled: boolean; onRevert: () => void }) {
-  const lines = useMemo(() => file.diff.replace(/\n$/, '').split('\n'), [file.diff]);
+function DiffView({ file, load, disabled, onRevert }: { file: FileChange; load: (path: string) => Promise<FileDiff>; disabled: boolean; onRevert: () => void }) {
+  // 파일을 고를 때 그 파일의 diff만 받는다 (목록에는 줄 수만 있다)
+  const [diff, setDiff] = useState<FileDiff | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void load(file.path).then((d) => alive && setDiff(d));
+    return () => {
+      alive = false;
+    };
+  }, [file.path, load]);
+  const lines = useMemo(() => (diff?.diff ?? '').replace(/\n$/, '').split('\n'), [diff]);
   const st = STATUS[file.status];
   return (
     <div className="flex min-h-0 flex-col">
@@ -264,14 +288,20 @@ function DiffView({ file, disabled, onRevert }: { file: FileChange; disabled: bo
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        <pre className="min-w-max font-mono text-[12px] leading-5">
-          {lines.map((line, i) => (
-            <div key={i} className={`px-3 ${lineClass(line)}`}>
-              {line || ' '}
-            </div>
-          ))}
-        </pre>
-        {file.truncated && <p className="px-3 py-2 text-[11px] text-amber-300">diff가 길어 일부만 표시합니다.</p>}
+        {!diff ? (
+          <p className="px-3 py-2 text-[12px] text-slate-500">diff를 불러오는 중…</p>
+        ) : !diff.ok ? (
+          <p className="px-3 py-2 text-[12px] text-red-300">{diff.error}</p>
+        ) : (
+          <pre className="min-w-max font-mono text-[12px] leading-5">
+            {lines.map((line, i) => (
+              <div key={i} className={`px-3 ${lineClass(line)}`}>
+                {line || ' '}
+              </div>
+            ))}
+          </pre>
+        )}
+        {diff?.truncated && <p className="px-3 py-2 text-[11px] text-amber-300">diff가 길어 일부만 표시합니다.</p>}
       </div>
     </div>
   );

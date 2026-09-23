@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { GitService } from './git.service.js';
 import { AgentRunnerService } from './agent-runner.service.js';
 
 /**
  * 결과 미리보기의 "변경사항" 탭.
- *   GET  /api/git/changes          작업 폴더의 변경 파일 + diff
+ *   GET  /api/git/changes          작업 폴더의 변경 파일 목록 (추가/삭제 줄 수)
+ *   GET  /api/git/diff?path=       파일 하나의 diff
  *   POST /api/git/revert           { path }                  파일 하나 되돌리기
  *   POST /api/git/commit           { message, branch?, paths? }  커밋 (branch를 주면 새 브랜치에)
  *   POST /api/git/commit-message                             Claude가 커밋 메시지 제안
@@ -24,6 +25,11 @@ export class GitController {
   @Get('changes')
   changes() {
     return this.git.changes();
+  }
+
+  @Get('diff')
+  diff(@Query('path') path?: string) {
+    return this.git.diff(path);
   }
 
   @Post('revert')

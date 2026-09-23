@@ -1,21 +1,28 @@
 'use client';
 
 import { useAgentStore, type CenterView } from '@/store/agentStore';
-import { FileIcon, MapIcon } from '@/components/ui/icons';
+import { ChatIcon, FileIcon, MapIcon } from '@/components/ui/icons';
 
-/** 가운데 영역을 "사무실 맵"과 "결과 미리보기" 사이에서 전환하는 탭 */
+/** 가운데 영역을 "대화" / "사무실 맵" / "결과 미리보기" 사이에서 전환하는 탭 */
 export function CenterViewTabs() {
   const view = useAgentStore((s) => s.centerView);
   const setView = useAgentStore((s) => s.setCenterView);
   const fresh = useAgentStore((s) => s.freshResults);
   const artifacts = useAgentStore((s) => s.artifacts);
   const run = useAgentStore((s) => s.run);
+  const running = useAgentStore((s) => s.running);
 
   const resultCount =
     Object.keys(artifacts.code).length + Object.keys(artifacts.test).length + Object.keys(artifacts.doc).length + (run?.result ? 1 : 0);
   const hasFresh = Object.values(fresh).some(Boolean);
 
   const tabs: { id: CenterView; label: string; icon: React.ReactNode; badge?: React.ReactNode }[] = [
+    {
+      id: 'conversation',
+      label: '대화',
+      icon: <ChatIcon className="h-4 w-4" />,
+      badge: running && view !== 'conversation' ? <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-blue-400" /> : undefined,
+    },
     { id: 'office', label: '사무실 맵', icon: <MapIcon className="h-4 w-4" /> },
     {
       id: 'results',

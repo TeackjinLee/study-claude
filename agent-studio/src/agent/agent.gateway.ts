@@ -19,6 +19,7 @@ const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
  *   command            { prompt, mode, planFirst, attachments }  작업 시작 (ack로 성공/실패 응답)
  *   follow-up          { prompt }            실행 도중 추가 지시 끼워 넣기
  *   new-conversation   { mode? }             코드·채팅의 이어갈 대화를 비우고 새로 시작
+ *   undo-checkpoint    { id, force? }        실행 되돌리기 (그 실행이 바꾼 파일을 실행 전으로)
  *   interrupt                                  작업 중지
  *   permission-reply   { id, allowed, always } 권한 요청에 대한 답
  *
@@ -66,6 +67,11 @@ export class AgentGateway implements OnGatewayInit, OnGatewayConnection {
   @SubscribeMessage('new-conversation')
   handleNewConversation(@MessageBody() body: { mode?: unknown } | undefined) {
     return this.runner.newConversation(body?.mode);
+  }
+
+  @SubscribeMessage('undo-checkpoint')
+  handleUndo(@MessageBody() body: { id?: unknown; force?: unknown } | undefined) {
+    return this.runner.undoCheckpoint(body?.id, body?.force);
   }
 
   @SubscribeMessage('interrupt')

@@ -1,6 +1,6 @@
 import type { AgentDef } from '@/types/agent';
 import type { Attachment } from '@/lib/uploads';
-import type { AgentEventSource, AgentSimEvent, CommandChoices, CommandInfo, RunMode, RunSettings } from './types';
+import type { AgentEventSource, AgentSimEvent, CommandChoices, CommandInfo, RunMode, RunSettings, UndoResult } from './types';
 
 type Step = { delay: number; event: AgentSimEvent };
 
@@ -265,6 +265,8 @@ const VALIDATE_CODE = `export function validateBody(required) {
 }
 `;
 
+const CODE_SUMMARY = '로그인/회원가입 요청에 입력 검증을 추가했습니다.\n- `src/middlewares/validate.js`: 필수 필드·이메일 형식 검사 (실패 시 400)\n- `src/routes/auth.js`: 두 라우트에 검증 연결\n- `npm test`: 4건 모두 통과';
+
 /**
  * 코드 모드 데모: 서브에이전트 없이 Claude 혼자 파일을 읽고 고치고 테스트한다 (로그는 system 줄로 흐른다).
  * 이어서 대화 중이면 continued로 시작하고, 계획 먼저면 계획 승인(ExitPlanMode)에서 멈춘다.
@@ -276,8 +278,13 @@ function buildCodeScript(prompt: string, attachments: Attachment[], continued: b
   push(0, { type: 'session', model: 'claude-sonnet-5 (mock)' });
   push(0, { type: 'log', agent: 'system', text: `코드 명령 접수: ${prompt}${continued ? ' (이어서)' : ''}` });
   if (!continued) push(100, { type: 'conversation', mode: 'code', active: true });
+  push(300, { type: 'tx', event: { t: 'text', agent: 'main', text: '먼저 인증 라우트와 기존 검증 코드를 확인하겠습니다.' } });
   push(500, { type: 'log', agent: 'system', text: '파일 읽는 중: src/routes/auth.js' });
+  push(500, { type: 'tx', event: { t: 'tool_start', id: 'mock-read', agent: 'main', tool: 'Read', label: '파일 읽기: src/routes/auth.js', detail: { kind: 'read', path: 'src/routes/auth.js' } } });
+  push(800, { type: 'tx', event: { t: 'tool_done', id: 'mock-read', ok: true } });
   push(1100, { type: 'log', agent: 'system', text: '검색: validateBody' });
+  push(1100, { type: 'tx', event: { t: 'tool_start', id: 'mock-grep', agent: 'main', tool: 'Grep', label: '코드 검색: validateBody', detail: { kind: 'search', pattern: 'validateBody', path: 'src' } } });
+  push(1400, { type: 'tx', event: { t: 'tool_done', id: 'mock-grep', ok: true, output: 'src/routes/auth.js' } });
   if (planFirst) {
     push(1800, { type: 'log', agent: 'system', text: '계획을 세웠습니다. 승인을 기다립니다' });
     push(1800, {
@@ -292,17 +299,60 @@ function buildCodeScript(prompt: string, attachments: Attachment[], continued: b
 function buildCodeTail(start: number): Step[] {
   const steps: Step[] = [];
   const push = (delay: number, event: AgentSimEvent) => steps.push({ delay, event });
+  push(start, {
+    type: 'tx',
+    event: { t: 'plan', items: [{ text: '검증 미들웨어 만들기', status: 'in_progress' }, { text: '라우트에 연결', status: 'pending' }, { text: '테스트 실행', status: 'pending' }] },
+  });
+  push(start, { type: 'tx', event: { t: 'text', agent: 'main', text: '검증 미들웨어가 없어서 `src/middlewares/validate.js`를 새로 만들겠습니다.' } });
+  push(start, { type: 'tx', event: { t: 'tool_start', id: 'mock-write', agent: 'main', tool: 'Write', label: '파일 생성: src/middlewares/validate.js', detail: { kind: 'write', path: 'src/middlewares/validate.js', content: VALIDATE_CODE } } });
+  push(start + 300, { type: 'tx', event: { t: 'tool_done', id: 'mock-write', ok: true } });
   push(start, { type: 'log', agent: 'system', text: '수정: src/middlewares/validate.js' });
   push(start, { type: 'artifact', artifact: { kind: 'code', key: 'src/middlewares/validate.js', title: 'src/middlewares/validate.js', lang: 'JavaScript', text: VALIDATE_CODE } });
+  push(start + 900, {
+    type: 'tx',
+    event: { t: 'plan', items: [{ text: '검증 미들웨어 만들기', status: 'completed' }, { text: '라우트에 연결', status: 'in_progress' }, { text: '테스트 실행', status: 'pending' }] },
+  });
+  push(start + 900, {
+    type: 'tx',
+    event: {
+      t: 'tool_start',
+      id: 'mock-edit',
+      agent: 'main',
+      tool: 'Edit',
+      label: '파일 수정: src/routes/auth.js',
+      detail: {
+        kind: 'edit',
+        path: 'src/routes/auth.js',
+        edits: [
+          {
+            oldText: "router.post('/login', login);\nrouter.post('/register', register);",
+            newText: "router.post('/login', validateBody(['email', 'password']), login);\nrouter.post('/register', validateBody(['email', 'password', 'name']), register);",
+          },
+        ],
+      },
+    },
+  });
+  push(start + 1200, { type: 'tx', event: { t: 'tool_done', id: 'mock-edit', ok: true } });
   push(start + 900, { type: 'log', agent: 'system', text: '수정: src/routes/auth.js' });
   push(start + 900, { type: 'artifact', artifact: { kind: 'code', key: 'src/routes/auth.js', title: 'src/routes/auth.js', lang: 'JavaScript', text: ROUTE_CODE } });
+  push(start + 1800, {
+    type: 'tx',
+    event: { t: 'plan', items: [{ text: '검증 미들웨어 만들기', status: 'completed' }, { text: '라우트에 연결', status: 'completed' }, { text: '테스트 실행', status: 'in_progress' }] },
+  });
+  push(start + 1800, { type: 'tx', event: { t: 'tool_start', id: 'mock-bash', agent: 'main', tool: 'Bash', label: '명령 실행: npm test', detail: { kind: 'bash', command: 'npm test', description: '테스트 실행' } } });
+  push(start + 3000, { type: 'tx', event: { t: 'tool_done', id: 'mock-bash', ok: true, output: TEST_OUTPUT } });
+  push(start + 3100, {
+    type: 'tx',
+    event: { t: 'plan', items: [{ text: '검증 미들웨어 만들기', status: 'completed' }, { text: '라우트에 연결', status: 'completed' }, { text: '테스트 실행', status: 'completed' }] },
+  });
+  push(start + 3100, { type: 'tx', event: { t: 'text', agent: 'main', text: CODE_SUMMARY } });
   push(start + 1800, { type: 'log', agent: 'system', text: '실행: npm test' });
   push(start + 3000, { type: 'artifact', artifact: { kind: 'test', key: 'bash:npm test', title: 'npm test', lang: 'bash', text: TEST_OUTPUT } });
   push(start + 3200, {
     type: 'run_done',
     result: {
       ok: true,
-      result: '로그인/회원가입 요청에 입력 검증을 추가했습니다.\n- src/middlewares/validate.js: 필수 필드·이메일 형식 검사 (실패 시 400)\n- src/routes/auth.js: 두 라우트에 검증 연결\n- npm test: 4건 모두 통과',
+      result: CODE_SUMMARY,
       costUsd: 0.0213,
       turns: 9,
       durationMs: start + 3200,
@@ -310,8 +360,21 @@ function buildCodeTail(start: number): Step[] {
     },
   });
   push(start + 3200, { type: 'log', agent: 'system', text: '작업을 마쳤습니다. (9턴, $0.0213)' });
+  push(start + 3300, {
+    type: 'tx',
+    event: {
+      t: 'checkpoint',
+      id: `mock-cp-${Date.now()}`,
+      files: [
+        { path: 'src/middlewares/validate.js', status: 'added' },
+        { path: 'src/routes/auth.js', status: 'modified' },
+      ],
+    },
+  });
   return steps;
 }
+
+const CHAT_ANSWER = '(Mock) 인증 라우트는 `src/routes/auth.js`에 있고, 컨트롤러가 이메일로 사용자를 찾아 비밀번호를 비교한 뒤 토큰을 발급합니다. 비밀번호가 **평문**으로 저장돼 있어 해싱을 권합니다.';
 
 /** 채팅 모드 데모: 파일만 읽고 답한다 */
 function buildChatScript(prompt: string, attachments: Attachment[], continued: boolean): Step[] {
@@ -321,13 +384,16 @@ function buildChatScript(prompt: string, attachments: Attachment[], continued: b
     { delay: 0, event: { type: 'log', agent: 'system', text: `채팅 접수: ${prompt}${continued ? ' (이어서)' : ''}` } },
     ...(continued ? [] : [{ delay: 100, event: { type: 'conversation', mode: 'chat', active: true } as AgentSimEvent }]),
     { delay: 700, event: { type: 'log', agent: 'system', text: '파일 읽는 중: src/routes/auth.js' } },
+    { delay: 700, event: { type: 'tx', event: { t: 'tool_start', id: 'mock-chat-read', agent: 'main', tool: 'Read', label: '파일 읽기', detail: { kind: 'read', path: 'src/routes/auth.js' } } } },
+    { delay: 1000, event: { type: 'tx', event: { t: 'tool_done', id: 'mock-chat-read', ok: true } } },
+    { delay: 1500, event: { type: 'tx', event: { t: 'text', agent: 'main', text: CHAT_ANSWER } } },
     {
       delay: 1600,
       event: {
         type: 'run_done',
         result: {
           ok: true,
-          result: '(Mock) 인증 라우트는 src/routes/auth.js 에 있고, 컨트롤러가 이메일로 사용자를 찾아 비밀번호를 비교한 뒤 토큰을 발급합니다. 비밀번호가 평문으로 저장돼 있어 해싱을 권합니다.',
+          result: CHAT_ANSWER,
           costUsd: 0.0041,
           turns: 2,
           durationMs: 1600,
@@ -461,6 +527,14 @@ export class MockEventSource implements AgentEventSource {
     }
     this.onEvent({ type: 'follow_up', text: prompt });
     this.onEvent({ type: 'log', agent: 'system', text: `추가 지시: ${prompt} (Mock: 다음 단계에 반영된 것으로 봅니다)` });
+  }
+
+  async undoCheckpoint(id: string): Promise<UndoResult> {
+    // Mock: 실제 파일은 없으니 되돌린 것으로만 보여준다
+    const restored = ['src/middlewares/validate.js', 'src/routes/auth.js'];
+    this.onEvent?.({ type: 'tx', event: { t: 'checkpoint_undone', id, restored, skipped: [], complete: true } });
+    this.onEvent?.({ type: 'log', agent: 'system', text: `실행 되돌리기: ${restored.length}개 복원 (Mock)` });
+    return { ok: true, restored, skipped: [], complete: true };
   }
 
   newConversation(mode?: RunMode) {

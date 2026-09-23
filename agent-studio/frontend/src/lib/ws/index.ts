@@ -2,7 +2,7 @@ import type { AgentEventSource } from './types';
 import { MockEventSource } from './MockEventSource';
 import { SocketIoEventSource } from './SocketIoEventSource';
 
-export type { AgentEventSource, AgentSimEvent, Artifact, ArtifactKind, CommandChoice, CommandChoices, CommandInfo, PermissionRequest, RunMode, RunResult, RunSettings } from './types';
+export type { AgentEventSource, AgentSimEvent, Artifact, ArtifactKind, CommandChoice, CommandChoices, CommandInfo, PermissionRequest, RunMode, RunResult, RunSettings, ToolDetail, TxAgent, TxEvent, CheckpointFile, UndoResult } from './types';
 export { RUN_MODES } from './types';
 export { createAgentRepository, type AgentRepository } from '@/lib/agents/repository';
 

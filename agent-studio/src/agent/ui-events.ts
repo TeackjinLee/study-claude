@@ -18,6 +18,18 @@ export type RunMode = 'code' | 'chat' | 'cowork';
 export const RUN_MODES: readonly RunMode[] = ['code', 'chat', 'cowork'];
 
 export type ArtifactKind = 'code' | 'test' | 'doc' | 'image';
+
+/** 실행 하나가 바꾼 파일 (작업 폴더 기준 경로) */
+export type CheckpointFile = { path: string; status: 'added' | 'modified' | 'deleted' };
+
+/** 대화 화면에서 도구 호출을 펼쳐 볼 때 쓰는 입력 요약 (길면 잘림) */
+export type ToolDetail =
+  | { kind: 'bash'; command: string; description?: string }
+  | { kind: 'edit'; path: string; edits: { oldText: string; newText: string }[] }
+  | { kind: 'write'; path: string; content: string }
+  | { kind: 'read'; path: string }
+  | { kind: 'search'; pattern: string; path?: string }
+  | { kind: 'other'; input: string };
 /** Codex 협업자에게 보내는 요청 종류. discuss/review는 읽기 전용, implement만 파일 수정 가능 */
 /** image: 총괄이 쓴 프롬프트로 Codex가 내장 이미지 생성 도구를 써서 그림 파일을 만든다 */
 export type CodexMode = 'discuss' | 'review' | 'implement' | 'image';
@@ -29,7 +41,9 @@ export type UiEventBody =
   /** 실행 도중 사용자가 끼워 넣은 추가 지시 */
   | { type: 'follow_up'; text: string }
   /** 코드·채팅 모드의 이어갈 대화(세션)가 생기거나(active) 새 대화로 비워짐 */
-  | { type: 'conversation'; mode: RunMode; active: boolean }
+  | { type: 'conversation'; mode: RunMode; active: boolean; id?: string; title?: string }
+  /** 지난 대화를 열었음: 화면을 비우고 events로 대화 화면을 다시 그린다 (이 이벤트 자체는 기록하지 않음) */
+  | { type: 'conversation_loaded'; mode: RunMode; conversationId: string; title: string; events: UiEvent[] }
   /** 슬래시 명령(/model 등)을 서버가 처리한 결과 */
   | { type: 'command_result'; command: string; ok: boolean; text: string; choices?: CommandChoices }
   /** 실행 설정이 바뀜 (/model, /effort ...) */
@@ -51,8 +65,11 @@ export type UiEventBody =
   | { type: 'codex_direct'; active: boolean }
   /** /talk — 사용자(Master)가 사무실에서 Claude 서브에이전트에게 직접 말을 걸어 대화 중 */
   | { type: 'direct_talk'; active: boolean; agent: UiAgentId }
-  | { type: 'action_start'; agent: AgentRef; actionId: string; tool: string; label: string }
-  | { type: 'action_done'; agent: AgentRef; actionId: string; ok: boolean }
+  | { type: 'action_start'; agent: AgentRef; actionId: string; tool: string; label: string; detail?: ToolDetail }
+  /** output: 도구 결과 텍스트 (파일 읽기 결과는 보내지 않음, 길면 잘림) */
+  | { type: 'action_done'; agent: AgentRef; actionId: string; ok: boolean; output?: string }
+  /** 에이전트가 쓴 글 전체 (대화 화면용. main_note/agent_note는 로그용 한 줄 요약) */
+  | { type: 'assistant_text'; agent: AgentRef; text: string }
   /** image 종류는 text가 작업 폴더 기준 경로이고 url로 파일을 받아 볼 수 있다 */
   | { type: 'artifact'; kind: ArtifactKind; key: string; title: string; lang: string; text: string; url?: string }
   | { type: 'permission_request'; id: string; agent: AgentRef; tool: string; title: string; detail: string; canAlwaysAllow: boolean }
@@ -60,6 +77,10 @@ export type UiEventBody =
   /** suggestions: 총괄이 요약 끝에 붙인 다음 추천 명령 (명령 입력창의 버튼으로 표시) */
   | { type: 'run_done'; ok: boolean; result: string; costUsd: number; turns: number; durationMs: number; suggestions?: string[] }
   | { type: 'run_error'; message: string }
+  /** 실행이 끝났고 파일이 바뀌었음 → "이 실행 되돌리기" 버튼 (id로 되돌린다) */
+  | { type: 'checkpoint'; id: string; files: CheckpointFile[] }
+  /** 되돌리기 결과. complete면 이 실행의 변경을 전부 되돌렸다 */
+  | { type: 'checkpoint_undone'; id: string; restored: string[]; skipped: { path: string; reason: string }[]; complete: boolean }
   | { type: 'run_aborted' };
 
 export type UiEvent = UiEventBody & { at: number };

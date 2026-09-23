@@ -67,3 +67,36 @@ export const stripPrefix = (path: string, prefix: string) => (prefix && path.sta
 
 /** 브랜치 이름으로 쓸 수 있는지 (최종 판단은 git check-ref-format, 여기서는 명백히 위험한 값을 거른다) */
 export const looksLikeBranchName = (name: string) => /^[\w./-]{1,100}$/.test(name) && !name.startsWith('-') && !name.includes('..');
+
+export interface NumstatEntry {
+  path: string;
+  from?: string;
+  additions: number;
+  deletions: number;
+  binary: boolean;
+}
+
+/**
+ * `git diff --numstat -z` 출력. 한 줄은 "추가\t삭제\t경로\0", 이름 바꿈은 "추가\t삭제\t\0원래\0새경로\0".
+ * 바이너리 파일은 추가·삭제가 "-"로 온다.
+ */
+export function parseNumstatZ(out: string): NumstatEntry[] {
+  const parts = out.split('\0');
+  const entries: NumstatEntry[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const m = /^(-|\d+)\t(-|\d+)\t(.*)$/s.exec(parts[i]);
+    if (!m) continue;
+    const binary = m[1] === '-';
+    const counts = { additions: binary ? 0 : Number(m[1]), deletions: binary ? 0 : Number(m[2]), binary };
+    if (m[3] === '') {
+      entries.push({ from: parts[i + 1], path: parts[i + 2], ...counts });
+      i += 2;
+    } else {
+      entries.push({ path: m[3], ...counts });
+    }
+  }
+  return entries;
+}
+
+/** 새 파일(추적 안 됨)의 줄 수. 끝의 줄바꿈 하나는 줄로 세지 않는다 */
+export const countLines = (text: string) => (text ? text.replace(/\n$/, '').split('\n').length : 0);

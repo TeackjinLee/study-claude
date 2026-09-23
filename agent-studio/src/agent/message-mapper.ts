@@ -1,6 +1,6 @@
 import { isAbsolute, relative } from 'node:path';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentRef, ArtifactKind, CodexMode, PlanItem, UiAgentId, UiEventBody } from './ui-events.js';
+import type { AgentRef, ArtifactKind, CodexMode, PlanItem, ToolDetail, UiAgentId, UiEventBody } from './ui-events.js';
 import { TEST_COMMAND, artifactKindOf, clip, langOf, oneLine, splitNextSteps, str } from './artifact-utils.js';
 
 type Emit = (event: UiEventBody) => void;
@@ -19,6 +19,11 @@ export interface ExternalAgentHooks {
 
 export const CODEX_MODE_LABEL: Record<CodexMode, string> = { discuss: '토론', review: '리뷰', implement: '구현 요청', image: '이미지 생성' };
 const modeOf = (v: unknown): CodexMode => (v === 'review' || v === 'implement' || v === 'image' ? v : 'discuss');
+
+/** 대화 화면용 글·도구 입력·도구 출력의 최대 길이 */
+const TEXT_MAX = 20_000;
+const DETAIL_MAX = 8_000;
+const OUTPUT_MAX = 6_000;
 
 /** 서브에이전트를 호출하는 도구 이름 (최신 버전은 Agent, 이전 버전은 Task) */
 const SUBAGENT_TOOLS = new Set(['Agent', 'Task']);
@@ -169,11 +174,12 @@ export class MessageMapper {
       const block = raw as { type: string; text?: string; id?: string; name?: string; input?: unknown };
 
       if (block.type === 'text' && block.text?.trim()) {
-        if (owner === 'main') {
-          const text = splitNextSteps(block.text).body;
-          if (text) this.emit({ type: 'main_note', text: oneLine(text, 200) });
-        }
-        else this.emit({ type: 'agent_note', agent: owner, text: oneLine(block.text, 200) });
+        // <next-steps>는 화면 버튼으로 쓰고 글에서는 뗀다
+        const text = splitNextSteps(block.text).body;
+        if (!text) continue;
+        this.emit({ type: 'assistant_text', agent: owner, text: clip(text, TEXT_MAX) });
+        if (owner === 'main') this.emit({ type: 'main_note', text: oneLine(text, 200) });
+        else this.emit({ type: 'agent_note', agent: owner, text: oneLine(text, 200) });
         continue;
       }
 
@@ -214,7 +220,7 @@ export class MessageMapper {
         continue; // 결과(tool_use_result)를 받은 뒤 처리한다
       }
 
-      this.emit({ type: 'action_start', agent: owner, actionId: block.id, tool: block.name, label: this.describe(block.name, input) });
+      this.emit({ type: 'action_start', agent: owner, actionId: block.id, tool: block.name, label: this.describe(block.name, input), detail: this.detail(block.name, input) });
     }
   }
 
@@ -247,8 +253,10 @@ export class MessageMapper {
       }
       if (call.name === 'TodoWrite' || call.name === 'TaskList' || call.name === 'TaskGet') continue;
 
-      this.emit({ type: 'action_done', agent: call.owner, actionId: id, ok });
-      if (ok) this.maybeArtifact(call, toolResultText(block.content));
+      const output = toolResultText(block.content);
+      // 파일 읽기 결과는 파일 내용 그대로라 대화 화면에 싣지 않는다
+      this.emit({ type: 'action_done', agent: call.owner, actionId: id, ok, output: call.name === 'Read' && ok ? undefined : clip(output, OUTPUT_MAX) });
+      if (ok) this.maybeArtifact(call, output);
     }
   }
 
@@ -315,6 +323,30 @@ export class MessageMapper {
         if (external) return `${this.external!.labelFor(external)}에게 ${CODEX_MODE_LABEL[modeOf(input.mode)]}: ${oneLine(str(input.message), 60)}`;
         return tool.startsWith('mcp__') ? `외부 도구: ${tool.replace(/^mcp__/, '')}` : tool;
       }
+    }
+  }
+
+  /** 대화 화면에서 펼쳐 볼 도구 입력 */
+  private detail(tool: string, input: Record<string, unknown>): ToolDetail {
+    const path = this.rel(str(input.file_path));
+    switch (tool) {
+      case 'Bash':
+        return { kind: 'bash', command: clip(str(input.command), DETAIL_MAX), description: str(input.description) || undefined };
+      case 'Edit':
+        return { kind: 'edit', path, edits: [{ oldText: clip(str(input.old_string), DETAIL_MAX), newText: clip(str(input.new_string), DETAIL_MAX) }] };
+      case 'MultiEdit': {
+        const edits = Array.isArray(input.edits) ? (input.edits as Array<Record<string, unknown>>) : [];
+        return { kind: 'edit', path, edits: edits.slice(0, 20).map((e) => ({ oldText: clip(str(e.old_string), DETAIL_MAX / 4), newText: clip(str(e.new_string), DETAIL_MAX / 4) })) };
+      }
+      case 'Write':
+        return { kind: 'write', path, content: clip(str(input.content), DETAIL_MAX) };
+      case 'Read':
+        return { kind: 'read', path };
+      case 'Glob':
+      case 'Grep':
+        return { kind: 'search', pattern: str(input.pattern), path: input.path ? this.rel(str(input.path)) : undefined };
+      default:
+        return { kind: 'other', input: clip(JSON.stringify(input, null, 2), DETAIL_MAX) };
     }
   }
 
