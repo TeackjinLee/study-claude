@@ -7,7 +7,8 @@ import type { CheckpointFile, RunMode, RunResult, ToolDetail, TxAgent, TxEvent }
  */
 export type TxItem =
   | { kind: 'user'; id: string; text: string; mode?: RunMode; followUp?: boolean; to?: AgentRole; attachments?: number; at: number }
-  | { kind: 'text'; id: string; agent: TxAgent; text: string }
+  /** draft: 지금 쓰는 중인 글 (실시간으로 이어 붙고, 완성된 글이 오면 text로 옮긴다) */
+  | { kind: 'text'; id: string; agent: TxAgent; text: string; draft?: string }
   | { kind: 'tool'; id: string; agent: TxAgent; tool: string; label: string; detail?: ToolDetail; status: 'running' | 'ok' | 'error'; output?: string }
   | { kind: 'agent'; id: string; agent: AgentRole; task: string; status: 'running' | 'ok' | 'error'; summary?: string }
   | { kind: 'plan'; id: string; items: { text: string; status: 'pending' | 'in_progress' | 'completed' }[] }
@@ -41,18 +42,33 @@ export function txNotice(items: TxItem[], tone: 'error' | 'warn', text: string):
   return cap([...settleRunning(items, false), { kind: 'notice', id: nextId('n'), tone, text }]);
 }
 
-/** 실행이 끝났는데 결과를 못 받은 도구·에이전트 호출은 멈춘 것으로 표시 */
+/** 실행이 끝났는데 결과를 못 받은 도구·에이전트 호출은 멈춘 것으로, 쓰다 만 글은 받은 데까지 글로 남긴다 */
 function settleRunning(items: TxItem[], ok: boolean): TxItem[] {
-  if (!items.some((i) => (i.kind === 'tool' || i.kind === 'agent') && i.status === 'running')) return items;
-  return items.map((i) => ((i.kind === 'tool' || i.kind === 'agent') && i.status === 'running' ? { ...i, status: ok ? 'ok' : 'error' } : i));
+  const unsettled = (i: TxItem) => ((i.kind === 'tool' || i.kind === 'agent') && i.status === 'running') || (i.kind === 'text' && i.draft !== undefined);
+  if (!items.some(unsettled)) return items;
+  return items
+    .map((i): TxItem => {
+      if (!unsettled(i)) return i;
+      if (i.kind === 'text') return { ...i, text: joinText(i.text, i.draft?.trim() ?? ''), draft: undefined };
+      return { ...i, status: ok ? 'ok' : 'error' } as TxItem;
+    })
+    .filter((i) => i.kind !== 'text' || i.text !== '');
 }
+
+const joinText = (a: string, b: string) => (a && b ? `${a}\n\n${b}` : a || b);
 
 export function applyTx(items: TxItem[], e: TxEvent): TxItem[] {
   switch (e.t) {
-    case 'text': {
-      // 스트리밍이 아니라 블록 단위로 오지만, 같은 주인의 글이 연달아 오면 한 덩어리로 붙인다
+    case 'text_delta': {
+      // 쓰는 중인 글은 마지막 글 항목의 draft에 이어 붙인다
       const last = items[items.length - 1];
-      if (last?.kind === 'text' && last.agent === e.agent) return [...items.slice(0, -1), { ...last, text: `${last.text}\n\n${e.text}` }];
+      if (last?.kind === 'text' && last.agent === e.agent) return [...items.slice(0, -1), { ...last, draft: (last.draft ?? '') + e.text }];
+      return cap([...items, { kind: 'text', id: nextId('t'), agent: e.agent, text: '', draft: e.text }]);
+    }
+    case 'text': {
+      // 블록 하나가 완성됐다. 쓰던 글(draft)을 완성된 글로 바꾸고, 같은 주인의 글이 연달아 오면 한 덩어리로 붙인다
+      const last = items[items.length - 1];
+      if (last?.kind === 'text' && last.agent === e.agent) return [...items.slice(0, -1), { ...last, text: joinText(last.text, e.text), draft: undefined }];
       return cap([...items, { kind: 'text', id: nextId('t'), agent: e.agent, text: e.text }]);
     }
     case 'tool_start':

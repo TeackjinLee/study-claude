@@ -37,7 +37,7 @@ const MAX_EVENTS = 5000;
  * 저장하지 않는 이벤트. 권한 요청은 다시 그리면 승인 배너가 떠 버리고,
  * 대화 상태(conversation)는 다시 열 때 서버가 따로 알려준다 (기록에 "새 대화"가 남으면 다시 그릴 때 화면이 비워진다)
  */
-const SKIP_EVENTS = new Set<UiEvent['type']>(['permission_request', 'permission_resolved', 'settings', 'command_result', 'cleared', 'conversation', 'conversation_loaded']);
+const SKIP_EVENTS = new Set<UiEvent['type']>(['permission_request', 'permission_resolved', 'settings', 'command_result', 'cleared', 'conversation', 'conversation_loaded', 'assistant_delta']);
 const FLUSH_DELAY_MS = 800;
 
 const isId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f-]{36}$/.test(v);

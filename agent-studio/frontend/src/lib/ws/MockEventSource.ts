@@ -4,6 +4,17 @@ import type { AgentEventSource, AgentSimEvent, CommandChoices, CommandInfo, RunM
 
 type Step = { delay: number; event: AgentSimEvent };
 
+/** 실시간 글: from~to 사이에 몇 글자씩 조각(text_delta)으로 보내고, to에 완성된 글(text)을 보낸다 */
+function streamText(from: number, to: number, text: string): Step[] {
+  const size = 4;
+  const count = Math.ceil(text.length / size);
+  const steps: Step[] = Array.from({ length: count }, (_, i) => ({
+    delay: Math.round(from + ((to - from) * i) / count),
+    event: { type: 'tx', event: { t: 'text_delta', agent: 'main', text: text.slice(i * size, (i + 1) * size) } },
+  }));
+  return [...steps, { delay: to, event: { type: 'tx', event: { t: 'text', agent: 'main', text } } }];
+}
+
 const PERMISSION_ID = 'mock-deploy-permission';
 const PLAN_PERMISSION_ID = 'mock-plan-approval';
 /** 승인 요청에 아무 응답이 없으면 데모가 멈추지 않도록 이 시간 뒤 자동 허용 */
@@ -278,7 +289,7 @@ function buildCodeScript(prompt: string, attachments: Attachment[], continued: b
   push(0, { type: 'session', model: 'claude-sonnet-5 (mock)' });
   push(0, { type: 'log', agent: 'system', text: `코드 명령 접수: ${prompt}${continued ? ' (이어서)' : ''}` });
   if (!continued) push(100, { type: 'conversation', mode: 'code', active: true });
-  push(300, { type: 'tx', event: { t: 'text', agent: 'main', text: '먼저 인증 라우트와 기존 검증 코드를 확인하겠습니다.' } });
+  steps.push(...streamText(100, 450, '먼저 인증 라우트와 기존 검증 코드를 확인하겠습니다.'));
   push(500, { type: 'log', agent: 'system', text: '파일 읽는 중: src/routes/auth.js' });
   push(500, { type: 'tx', event: { t: 'tool_start', id: 'mock-read', agent: 'main', tool: 'Read', label: '파일 읽기: src/routes/auth.js', detail: { kind: 'read', path: 'src/routes/auth.js' } } });
   push(800, { type: 'tx', event: { t: 'tool_done', id: 'mock-read', ok: true } });
@@ -345,22 +356,22 @@ function buildCodeTail(start: number): Step[] {
     type: 'tx',
     event: { t: 'plan', items: [{ text: '검증 미들웨어 만들기', status: 'completed' }, { text: '라우트에 연결', status: 'completed' }, { text: '테스트 실행', status: 'completed' }] },
   });
-  push(start + 3100, { type: 'tx', event: { t: 'text', agent: 'main', text: CODE_SUMMARY } });
+  steps.push(...streamText(start + 3100, start + 3950, CODE_SUMMARY));
   push(start + 1800, { type: 'log', agent: 'system', text: '실행: npm test' });
   push(start + 3000, { type: 'artifact', artifact: { kind: 'test', key: 'bash:npm test', title: 'npm test', lang: 'bash', text: TEST_OUTPUT } });
-  push(start + 3200, {
+  push(start + 4000, {
     type: 'run_done',
     result: {
       ok: true,
       result: CODE_SUMMARY,
       costUsd: 0.0213,
       turns: 9,
-      durationMs: start + 3200,
+      durationMs: start + 4000,
       suggestions: ['검증 실패 케이스 테스트를 추가해줘', '비밀번호 최소 길이 검사를 넣어줘', '에러 응답 형식을 문서로 정리해줘'],
     },
   });
-  push(start + 3200, { type: 'log', agent: 'system', text: '작업을 마쳤습니다. (9턴, $0.0213)' });
-  push(start + 3300, {
+  push(start + 4000, { type: 'log', agent: 'system', text: '작업을 마쳤습니다. (9턴, $0.0213)' });
+  push(start + 4100, {
     type: 'tx',
     event: {
       t: 'checkpoint',
@@ -386,7 +397,7 @@ function buildChatScript(prompt: string, attachments: Attachment[], continued: b
     { delay: 700, event: { type: 'log', agent: 'system', text: '파일 읽는 중: src/routes/auth.js' } },
     { delay: 700, event: { type: 'tx', event: { t: 'tool_start', id: 'mock-chat-read', agent: 'main', tool: 'Read', label: '파일 읽기', detail: { kind: 'read', path: 'src/routes/auth.js' } } } },
     { delay: 1000, event: { type: 'tx', event: { t: 'tool_done', id: 'mock-chat-read', ok: true } } },
-    { delay: 1500, event: { type: 'tx', event: { t: 'text', agent: 'main', text: CHAT_ANSWER } } },
+    ...streamText(1050, 1550, CHAT_ANSWER),
     {
       delay: 1600,
       event: {

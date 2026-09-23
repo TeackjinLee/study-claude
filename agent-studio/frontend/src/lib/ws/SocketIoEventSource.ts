@@ -65,6 +65,11 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
       const text = String(evt.text ?? '');
       return agent && text ? [{ type: 'tx', event: { t: 'text', agent, text } }] : [];
     }
+    case 'assistant_delta': {
+      const agent = txAgentOf(evt.agent);
+      const text = String(evt.text ?? '');
+      return agent && text ? [{ type: 'tx', event: { t: 'text_delta', agent, text } }] : [];
+    }
     case 'plan': {
       const items = Array.isArray(evt.items) ? (evt.items as { text: string; status: 'pending' | 'in_progress' | 'completed' }[]) : [];
       return [{ type: 'tx', event: { t: 'plan', items } }];

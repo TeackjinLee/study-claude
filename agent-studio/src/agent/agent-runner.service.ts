@@ -486,6 +486,11 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
           if (fresh) this.emit({ type: 'conversation', mode, active: true, id: conversation.id, title: conversation.title });
         }
         // 결과는 추가 지시까지 다 끝났을 때 한 번만 내보낸다 (RunCompletion이 판단)
+        // 쓰는 중인 글 조각은 화면에만 보낸다 (블록이 끝나면 전체 글이 따로 기록된다)
+        if (e.type === 'assistant_delta') {
+          this.broadcast({ ...e, at: Date.now() });
+          return;
+        }
         if (e.type === 'run_done') {
           heldDone = e;
           completion.result();
@@ -529,6 +534,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
           maxTurns: settings.maxTurns,
           maxBudgetUsd: settings.maxBudgetUsd,
           permissionMode: planFirst ? 'plan' : settings.permissionMode,
+          // 글을 토큰 단위로 받아 대화 화면에 실시간으로 보여준다
+          includePartialMessages: true,
           agents: profile.subagents ? this.registry.sdkAgents() : undefined,
           mcpServers: session ? { codex: session.mcpServer() } : undefined,
           disallowedTools: profile.disallowedTools,

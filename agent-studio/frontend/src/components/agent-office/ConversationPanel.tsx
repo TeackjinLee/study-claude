@@ -162,7 +162,14 @@ function TxRow({ item }: { item: TxItem }) {
           <Who agent={item.agent} />
           <div className="min-w-0 flex-1 pt-0.5">
             {item.agent !== 'main' && <p className="mb-0.5 text-[11px] font-semibold text-slate-400">{whoName(item.agent, names)}</p>}
-            <Markdown text={item.text} />
+            {item.text && <Markdown text={item.text} />}
+            {item.draft !== undefined && (
+              // 쓰는 중: 마지막 줄 끝에 깜빡이는 커서
+              <Markdown
+                text={item.draft || ' '}
+                className={`${item.text ? 'mt-2' : ''} [&>*:last-child]:after:ml-0.5 [&>*:last-child]:after:animate-pulse [&>*:last-child]:after:text-blue-300 [&>*:last-child]:after:content-['▍']`}
+              />
+            )}
           </div>
         </div>
       );

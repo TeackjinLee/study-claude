@@ -1,5 +1,5 @@
 import { isAbsolute, relative } from 'node:path';
-import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKMessage, SDKPartialAssistantMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentRef, ArtifactKind, CodexMode, PlanItem, ToolDetail, UiAgentId, UiEventBody } from './ui-events.js';
 import { TEST_COMMAND, artifactKindOf, clip, langOf, oneLine, splitNextSteps, str } from './artifact-utils.js';
 
@@ -54,6 +54,20 @@ function toolResultText(content: unknown): string {
   return '';
 }
 
+const NEXT_STEPS_TAG = '<next-steps>';
+
+/**
+ * 쓰는 중인 글에서 화면에 보낼 부분. <next-steps> 뒤는 버튼으로 쓰므로 보내지 않고,
+ * 끝이 태그의 앞부분일 수 있으면("<next-st") 다음 조각을 볼 때까지 미룬다.
+ */
+export function visibleDraft(text: string): string {
+  const tag = text.toLowerCase().indexOf(NEXT_STEPS_TAG);
+  if (tag >= 0) return text.slice(0, tag).trimEnd();
+  const lt = text.lastIndexOf('<');
+  if (lt >= 0 && NEXT_STEPS_TAG.startsWith(text.slice(lt).toLowerCase())) return text.slice(0, lt);
+  return text;
+}
+
 export class MessageMapper {
   /** 모든 tool_use id → 호출 정보 */
   private readonly calls = new Map<string, ToolCall>();
@@ -62,6 +76,11 @@ export class MessageMapper {
   /** TaskCreate/TaskUpdate 방식의 할 일 목록 */
   private readonly tasks = new Map<string, PlanItem>();
   private finished = false;
+  /** 실시간으로 받는 중인 글 블록 (메시지 id:블록 번호 → 지금까지의 글, 화면에 보낸 길이) */
+  private readonly drafts = new Map<string, { owner: AgentRef; text: string; sent: number }>();
+  /** 스트리밍으로 받은 메시지 id → 이미 내보낸 글. 완성된 assistant 메시지에서 같은 글을 다시 내보내지 않는다 */
+  private readonly streamed = new Map<string, string[]>();
+  private streamMessageId: string | null = null;
   /** result 메시지의 비용/토큰 요약 (/cost 기록용) */
   lastResult: {
     ok: boolean;
@@ -119,7 +138,10 @@ export class MessageMapper {
         if (msg.error && !msg.parent_tool_use_id) {
           this.emit({ type: 'api_error', reason: API_ERROR_TEXT[msg.error] ?? msg.error });
         }
-        this.onAssistant(msg.message.content as unknown[], msg.parent_tool_use_id);
+        this.onAssistant(msg.message.content as unknown[], msg.parent_tool_use_id, msg.message.id);
+        break;
+      case 'stream_event':
+        this.onStreamEvent(msg.event, msg.parent_tool_use_id);
         break;
       case 'user':
         this.onUser(msg.message.content, msg.tool_use_result);
@@ -167,19 +189,77 @@ export class MessageMapper {
     return (parentToolUseId && this.subagentCalls.get(parentToolUseId)) || this.defaultOwner;
   }
 
-  private onAssistant(blocks: unknown[], parentToolUseId: string | null) {
+  /**
+   * includePartialMessages의 스트리밍 이벤트. 글 블록은 조각(assistant_delta)으로 바로 보내고,
+   * 블록이 끝나면 전체 글(assistant_text)을 보낸다. 완성된 assistant 메시지가 먼저 오면 그쪽이 내보내고 여기서는 건너뛴다.
+   */
+  private onStreamEvent(event: SDKPartialAssistantMessage['event'], parentToolUseId: string | null) {
+    switch (event.type) {
+      case 'message_start':
+        this.streamMessageId = event.message.id;
+        break;
+      case 'content_block_start':
+        if (this.streamMessageId && event.content_block.type === 'text') {
+          this.drafts.set(`${this.streamMessageId}:${event.index}`, { owner: this.ownerFromParent(parentToolUseId), text: '', sent: 0 });
+        }
+        break;
+      case 'content_block_delta': {
+        const draft = this.drafts.get(`${this.streamMessageId}:${event.index}`);
+        if (!draft || event.delta.type !== 'text_delta') break;
+        draft.text += event.delta.text;
+        const visible = visibleDraft(draft.text);
+        if (visible.length > draft.sent) {
+          this.emit({ type: 'assistant_delta', agent: draft.owner, text: visible.slice(draft.sent) });
+          draft.sent = visible.length;
+        }
+        break;
+      }
+      case 'content_block_stop': {
+        const key = `${this.streamMessageId}:${event.index}`;
+        const draft = this.drafts.get(key);
+        if (!draft) break;
+        this.drafts.delete(key);
+        if (this.streamMessageId && this.claimText(this.streamMessageId, draft.text)) this.emitText(draft.owner, draft.text);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  /** 스트리밍 쪽과 완성 메시지 쪽 중 먼저 온 쪽만 글을 내보낸다. 처음이면 true */
+  private claimText(messageId: string, text: string): boolean {
+    const seen = this.streamed.get(messageId) ?? [];
+    const idx = seen.indexOf(text);
+    if (idx >= 0) {
+      seen.splice(idx, 1);
+      if (seen.length === 0) this.streamed.delete(messageId);
+      return false;
+    }
+    this.streamed.set(messageId, [...seen, text]);
+    return true;
+  }
+
+  private emitText(owner: AgentRef, raw: string) {
+    if (!raw.trim()) return;
+    // <next-steps>는 화면 버튼으로 쓰고 글에서는 뗀다
+    const text = splitNextSteps(raw).body;
+    if (!text) return;
+    this.emit({ type: 'assistant_text', agent: owner, text: clip(text, TEXT_MAX) });
+    if (owner === 'main') this.emit({ type: 'main_note', text: oneLine(text, 200) });
+    else this.emit({ type: 'agent_note', agent: owner, text: oneLine(text, 200) });
+  }
+
+  private onAssistant(blocks: unknown[], parentToolUseId: string | null, messageId?: string) {
     const owner = this.ownerFromParent(parentToolUseId);
+    // 스트리밍으로 받기 시작한 메시지면 글은 스트리밍 쪽과 나눠서 한 번만 내보낸다
+    const streaming = !!messageId && messageId === this.streamMessageId;
 
     for (const raw of blocks) {
       const block = raw as { type: string; text?: string; id?: string; name?: string; input?: unknown };
 
       if (block.type === 'text' && block.text?.trim()) {
-        // <next-steps>는 화면 버튼으로 쓰고 글에서는 뗀다
-        const text = splitNextSteps(block.text).body;
-        if (!text) continue;
-        this.emit({ type: 'assistant_text', agent: owner, text: clip(text, TEXT_MAX) });
-        if (owner === 'main') this.emit({ type: 'main_note', text: oneLine(text, 200) });
-        else this.emit({ type: 'agent_note', agent: owner, text: oneLine(text, 200) });
+        if (!streaming || this.claimText(messageId, block.text)) this.emitText(owner, block.text);
         continue;
       }
 

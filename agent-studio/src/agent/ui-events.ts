@@ -70,6 +70,8 @@ export type UiEventBody =
   | { type: 'action_done'; agent: AgentRef; actionId: string; ok: boolean; output?: string }
   /** 에이전트가 쓴 글 전체 (대화 화면용. main_note/agent_note는 로그용 한 줄 요약) */
   | { type: 'assistant_text'; agent: AgentRef; text: string }
+  /** 쓰는 중인 글의 새 조각 (실시간 표시용, 기록·저장하지 않는다). 블록이 끝나면 전체 글이 assistant_text로 온다 */
+  | { type: 'assistant_delta'; agent: AgentRef; text: string }
   /** image 종류는 text가 작업 폴더 기준 경로이고 url로 파일을 받아 볼 수 있다 */
   | { type: 'artifact'; kind: ArtifactKind; key: string; title: string; lang: string; text: string; url?: string }
   | { type: 'permission_request'; id: string; agent: AgentRef; tool: string; title: string; detail: string; canAlwaysAllow: boolean }

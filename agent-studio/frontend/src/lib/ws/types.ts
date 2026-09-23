@@ -51,6 +51,8 @@ export type TxAgent = AgentRole | 'main';
 /** 대화 화면(Claude Code처럼 글·도구 호출이 이어지는 화면)을 그리는 이벤트 */
 export type TxEvent =
   | { t: 'text'; agent: TxAgent; text: string }
+  /** 쓰는 중인 글의 새 조각. 블록이 끝나면 전체 글(text)이 와서 대체한다 */
+  | { t: 'text_delta'; agent: TxAgent; text: string }
   | { t: 'tool_start'; id: string; agent: TxAgent; tool: string; label: string; detail?: ToolDetail }
   | { t: 'tool_done'; id: string; ok: boolean; output?: string }
   | { t: 'agent_start'; id: string; agent: AgentRole; task: string }
