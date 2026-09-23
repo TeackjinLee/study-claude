@@ -29,7 +29,7 @@ import {
   RUN_MODES,
 } from '@/lib/ws';
 import type { Attachment } from '@/lib/uploads';
-import { applyTx, txNotice, txResult, txUser, type TxItem } from './transcript';
+import { applyTx, txNotice, txPermission, txPermissionDone, txResult, txUser, type TxItem } from './transcript';
 
 const MAX_LOGS = 300;
 /** completed/error 상태를 잠깐 보여준 뒤 휴게실로 돌려보내기까지의 시간(ms) */
@@ -337,12 +337,10 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
       // 서버 응답(permission_resolved)이 오기 전에도 화면에서 바로 지운다. 범위 허용이면 같은 범위의 다른 배너도 함께 지운다
       set((s) => {
         const target = s.permissions.find((p) => p.id === id);
+        const closes = (p: PermissionRequest) => p.id === id || (allowed && !!always && (always === 'all' || p.tool === target?.tool));
         return {
-          permissions: s.permissions.filter((p) => {
-            if (p.id === id) return false;
-            if (!allowed || !always) return true;
-            return always === 'all' ? false : p.tool !== target?.tool;
-          }),
+          permissions: s.permissions.filter((p) => !closes(p)),
+          transcript: txPermissionDone(s.transcript, s.permissions.filter(closes).map((p) => p.id), allowed),
         };
       });
     },
@@ -565,11 +563,11 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
         }
 
         case 'permission_request':
-          set((s) => ({ permissions: [...s.permissions.filter((p) => p.id !== evt.request.id), evt.request] }));
+          set((s) => ({ permissions: [...s.permissions.filter((p) => p.id !== evt.request.id), evt.request], transcript: txPermission(s.transcript, evt.request) }));
           return;
 
         case 'permission_resolved':
-          set((s) => ({ permissions: s.permissions.filter((p) => p.id !== evt.id) }));
+          set((s) => ({ permissions: s.permissions.filter((p) => p.id !== evt.id), transcript: txPermissionDone(s.transcript, [evt.id], evt.allowed) }));
           return;
 
         case 'run_done':

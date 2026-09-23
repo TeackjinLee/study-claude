@@ -17,10 +17,12 @@ import { ConversationStoreService } from './conversation-store.service.js';
 import { ConversationsController } from './conversations.controller.js';
 import { GitController } from './git.controller.js';
 
+import { FileSuggestionsController } from './file-suggestions.controller.js';
+import { FileIndexService } from './file-index.service.js';
 @Module({
   // AuthModule: Codex 협업 브리지가 Codex 로그인 상태를 확인한다
   imports: [AuthModule],
-  controllers: [AgentsController, UploadsController, UploadFilesController, WorkspaceFilesController, CommandsController, GitController, ConversationsController],
-  providers: [SettingsService, CostTrackerService, SlashCommandsService, AgentRegistryService, AgentRunnerService, AgentGateway, UploadCleanupService, CodexBridgeService, GitService, ConversationStoreService, CheckpointService],
+  controllers: [AgentsController, UploadsController, UploadFilesController, WorkspaceFilesController, CommandsController, GitController, ConversationsController, FileSuggestionsController],
+  providers: [SettingsService, CostTrackerService, SlashCommandsService, AgentRegistryService, AgentRunnerService, AgentGateway, UploadCleanupService, CodexBridgeService, GitService, ConversationStoreService, CheckpointService, FileIndexService],
 })
 export class AgentModule {}

@@ -10,6 +10,7 @@ import { useSpeechInput } from '@/lib/useSpeechInput';
 import type { RunMode } from '@/lib/ws';
 import { AttachmentChips } from './AttachmentChips';
 import { SlashCommandMenu } from './SlashCommandMenu';
+import { FileMentionMenu } from './FileMentionMenu';
 
 const QUICK_COMMANDS = ['택시 차종 추가해줘', '트럭 제동 거리 튜닝해줘', '헤드리스 검증 4종 돌려줘', '도시에 신호등 교차로 추가해줘'];
 
@@ -63,6 +64,21 @@ export function CommandBar() {
   const menuKeyHandler = useRef<((e: React.KeyboardEvent) => boolean) | null>(null);
   const registerKeyHandler = useCallback((h: ((e: React.KeyboardEvent) => boolean) | null) => {
     menuKeyHandler.current = h;
+  }, []);
+  /** @파일 메뉴가 열려 있을 때의 키 핸들러 (슬래시 메뉴보다 먼저) */
+  const fileKeyHandler = useRef<((e: React.KeyboardEvent) => boolean) | null>(null);
+  const registerFileKeyHandler = useCallback((h: ((e: React.KeyboardEvent) => boolean) | null) => {
+    fileKeyHandler.current = h;
+  }, []);
+  /** 입력창 커서 위치 (@파일 자동완성이 커서 앞의 @검색어를 본다) */
+  const [caret, setCaret] = useState(0);
+  const pickFile = useCallback((next: string, pos: number) => {
+    setValue(next);
+    setCaret(pos);
+    requestAnimationFrame(() => {
+      textarea.current?.focus();
+      textarea.current?.setSelectionRange(pos, pos);
+    });
   }, []);
   const pickCommand = useCallback((completed: string) => {
     setValue(completed);
@@ -334,6 +350,7 @@ export function CommandBar() {
         </div>
         <div className="relative flex min-h-[56px] flex-1 flex-col">
           <SlashCommandMenu value={value} onPick={pickCommand} onSubmit={(text) => void submit(text)} registerKeyHandler={registerKeyHandler} />
+          <FileMentionMenu value={value} caret={caret} onPick={pickFile} registerKeyHandler={registerFileKeyHandler} />
           {talking && talkDef ? (
             <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center" aria-hidden>
               <AgentAvatar role={talkDef.id} size={26} />
@@ -351,9 +368,13 @@ export function CommandBar() {
           <textarea
             ref={textarea}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setCaret(e.target.selectionStart);
+            }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
             onKeyDown={(e) => {
-              if (menuKeyHandler.current?.(e)) {
+              if (fileKeyHandler.current?.(e) || menuKeyHandler.current?.(e)) {
                 e.preventDefault();
                 return;
               }

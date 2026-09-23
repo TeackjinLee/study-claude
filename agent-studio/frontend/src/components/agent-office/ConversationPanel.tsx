@@ -9,6 +9,7 @@ import { ChatIcon, ChevronDownIcon, ClaudeMarkIcon, UserIcon } from '@/component
 import { AgentAvatar } from './AgentAvatar';
 import { Markdown } from './Markdown';
 import { ConversationHistoryMenu } from './ConversationHistoryMenu';
+import { PermissionCard } from './PermissionBanner';
 
 const MODE_LABEL = { code: '코드', chat: '채팅', cowork: 'Cowork' } as const;
 
@@ -34,10 +35,15 @@ export function ConversationPanel() {
   /** 사용자가 위로 스크롤해 읽는 중이면 새 항목이 와도 끌어내리지 않는다 */
   const stick = useRef(true);
 
+  // 새 승인 요청은 위로 올려 읽는 중이어도 보이게 끌어내린다 (답해야 실행이 이어진다)
+  const pendingCount = useAgentStore((s) => s.permissions.length);
+  const lastPending = useRef(0);
   useLayoutEffect(() => {
     const el = scroller.current;
+    if (pendingCount > lastPending.current) stick.current = true;
+    lastPending.current = pendingCount;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [items, running]);
+  }, [items, running, pendingCount]);
 
   const totals = useMemo(() => {
     let cost = 0;
@@ -52,7 +58,7 @@ export function ConversationPanel() {
   }, [items]);
 
   const last = items[items.length - 1];
-  const waiting = running && !(last?.kind === 'tool' && last.status === 'running') && !(last?.kind === 'agent' && last.status === 'running');
+  const waiting = running && pendingCount === 0 && !(last?.kind === 'tool' && last.status === 'running') && !(last?.kind === 'agent' && last.status === 'running');
 
   return (
     <section className="panel flex h-full min-h-0 flex-col overflow-hidden">
@@ -215,6 +221,9 @@ function TxRow({ item }: { item: TxItem }) {
     case 'checkpoint':
       return <CheckpointRow item={item} />;
 
+    case 'permission':
+      return <PermissionRow item={item} />;
+
     case 'compact':
       return (
         <div className="flex items-center gap-2 py-1 text-[11px] text-slate-500" title="이 위의 대화는 Claude가 요약본으로만 기억합니다">
@@ -227,6 +236,30 @@ function TxRow({ item }: { item: TxItem }) {
         </div>
       );
   }
+}
+
+const PERMISSION_DONE = {
+  allowed: { mark: '✓', text: '허용함', cls: 'text-emerald-300' },
+  denied: { mark: '✕', text: '거부함', cls: 'text-red-300' },
+  expired: { mark: '–', text: '답하지 않고 끝남', cls: 'text-slate-500' },
+} as const;
+
+/** 승인 요청: 기다리는 중이면 대화 안에서 바로 답하는 카드, 답했으면 한 줄 기록 */
+function PermissionRow({ item }: { item: Extract<TxItem, { kind: 'permission' }> }) {
+  const request = useAgentStore((s) => (item.status === 'pending' ? s.permissions.find((p) => p.id === item.id) : undefined));
+  if (request) return <PermissionCard request={request} />;
+  const done = PERMISSION_DONE[item.status === 'pending' ? 'expired' : item.status];
+  const plan = item.tool === 'ExitPlanMode';
+  return (
+    <p className="ml-8 flex min-w-0 items-center gap-1.5 text-[11px] text-slate-500">
+      <span className={`shrink-0 font-semibold ${done.cls}`}>
+        {done.mark} {plan ? (item.status === 'allowed' ? '계획 승인' : item.status === 'denied' ? '계획 거절' : '계획 승인 안 함') : done.text}
+      </span>
+      <span className="min-w-0 truncate" title={item.title}>
+        · {item.title}
+      </span>
+    </p>
+  );
 }
 
 function formatTokens(n: number) {

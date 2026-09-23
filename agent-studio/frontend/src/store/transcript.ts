@@ -1,5 +1,5 @@
 import type { AgentRole } from '@/types/agent';
-import type { CheckpointFile, RunMode, RunResult, ToolDetail, TxAgent, TxEvent } from '@/lib/ws';
+import type { CheckpointFile, PermissionRequest, RunMode, RunResult, ToolDetail, TxAgent, TxEvent } from '@/lib/ws';
 
 /**
  * 대화 화면(Claude Code처럼 명령 → 글 → 도구 호출 → 결과가 이어지는 화면)의 항목.
@@ -17,7 +17,9 @@ export type TxItem =
   /** 실행이 바꾼 파일과 되돌리기 상태 (restored가 files 전부면 되돌림 완료) */
   | { kind: 'checkpoint'; id: string; files: CheckpointFile[]; restored: string[]; skipped: { path: string; reason: string }[]; complete: boolean }
   /** 대화 압축 경계. 이 위의 내용은 Claude가 요약본으로만 기억한다 */
-  | { kind: 'compact'; id: string; trigger: 'manual' | 'auto'; preTokens: number; postTokens?: number };
+  | { kind: 'compact'; id: string; trigger: 'manual' | 'auto'; preTokens: number; postTokens?: number }
+  /** 승인 요청. 기다리는 동안은 대화 흐름 안에 승인 카드로, 답한 뒤에는 한 줄 기록으로 남는다 */
+  | { kind: 'permission'; id: string; agent: PermissionRequest['agent']; tool: string; title: string; status: 'pending' | 'allowed' | 'denied' | 'expired' };
 
 const MAX_ITEMS = 1500;
 let seq = 0;
@@ -44,14 +46,28 @@ export function txNotice(items: TxItem[], tone: 'error' | 'warn', text: string):
   return cap([...settleRunning(items, false), { kind: 'notice', id: nextId('n'), tone, text }]);
 }
 
-/** 실행이 끝났는데 결과를 못 받은 도구·에이전트 호출은 멈춘 것으로, 쓰다 만 글은 받은 데까지 글로 남긴다 */
+/** 승인 요청을 대화에 넣는다 (같은 요청이 다시 오면 그대로) */
+export function txPermission(items: TxItem[], req: PermissionRequest): TxItem[] {
+  if (items.some((i) => i.kind === 'permission' && i.id === req.id)) return items;
+  return cap([...items, { kind: 'permission', id: req.id, agent: req.agent, tool: req.tool, title: req.title, status: 'pending' }]);
+}
+
+/** 승인 요청에 답했음. 이미 답한 요청은 그대로 둔다 (화면에서 먼저 답하고 서버 응답이 뒤따라온다) */
+export function txPermissionDone(items: TxItem[], ids: string[], allowed: boolean): TxItem[] {
+  if (!items.some((i) => i.kind === 'permission' && i.status === 'pending' && ids.includes(i.id))) return items;
+  return items.map((i) => (i.kind === 'permission' && i.status === 'pending' && ids.includes(i.id) ? { ...i, status: allowed ? 'allowed' : 'denied' } : i));
+}
+
+/** 실행이 끝났는데 결과를 못 받은 도구·에이전트 호출은 멈춘 것으로, 쓰다 만 글은 받은 데까지 글로, 답하지 않은 승인 요청은 끝난 것으로 남긴다 */
 function settleRunning(items: TxItem[], ok: boolean): TxItem[] {
-  const unsettled = (i: TxItem) => ((i.kind === 'tool' || i.kind === 'agent') && i.status === 'running') || (i.kind === 'text' && i.draft !== undefined);
+  const unsettled = (i: TxItem) =>
+    ((i.kind === 'tool' || i.kind === 'agent') && i.status === 'running') || (i.kind === 'text' && i.draft !== undefined) || (i.kind === 'permission' && i.status === 'pending');
   if (!items.some(unsettled)) return items;
   return items
     .map((i): TxItem => {
       if (!unsettled(i)) return i;
       if (i.kind === 'text') return { ...i, text: joinText(i.text, i.draft?.trim() ?? ''), draft: undefined };
+      if (i.kind === 'permission') return { ...i, status: 'expired' };
       return { ...i, status: ok ? 'ok' : 'error' } as TxItem;
     })
     .filter((i) => i.kind !== 'text' || i.text !== '');
