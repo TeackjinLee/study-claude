@@ -15,7 +15,7 @@ export const MAX_FILE_BYTES = 1024 * 1024 * 1024; // 1GB
 export const ACCEPT =
   '.png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.md,.mdx,.csv,.tsv,.json,.yaml,.yml,.xml,.toml,.html,.css,.scss,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.kt,.go,.rs,.rb,.php,.c,.h,.cpp,.hpp,.cs,.swift,.sql,.sh,.log,.svg';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
+import { BACKEND_URL, apiFetch } from '@/lib/backend';
 const isLive = (process.env.NEXT_PUBLIC_WS_MODE ?? 'mock') === 'live';
 
 export const isImageFile = (f: File) => /^image\/(png|jpeg|gif|webp)$/.test(f.type);
@@ -46,7 +46,7 @@ export async function uploadFiles(files: File[]): Promise<Attachment[]> {
 
   const form = new FormData();
   for (const f of files) form.append('files', f, f.name);
-  const res = await fetch(`${BACKEND_URL}/api/uploads`, { method: 'POST', body: form });
+  const res = await apiFetch('/api/uploads', { method: 'POST', body: form });
   const body = (await res.json().catch(() => ({}))) as { files?: Attachment[]; message?: string | string[] };
   if (!res.ok) {
     const msg = Array.isArray(body.message) ? body.message.join(', ') : body.message;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { atQuery } from '../src/lib/fileSuggestions.ts';
+import { atQuery } from '../src/lib/atQuery.ts';
 import { slashQuery } from '../src/lib/slashQuery.ts';
 
 test('atQuery: 커서 바로 앞의 @검색어', () => {

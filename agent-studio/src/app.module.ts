@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { AgentModule } from './agent/agent.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { AccessController } from './access/access.controller.js';
 
 @Module({
   imports: [
@@ -14,5 +15,6 @@ import { AuthModule } from './auth/auth.module.js';
     AgentModule,
     AuthModule,
   ],
+  controllers: [AccessController],
 })
 export class AppModule {}

@@ -9,7 +9,8 @@ import { withUrls, type Attachment } from '@/lib/uploads';
  */
 type BackendUiEvent = { type: string; at: number; [key: string]: unknown };
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
+import { BACKEND_URL, apiFetch } from '@/lib/backend';
+import { UNAUTHORIZED_EVENT } from '@/components/layout/AccessGate';
 
 /** 백엔드가 에이전트 id를 문자열로 보낸다. 등록 여부는 스토어가 판단한다. */
 const isAgentRole = (v: unknown): v is AgentRole => typeof v === 'string' && v.length > 0 && v !== 'main';
@@ -290,11 +291,15 @@ export class SocketIoEventSource implements AgentEventSource {
     this.onEvent = onEvent;
     onEvent({ type: 'connection', status: 'connecting' });
 
-    const socket = io(BACKEND_URL, { transports: ['websocket'] });
+    const socket = io(BACKEND_URL, { transports: ['websocket'], withCredentials: true });
     this.socket = socket;
 
     socket.on('connect', () => onEvent({ type: 'connection', status: 'connected' }));
     socket.on('disconnect', () => onEvent({ type: 'connection', status: 'disconnected' }));
+    // 원격 접속에서 로그인이 풀렸으면(비밀번호 변경, 만료) 로그인 창을 띄운다
+    socket.on('connect_error', (err) => {
+      if (err.message === 'unauthorized') window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    });
 
     socket.on('hello', (snapshot: HelloSnapshot) => {
       // 다시 접속했을 때(서버 재시작 등) 같은 기록이 두 번 쌓이지 않게 비우고 다시 그린다
@@ -379,7 +384,7 @@ export class SocketIoEventSource implements AgentEventSource {
   }
 
   async listCommands(): Promise<CommandInfo[]> {
-    const res = await fetch(`${BACKEND_URL}/api/commands`);
+    const res = await apiFetch('/api/commands');
     if (!res.ok) return [];
     const body = (await res.json()) as { commands?: CommandInfo[] };
     return body.commands ?? [];

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { atQuery, fetchFileSuggestions, type FileSuggestion } from '@/lib/fileSuggestions';
+import { fetchFileSuggestions, type FileSuggestion } from '@/lib/fileSuggestions';
+import { atQuery } from '@/lib/atQuery';
 import { FileIcon, FolderIcon } from '@/components/ui/icons';
 
 interface Props {

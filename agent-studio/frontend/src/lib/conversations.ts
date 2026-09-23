@@ -1,7 +1,7 @@
 /** 백엔드 ConversationsController(/api/conversations) 호출 — 지난 대화 목록 */
 import type { RunMode } from '@/lib/ws';
+import { apiFetch } from '@/lib/backend';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
 
 export interface ConversationMeta {
   id: string;
@@ -18,7 +18,7 @@ export interface ConversationMeta {
 type Result = { ok: boolean; error?: string };
 
 async function call<T>(path: string, method = 'GET'): Promise<T> {
-  const res = await fetch(`${BACKEND_URL}/api/conversations${path}`, { method });
+  const res = await apiFetch(`/api/conversations${path}`, { method });
   if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
   return res.json() as Promise<T>;
 }

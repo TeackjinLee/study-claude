@@ -1,6 +1,6 @@
 export function AppFooter() {
   return (
-    <footer className="flex h-9 shrink-0 items-center gap-3 border-t border-line bg-[#0a1428]/90 px-4 text-[11px] text-muted md:px-5">
+    <footer className="hidden h-9 shrink-0 md:flex items-center gap-3 border-t border-line bg-[#0a1428]/90 px-4 text-[11px] text-muted md:px-5">
       <span className="font-semibold text-slate-300">AI Agent Office Simulator</span>
       <span className="text-line-strong">|</span>
       <span>Powered by Next.js + Phaser.js</span>

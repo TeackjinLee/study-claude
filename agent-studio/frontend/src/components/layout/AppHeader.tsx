@@ -66,19 +66,26 @@ export function AppHeader() {
   }, [refreshAuth, refreshCodexAuth]);
 
   return (
-    <header className="relative z-30 flex h-[60px] shrink-0 items-center gap-4 border-b border-line bg-[#0a1428]/90 px-4 backdrop-blur md:px-5">
-      <div className="flex items-center gap-3">
-        <LogoMark className="h-9 w-9 drop-shadow-[0_0_10px_rgba(255,107,107,0.35)]" />
-        <div className="leading-tight">
-          <h1 className="text-[18px] font-extrabold tracking-tight text-white md:text-[20px]">AI Agent Office Simulator</h1>
+    <header className="relative z-30 flex h-[60px] shrink-0 items-center gap-2 border-b border-line bg-[#0a1428]/90 px-3 backdrop-blur sm:gap-4 sm:px-4 md:px-5">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+        <LogoMark className="h-8 w-8 shrink-0 drop-shadow-[0_0_10px_rgba(255,107,107,0.35)] sm:h-9 sm:w-9" />
+        <div className="min-w-0 leading-tight md:shrink-0">
+          {/* 휴대폰: 짧은 이름 한 줄 */}
+          <h1 className="truncate text-[16px] font-extrabold tracking-tight text-white sm:text-[18px] md:text-[20px]">
+            <span className="md:hidden">Agent Office</span>
+            <span className="hidden whitespace-nowrap md:inline">AI Agent Office Simulator</span>
+          </h1>
         </div>
-        <p className="hidden text-[13px] text-muted lg:block">AI 에이전트들이 함께 만드는 더 나은 코드 세상</p>
+        <p className="hidden min-w-0 truncate text-[13px] text-muted 2xl:block">AI 에이전트들이 함께 만드는 더 나은 코드 세상</p>
       </div>
 
-      <div className="ml-auto flex items-center gap-2 md:gap-3">
-        <WorkspaceChip />
+      <div className="ml-auto flex shrink-0 items-center gap-2 md:gap-3">
+        {/* 화면 폭에 따라 덜 중요한 칩부터 숨긴다 (휴대폰은 보기·승인 위주). 작업 폴더와 모델은 명령 입력 아래에도 있다 */}
+        <div className="hidden lg:contents">
+          <WorkspaceChip />
+        </div>
         <span
-          className="hidden items-center gap-1.5 rounded-full border border-line bg-panel px-3 py-1 text-[12px] text-slate-300 md:inline-flex"
+          className="hidden items-center gap-1.5 rounded-full border border-line bg-panel px-3 py-1 text-[12px] text-slate-300 2xl:inline-flex"
           title={`Claude 모델: ${model ?? '기본'}${effort ? ` (${effort})` : ''} — /model 로 변경\nCodex 모델: ${codexModel ?? codexAuth?.defaultModel ?? '기본'} — /codex-model 로 변경`}
         >
           <span className="text-muted">Claude</span>
@@ -92,19 +99,24 @@ export function AppHeader() {
             </>
           )}
         </span>
-        <UsageChip />
+        <div className="hidden xl:contents">
+          <UsageChip />
+        </div>
         <span
-          className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-semibold"
+          title={running ? '작업 실행 중' : sys.text}
+          className="inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-2 py-1 text-[12px] font-semibold sm:px-3"
           style={{ color: sys.color, borderColor: `${sys.color}55`, backgroundColor: `${sys.color}14` }}
         >
           <span className={`h-2 w-2 rounded-full ${connection === 'connected' ? 'pulse-dot' : ''}`} style={{ backgroundColor: sys.color }} />
-          {running ? '작업 실행 중' : sys.text}
+          <span className={running ? '' : 'hidden sm:inline'}>{running ? '작업 실행 중' : sys.text}</span>
         </span>
 
-        <AuthMenu auth={auth} running={running} onLogin={() => setLoginOpen(true)} onChanged={setAuth} />
-        <AuthMenu provider="codex" auth={codexAuth} running={running} onLogin={() => setCodexLoginOpen(true)} onChanged={setCodexAuth} />
+        <div className="hidden md:contents">
+          <AuthMenu auth={auth} running={running} onLogin={() => setLoginOpen(true)} onChanged={setAuth} />
+          <AuthMenu provider="codex" auth={codexAuth} running={running} onLogin={() => setCodexLoginOpen(true)} onChanged={setCodexAuth} />
+        </div>
 
-        <span className="hidden items-center gap-1.5 text-[13px] font-medium tabular-nums text-slate-200 sm:inline-flex">
+        <span className="hidden items-center gap-1.5 text-[13px] font-medium tabular-nums text-slate-200 2xl:inline-flex">
           <ClockIcon className="h-4 w-4 text-muted" />
           {clock ?? '--:--:--'}
         </span>
@@ -119,7 +131,7 @@ export function AppHeader() {
         </button>
 
         <div className="hidden items-center gap-2 sm:flex">
-          <div className="text-right leading-tight">
+          <div className="hidden text-right leading-tight 2xl:block">
             <p className="text-[13px] font-semibold text-white">관리자</p>
             <p className="text-[11px] text-muted">개발자</p>
           </div>

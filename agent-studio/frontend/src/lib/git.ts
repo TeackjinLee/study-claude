@@ -1,5 +1,5 @@
 /** 백엔드 GitController(/api/git) 호출 — 결과 미리보기의 "변경사항" 탭이 쓴다 */
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
+import { apiFetch } from '@/lib/backend';
 
 export type ChangeStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflicted';
 
@@ -27,7 +27,7 @@ export type ChangesResult =
 export type GitResult = { ok: boolean; error?: string };
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BACKEND_URL}/api/git/${path}`, {
+  const res = await apiFetch(`/api/git/${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),

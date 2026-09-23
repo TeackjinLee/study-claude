@@ -11,8 +11,7 @@ import {
 import type { Server, Socket } from 'socket.io';
 import { AgentRunnerService } from './agent-runner.service.js';
 import { AgentRegistryService } from './agent-registry.service.js';
-
-const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+import { access } from '../access/access.service.js';
 
 /**
  * 화면 → 서버
@@ -29,8 +28,8 @@ const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
  */
 @WebSocketGateway({
   cors: {
-    origin: (origin: string | undefined, cb: (err: Error | null, ok?: boolean) => void) =>
-      cb(null, !origin || LOCAL_ORIGIN.test(origin)),
+    origin: (origin: string | undefined, cb: (err: Error | null, ok?: boolean) => void) => cb(null, access.originAllowed(origin)),
+    credentials: true,
   },
 })
 export class AgentGateway implements OnGatewayInit, OnGatewayConnection {
@@ -44,7 +43,14 @@ export class AgentGateway implements OnGatewayInit, OnGatewayConnection {
     private readonly registry: AgentRegistryService,
   ) {}
 
-  afterInit() {
+  afterInit(server: Server) {
+    // 웹소켓은 CORS 검사를 받지 않으므로 Origin을 직접 본다 (이 컴퓨터에서 연 다른 웹사이트가 localhost로 붙지 못하게).
+    // 원격 접속: 이 컴퓨터가 아니면 로그인 쿠키가 있어야 연결된다 (화면은 connect_error 'unauthorized'로 로그인 창을 띄운다)
+    server.use((socket, next) => {
+      const { address, headers } = socket.handshake;
+      if (!access.originAllowed(headers.origin)) return next(new Error('forbidden origin'));
+      return access.allows(address, headers.cookie) ? next() : next(new Error('unauthorized'));
+    });
     this.runner.subscribe((event) => this.server.emit('agent-event', event));
     this.registry.subscribe((agents) => this.server.emit('agents-changed', { agents }));
   }

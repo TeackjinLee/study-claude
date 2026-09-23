@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAgentStore } from '@/store/agentStore';
 import { ActivityIcon, ChevronDownIcon } from '@/components/ui/icons';
+import { apiFetch } from '@/lib/backend';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
 const REFRESH_MS = 5 * 60_000;
 
 type Totals = { runs: number; costUsd: number; turns: number; durationMs: number };
@@ -69,7 +69,7 @@ export function UsageChip() {
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/usage${refresh ? '?refresh=1' : ''}`);
+      const res = await apiFetch(`/api/usage${refresh ? '?refresh=1' : ''}`);
       if (res.ok) setUsage((await res.json()) as Usage);
     } catch {
       // 서버가 잠깐 없으면 이전 값을 그대로 둔다

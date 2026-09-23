@@ -1,4 +1,5 @@
 import { DEFAULT_AGENTS, type AgentDef } from '@/types/agent';
+import { BACKEND_URL } from '@/lib/backend';
 
 /** 에이전트 목록의 저장소. Mock 모드는 브라우저 localStorage, Live 모드는 NestJS REST API. */
 export interface AgentRepository {
@@ -68,6 +69,7 @@ export class HttpAgentRepository implements AgentRepository {
 
   private async call(path: string, init?: RequestInit): Promise<AgentDef[]> {
     const res = await fetch(`${this.baseUrl}/api/agents${path}`, {
+      credentials: 'include',
       ...init,
       headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     });
@@ -102,6 +104,6 @@ export class HttpAgentRepository implements AgentRepository {
 
 export function createAgentRepository(): AgentRepository {
   const mode = process.env.NEXT_PUBLIC_WS_MODE ?? 'mock';
-  if (mode === 'live') return new HttpAgentRepository(process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000');
+  if (mode === 'live') return new HttpAgentRepository(BACKEND_URL);
   return new LocalStorageAgentRepository();
 }

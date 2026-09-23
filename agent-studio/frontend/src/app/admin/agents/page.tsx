@@ -48,10 +48,11 @@ export default function AgentManagementPage() {
           <StatusSummaryPanel />
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-col gap-3 xl:h-full">
+        {/* 휴대폰·태블릿: 대화·입력이 첫 화면에 오도록 가운데 열을 맨 위로, 화면 높이에 맞춘다 (나머지 패널은 아래로 스크롤) */}
+        <div className="order-first flex h-[calc(100dvh-60px-1.5rem)] min-h-[520px] min-w-0 flex-col gap-3 md:order-none md:h-auto md:min-h-0 xl:h-full">
           <CenterViewTabs />
           {/* Phaser 게임을 매번 다시 만들지 않도록 맵은 숨기기만 하고 결과 화면을 위에 얹는다 */}
-          <div className="relative h-[420px] min-w-0 shrink-0 xl:h-auto xl:min-h-0 xl:flex-1">
+          <div className="relative min-h-0 min-w-0 flex-1 md:h-[420px] md:flex-none xl:h-auto xl:min-h-0 xl:flex-1">
             <div className={`h-full w-full ${centerView === 'office' ? '' : 'invisible absolute inset-0'}`}>
               <OfficeStage />
             </div>
@@ -62,7 +63,9 @@ export default function AgentManagementPage() {
           </div>
           <div className="grid shrink-0 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:h-[296px]">
             <CommandBar />
-            <SelectedAgentPanel />
+            <div className="hidden min-h-0 md:grid">
+              <SelectedAgentPanel />
+            </div>
           </div>
         </div>
 

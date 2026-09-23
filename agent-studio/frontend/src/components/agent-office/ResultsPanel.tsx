@@ -8,8 +8,8 @@ import { formatTime } from '@/lib/format';
 import { AttachmentChips } from './AttachmentChips';
 import { LogFilterSelect, LogList, type LogFilter } from './LogList';
 import { ChangesPanel } from './ChangesPanel';
+import { BACKEND_URL } from '@/lib/backend';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
 
 /** 결과물 탭 + 작업 폴더의 git 변경사항 + 사이드 패널의 실시간 로그를 넓게 보는 탭 */
 type PanelTab = ResultTab | 'changes' | 'log';

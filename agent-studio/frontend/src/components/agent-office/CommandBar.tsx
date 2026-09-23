@@ -542,7 +542,10 @@ export function CommandBar() {
           </button>
         </div>
 
-        <CommandControls />
+        {/* 모델·노력·권한 설정은 넓은 화면에서만 (휴대폰은 입력창에 자리를 준다) */}
+        <div className="hidden sm:block">
+          <CommandControls />
+        </div>
 
         <div>
           <div className="mb-1.5 flex items-center gap-2">

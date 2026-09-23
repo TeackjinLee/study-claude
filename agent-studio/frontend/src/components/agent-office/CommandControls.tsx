@@ -5,8 +5,8 @@ import { createPortal } from 'react-dom';
 import { useAgentStore } from '@/store/agentStore';
 import { ChevronDownIcon, CodexMarkIcon, CpuIcon, GaugeIcon, ShieldIcon } from '@/components/ui/icons';
 import { WorkspaceChip } from '@/components/layout/WorkspaceChip';
+import { apiFetch } from '@/lib/backend';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
 
 interface Option {
   value: string;
@@ -139,7 +139,7 @@ type CommandsPayload = { models?: ModelInfo[]; commands?: { name: string; scope?
 let payloadCache: Promise<CommandsPayload> | null = null;
 function loadPayload(): Promise<CommandsPayload> {
   if (!payloadCache) {
-    payloadCache = fetch(`${BACKEND_URL}/api/commands`)
+    payloadCache = apiFetch('/api/commands')
       .then(async (res) => (await res.json()) as CommandsPayload)
       .catch(() => ({}));
   }

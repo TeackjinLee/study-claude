@@ -37,6 +37,11 @@ export const config = {
   /** 자동 정리 검사 주기 */
   uploadCleanupIntervalMs: 60 * 60 * 1000,
   permissionMode,
+  /**
+   * 휴대폰 등 같은 네트워크의 다른 기기에서 접속할 때 쓰는 비밀번호. 설정하면(8자 이상) 서버를 네트워크에 열고,
+   * 이 컴퓨터가 아닌 곳에서 오는 요청은 로그인해야 쓸 수 있다. 비우면 지금처럼 이 컴퓨터에서만 접속된다.
+   */
+  accessPassword: process.env.ACCESS_PASSWORD?.trim() || undefined,
   model: process.env.MODEL?.trim() || undefined,
   maxTurns: toInt(process.env.MAX_TURNS, 60),
   maxBudgetUsd: toFloat(process.env.MAX_BUDGET_USD, 2),
