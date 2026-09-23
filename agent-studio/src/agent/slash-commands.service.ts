@@ -11,6 +11,7 @@ import {
   type SlashCommand,
 } from '@anthropic-ai/claude-agent-sdk';
 import { buildOrchestratorPrompt, type AgentConfig } from './agents.config.js';
+import type { Attachment } from './attachments.js';
 import { config } from '../config.js';
 import { AgentRegistryService } from './agent-registry.service.js';
 import { EFFORT_LEVELS, PERMISSION_MODES, SettingsService, type EffortLevel, type RunSettings } from './settings.service.js';
@@ -65,7 +66,9 @@ export interface SlashContext {
   /** /codex 처럼 처리 중에 대시보드 이벤트를 흘려보내야 하는 명령용 */
   emit: (event: UiEventBody) => void;
   /** /talk — Claude 서브에이전트에게 직접 말하기 (AgentRunnerService.talk) */
-  talk: (agent: AgentConfig, message: string) => Promise<{ ok: boolean; text: string }>;
+  talk: (agent: AgentConfig, message: string, attachments: Attachment[]) => Promise<{ ok: boolean; text: string }>;
+  /** 명령과 함께 첨부된 파일 (검증 완료, 작업 폴더 기준 경로). /codex, /talk 가 같이 보낸다 */
+  attachments: Attachment[];
 }
 
 const CODEX_MODES: CodexMode[] = ['discuss', 'review', 'implement', 'image'];
@@ -415,14 +418,14 @@ export class SlashCommandsService {
           tokens.shift();
         }
         const message = tokens.join(' ').trim();
-        if (!message) return { ok: false, text: 'Codex에게 보낼 메시지를 적어주세요.' };
+        if (!message && ctx.attachments.length === 0) return { ok: false, text: 'Codex에게 보낼 메시지를 적어주세요.' };
 
         const auth = await this.codexAuth.status();
         if (!auth.available) return { ok: false, text: auth.message ?? 'Codex CLI를 찾을 수 없습니다.' };
         if (!auth.hasAuth) return { ok: false, text: 'Codex에 로그인되어 있지 않습니다. 헤더의 Codex 칩에서 로그인하세요.' };
 
         try {
-          const reply = await this.codexBridge.askDirect(agent, message, mode, { emit: ctx.emit, workspaceDir: s.workspaceDir, model: s.codexModel }, savePath);
+          const reply = await this.codexBridge.askDirect(agent, message || '첨부한 파일을 확인하고 의견을 말해줘.', mode, { emit: ctx.emit, workspaceDir: s.workspaceDir, model: s.codexModel }, savePath, undefined, ctx.attachments);
           return { ok: true, text: `${agent.shortName}:\n${reply}` };
         } catch (err) {
           return { ok: false, text: `Codex 응답 실패: ${(err as Error).message}` };
@@ -446,11 +449,11 @@ export class SlashCommandsService {
         }
         const agent = all.find((a) => a.sdkName === m[1] || a.id === m[1]);
         if (!agent) return { ok: false, text: `에이전트를 찾을 수 없습니다: @${m[1]}\n사용 가능: ${all.map((a) => `@${a.sdkName}`).join(', ')}` };
-        const message = m[2].trim();
+        const message = m[2].trim() || (ctx.attachments.length ? '첨부한 파일을 확인하고 의견을 말해줘.' : '');
         if (!message) return { ok: false, text: `${agent.shortName}에게 할 말을 적어주세요.` };
         if (agent.provider === 'codex') return this.handle(`/codex @${agent.sdkName} ${message}`, ctx);
         if (ctx.running) return { ok: false, text: '작업 실행 중에는 에이전트에게 직접 말할 수 없습니다.' };
-        const reply = await ctx.talk(agent, message);
+        const reply = await ctx.talk(agent, message, ctx.attachments);
         return { ok: reply.ok, text: reply.ok ? `${agent.shortName}:\n${reply.text}` : reply.text };
       }
 

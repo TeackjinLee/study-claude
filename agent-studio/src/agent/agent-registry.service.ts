@@ -5,6 +5,7 @@ import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 import { config } from '../config.js';
 import {
   AVAILABLE_TOOLS,
+  CODEX_TOOLS,
   DEFAULT_AGENTS,
   ROOM_IDS,
   buildOrchestratorPrompt,
@@ -151,8 +152,9 @@ export class AgentRegistryService implements OnModuleInit {
     const provider: AgentProvider = v.provider === 'codex' ? 'codex' : 'claude';
 
     const toolsRaw = Array.isArray(v.tools) ? v.tools : [];
-    // Codex는 자체 도구를 쓰므로 Claude 도구 목록은 비운다
-    const tools = provider === 'codex' ? [] : [...new Set(toolsRaw.filter((t): t is ToolName => AVAILABLE_TOOLS.includes(t as ToolName)))];
+    // Codex는 자체 도구를 쓴다. 여기서는 권한(Edit=수정, Write=생성, Bash=명령)만 고른다. 비우면 읽기 전용
+    const pool: readonly ToolName[] = provider === 'codex' ? CODEX_TOOLS : AVAILABLE_TOOLS;
+    const tools = [...new Set(toolsRaw.filter((t): t is ToolName => pool.includes(t as ToolName)))];
     if (provider === 'claude' && tools.length === 0) throw new BadRequestException('도구를 하나 이상 선택해야 합니다.');
 
     return {

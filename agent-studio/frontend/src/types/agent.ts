@@ -49,6 +49,10 @@ export const TOOL_DESCRIPTION: Record<ToolName, string> = {
   WebFetch: '웹 페이지 읽기',
 };
 
+/** Codex 에이전트에게 줄 수 있는 권한 (Edit=기존 파일 수정, Write=새 파일 생성, Bash=명령 실행). 모두 끄면 읽기 전용 */
+export const CODEX_TOOLS: ToolName[] = ['Edit', 'Write', 'Bash'];
+export const CODEX_TOOL_DESCRIPTION: Record<string, string> = { Edit: '기존 파일 수정', Write: '새 파일 생성', Bash: '명령 실행 (샌드박스 안)' };
+
 /**
  * claude: Claude 서브에이전트 (총괄이 위임) / codex: OpenAI Codex 협업자 (총괄이 대화). 없으면 claude.
  */
@@ -287,7 +291,7 @@ export const DEFAULT_AGENTS: AgentDef[] = [
     color: '#10a37f',
     pokemonId: 150,
     pokemonName: 'mewtwo',
-    tools: [],
+    tools: ['Edit', 'Write', 'Bash'],
     sdkDescription:
       '다른 모델(OpenAI Codex)의 시각으로 게임 설계(조작감, 물리 모델, 월드 구조)를 함께 토론하고, GDScript 코드를 솔직하게 리뷰하며, 요청하면 직접 구현한다. 설계 확정 전이나 구현 뒤 교차 검증이 필요할 때 부른다. 이미지 생성 도구가 있어 컨셉 아트·목업·문서용 그림이 필요할 때도 부른다 (게임 리소스가 아닌 참고용으로만).',
     prompt:

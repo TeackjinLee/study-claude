@@ -12,6 +12,21 @@ export const AVAILABLE_TOOLS = ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash',
 export type ToolName = (typeof AVAILABLE_TOOLS)[number];
 
 /**
+ * Codex 에이전트에게 줄 수 있는 권한. Codex 샌드박스는 read-only / workspace-write 둘뿐이라
+ * 하나라도 켜면 workspace-write(파일 쓰기 + 샌드박스 안 명령 실행)로 돌고, 세부 제한은 지시문으로 전달한다.
+ * Edit=기존 파일 수정, Write=새 파일 생성, Bash=명령 실행. 모두 끄면 항상 읽기 전용.
+ */
+export const CODEX_TOOLS = ['Edit', 'Write', 'Bash'] as const satisfies readonly ToolName[];
+export const codexCanWrite = (a: Pick<AgentConfig, 'tools'>) => a.tools.some((t) => (CODEX_TOOLS as readonly string[]).includes(t));
+/** Codex 에이전트의 권한을 지시문에 적을 한 줄 */
+export function codexAccessNote(a: Pick<AgentConfig, 'tools'>): string {
+  if (!codexCanWrite(a)) return '파일은 읽기만 할 수 있다. 수정·생성·명령 실행은 하지 마라.';
+  const allowed = [a.tools.includes('Edit') && '기존 파일 수정', a.tools.includes('Write') && '새 파일 생성', a.tools.includes('Bash') && '명령 실행'].filter(Boolean);
+  const denied = [!a.tools.includes('Edit') && '기존 파일 수정', !a.tools.includes('Write') && '새 파일 생성', !a.tools.includes('Bash') && '명령 실행'].filter(Boolean);
+  return `허용: ${allowed.join(', ')}.${denied.length ? ` 금지: ${denied.join(', ')}.` : ''} 요청받지 않은 파일은 건드리지 마라.`;
+}
+
+/**
  * claude: Claude Agent SDK 서브에이전트 (총괄이 Agent 도구로 호출)
  * codex: OpenAI Codex CLI 협업자 (총괄이 ask_<sdkName> MCP 도구로 대화; 도구 목록은 쓰지 않는다)
  */
@@ -251,7 +266,7 @@ export const DEFAULT_AGENTS: AgentConfig[] = [
     color: '#10a37f',
     pokemonId: 150,
     pokemonName: 'mewtwo',
-    tools: [],
+    tools: ['Edit', 'Write', 'Bash'],
     sdkDescription:
       '다른 모델(OpenAI Codex)의 시각으로 게임 설계(조작감, 물리 모델, 월드 구조)를 함께 토론하고, GDScript 코드를 솔직하게 리뷰하며, 요청하면 직접 구현한다. 설계 확정 전이나 구현 뒤 교차 검증이 필요할 때 부른다. 이미지 생성 도구가 있어 컨셉 아트·목업·문서용 그림이 필요할 때도 부른다 (게임 리소스가 아닌 참고용으로만).',
     prompt: [
@@ -288,16 +303,16 @@ export function buildOrchestratorPrompt(agents: AgentConfig[], opts: { codexAvai
 Codex 협업자(${codex.map((a) => a.name).join(', ')})가 등록돼 있지만 지금은 Codex에 로그인되어 있지 않아 쓸 수 없다. 이번 실행에서는 호출하지 마라.
 `;
   } else if (codex.length > 0) {
-    const tools = codex.map((a) => `- ${codexMcpToolName(a)} 도구 (${a.name}): ${a.sdkDescription}`).join('\n');
+    const tools = codex.map((a) => `- ${codexMcpToolName(a)} 도구 (${a.name}): ${a.sdkDescription} [권한: ${codexCanWrite(a) ? a.tools.join(', ') : '읽기 전용'}]`).join('\n');
     codexSection = `
 ## Codex 협업자
 다른 회사의 AI 모델(OpenAI Codex)로 움직이는 동료 개발자다. 서브에이전트가 아니라 대화 상대이며, 아래 도구로 메시지를 보내면 답이 돌아온다.
 ${tools}
 
 도구 입력은 message(보낼 말)와 mode다.
-- discuss: 설계·방향에 대한 의견을 묻거나 작업을 부탁한다. 메시지에서 파일 수정을 요청하면 Codex가 고칠 수 있다
+- discuss: 설계·방향에 대한 의견을 묻거나 작업을 부탁한다. 권한이 있는 Codex는 메시지에서 요청하면 파일을 고치거나 만들 수 있다
 - review: 작성된 코드를 리뷰받는다 (이 모드만 읽기 전용). 리뷰할 파일 경로를 메시지에 적어라
-- implement: 구현을 맡긴다 (작업 폴더 안 파일을 고칠 수 있다). 사용자 승인이 필요할 수 있다
+- implement: 구현을 맡긴다 (권한이 있는 Codex만 작업 폴더 안 파일을 고치거나 만든다. 읽기 전용 Codex에게는 맡기지 마라). 사용자 승인이 필요할 수 있다
 - image: 이미지를 만들게 한다. message에 상세한 이미지 프롬프트를, savePath에 작업 폴더 기준 저장 경로(예: assets/logo.png)를 넣는다
 
 협업 규칙:

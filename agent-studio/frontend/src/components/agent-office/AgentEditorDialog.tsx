@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAgentStore } from '@/store/agentStore';
 import {
   AVAILABLE_TOOLS,
+  CODEX_TOOLS,
+  CODEX_TOOL_DESCRIPTION,
   PROVIDER_LABEL,
   ROOM_LABEL,
   TOOL_DESCRIPTION,
@@ -89,8 +91,7 @@ export function AgentEditorDialog() {
     update(patch);
   };
 
-  const toggleTool = (tool: ToolName) =>
-    update({ tools: form.tools.includes(tool) ? form.tools.filter((t) => t !== tool) : [...form.tools, tool] });
+  const toggleTool = (tool: ToolName) => update({ tools: form.tools.includes(tool) ? form.tools.filter((t) => t !== tool) : [...form.tools, tool] });
 
   const isCodex = providerOf(form) === 'codex';
   const setProvider = (provider: AgentProvider) => {
@@ -124,7 +125,7 @@ export function AgentEditorDialog() {
         {
           ...form,
           provider: providerOf(form),
-          tools: isCodex ? [] : form.tools,
+          tools: isCodex ? form.tools.filter((t) => CODEX_TOOLS.includes(t)) : form.tools,
           id: form.id.trim(),
           sdkName: (form.sdkName.trim() || form.id.trim()).toLowerCase(),
           name: form.name.trim(),
@@ -170,12 +171,7 @@ export function AgentEditorDialog() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="agent-editor-title"
-        className="panel flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden"
-      >
+      <div role="dialog" aria-modal="true" aria-labelledby="agent-editor-title" className="panel flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden">
         <div className="panel-header">
           <h2 id="agent-editor-title" className="panel-title">
             <AgentAvatar def={form} size={34} />
@@ -218,7 +214,8 @@ export function AgentEditorDialog() {
               </div>
               {isCodex && (
                 <p className="mt-1 text-[11px] leading-snug text-muted">
-                  총괄 Claude가 대화 상대로 부릅니다. 토론/리뷰는 읽기 전용, 구현 요청일 때만 파일을 수정합니다. Codex 로그인이 필요합니다.
+                  총괄 Claude가 대화 상대로 부릅니다. 리뷰는 항상 읽기 전용이고, 그 외에는 아래 권한대로 파일을 수정·생성하거나 명령을 실행합니다. Codex 로그인이
+                  필요합니다.
                 </p>
               )}
             </div>
@@ -279,7 +276,14 @@ export function AgentEditorDialog() {
                 <label className={labelCls} htmlFor="ag-task">
                   담당 작업명 <span className="font-normal">(작업 트리)</span>
                 </label>
-                <input id="ag-task" className={inputCls} value={form.taskLabel} maxLength={24} onChange={(e) => update({ taskLabel: e.target.value })} placeholder="예: 코드 리뷰" />
+                <input
+                  id="ag-task"
+                  className={inputCls}
+                  value={form.taskLabel}
+                  maxLength={24}
+                  onChange={(e) => update({ taskLabel: e.target.value })}
+                  placeholder="예: 코드 리뷰"
+                />
               </div>
             </div>
 
@@ -287,7 +291,13 @@ export function AgentEditorDialog() {
               <label className={labelCls} htmlFor="ag-desc">
                 한 줄 설명 <span className="font-normal">(목록 카드)</span>
               </label>
-              <input id="ag-desc" className={inputCls} value={form.description} onChange={(e) => update({ description: e.target.value })} placeholder="예: PR 리뷰 및 개선 제안" />
+              <input
+                id="ag-desc"
+                className={inputCls}
+                value={form.description}
+                onChange={(e) => update({ description: e.target.value })}
+                placeholder="예: PR 리뷰 및 개선 제안"
+              />
             </div>
 
             <div>
@@ -303,11 +313,16 @@ export function AgentEditorDialog() {
               </select>
             </div>
 
-            {!isCodex && (
+            {
               <div>
-                <span className={labelCls}>사용 도구</span>
+                <span className={labelCls}>{isCodex ? '권한' : '사용 도구'}</span>
+                {isCodex && (
+                  <p className="mb-1 text-[11px] text-muted">
+                    모두 끄면 읽기 전용. 하나라도 켜면 Codex가 작업 폴더에 쓸 수 있는 샌드박스에서 돌고, 세부 제한은 지시문으로 전달됩니다.
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-1.5">
-                  {AVAILABLE_TOOLS.map((tool) => {
+                  {(isCodex ? CODEX_TOOLS : AVAILABLE_TOOLS).map((tool) => {
                     const on = form.tools.includes(tool);
                     return (
                       <label
@@ -318,13 +333,13 @@ export function AgentEditorDialog() {
                       >
                         <input type="checkbox" className="accent-blue-500" checked={on} onChange={() => toggleTool(tool)} />
                         <span className="font-mono">{tool}</span>
-                        <span className="ml-auto text-[11px] text-muted">{TOOL_DESCRIPTION[tool]}</span>
+                        <span className="ml-auto text-[11px] text-muted">{isCodex ? CODEX_TOOL_DESCRIPTION[tool] : TOOL_DESCRIPTION[tool]}</span>
                       </label>
                     );
                   })}
                 </div>
               </div>
-            )}
+            }
           </div>
 
           {/* 오른쪽: 캐릭터 + 프롬프트 */}
@@ -364,7 +379,11 @@ export function AgentEditorDialog() {
                     : '너는 코드 리뷰 에이전트다.\n작업 폴더의 변경 내용을 읽고 버그, 보안 문제, 개선점을 한국어로 보고한다.\n파일은 수정하지 않는다.'
                 }
               />
-              {!isLive && <p className="mt-1 text-[11px] text-muted">Mock 모드에서는 이 브라우저(localStorage)에만 저장됩니다. Live 모드에서는 서버의 data/agents.json에 저장되어 실제 실행에 쓰입니다.</p>}
+              {!isLive && (
+                <p className="mt-1 text-[11px] text-muted">
+                  Mock 모드에서는 이 브라우저(localStorage)에만 저장됩니다. Live 모드에서는 서버의 data/agents.json에 저장되어 실제 실행에 쓰입니다.
+                </p>
+              )}
             </div>
           </div>
 
@@ -376,7 +395,12 @@ export function AgentEditorDialog() {
                 {confirmDelete ? (
                   <span className="flex items-center gap-2 text-[12px] text-red-300">
                     정말 삭제할까요?
-                    <button type="button" disabled={busy || defs.length <= 1} onClick={() => void remove()} className="rounded-md bg-red-500 px-2.5 py-1 font-semibold text-white hover:bg-red-400 disabled:opacity-50">
+                    <button
+                      type="button"
+                      disabled={busy || defs.length <= 1}
+                      onClick={() => void remove()}
+                      className="rounded-md bg-red-500 px-2.5 py-1 font-semibold text-white hover:bg-red-400 disabled:opacity-50"
+                    >
                       삭제
                     </button>
                     <button type="button" onClick={() => setConfirmDelete(false)} className="rounded-md border border-line px-2.5 py-1 text-slate-300">
@@ -404,7 +428,11 @@ export function AgentEditorDialog() {
               <button type="button" onClick={close} className="rounded-lg border border-line px-3 py-1.5 text-[13px] text-slate-300 hover:text-white">
                 취소
               </button>
-              <button type="submit" disabled={busy} className="rounded-lg bg-accent px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-blue-500 disabled:opacity-60">
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-lg bg-accent px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+              >
                 {busy ? '저장 중...' : isNew ? '추가' : '저장'}
               </button>
             </div>

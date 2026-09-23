@@ -9,7 +9,8 @@ import { buildPromptContent, validateAttachments, type Attachment } from './atta
 import { SettingsService } from './settings.service.js';
 import { SlashCommandsService } from './slash-commands.service.js';
 import { CostTrackerService } from './cost-tracker.service.js';
-import { CodexBridgeService, codexModeWrites, isCodexTool } from './codex-bridge.service.js';
+import { CodexBridgeService, codexWrites, isCodexTool } from './codex-bridge.service.js';
+import { codexMcpToolName } from './agents.config.js';
 import { CodexAuthService } from '../auth/codex-auth.service.js';
 import { MessageMapper } from './message-mapper.js';
 import { RUN_MODES, type CodexMode, type RunMode, type UiEvent, type UiEventBody } from './ui-events.js';
@@ -147,7 +148,8 @@ export class AgentRunnerService implements OnModuleDestroy {
           this.talks.clear();
         },
         emit: (e) => this.emit(e),
-        talk: (agent, message) => this.talk(agent, message),
+        talk: (agent, message, attachments) => this.talk(agent, message, attachments),
+        attachments: files,
       });
       if (result) {
         if (result.clear) this.emit({ type: 'cleared' });
@@ -218,7 +220,7 @@ export class AgentRunnerService implements OnModuleDestroy {
    * 그 에이전트의 프롬프트·도구로 한 번 실행(query)하고, 대시보드에는 그 에이전트가 말하고 일하는 것으로 보인다.
    * 에이전트별로 세션을 이어가서(resume) 이전 대화를 기억한다. 총괄 실행과 동시에는 못 한다.
    */
-  async talk(agent: AgentConfig, message: string): Promise<{ ok: boolean; text: string }> {
+  async talk(agent: AgentConfig, message: string, attachments: Attachment[] = []): Promise<{ ok: boolean; text: string }> {
     if (this.running) return { ok: false, text: '작업 실행 중에는 에이전트에게 직접 말할 수 없습니다. 끝나거나 중지한 뒤 다시 시도하세요.' };
     if (this.talkAbort) return { ok: false, text: `${this.talkAgent ?? '다른 에이전트'}가 답하는 중입니다. 끝난 뒤 다시 말하세요.` };
     if (!config.hasAuth()) return { ok: false, text: '아직 인증되지 않았습니다. 헤더에서 로그인하세요.' };
@@ -257,14 +259,19 @@ export class AgentRunnerService implements OnModuleDestroy {
       agent.id,
     );
 
+    const shown = attachments.length ? `${message} (첨부 ${attachments.map((a) => a.name).join(', ')})` : message;
     this.emit({ type: 'direct_talk', active: true, agent: agent.id });
-    this.emit({ type: 'agent_message', from: 'user', to: agent.id, mode: 'discuss', text: clip(message, 1200) });
-    this.emit({ type: 'agent_start', agent: agent.id, callId, task: oneLine(message) });
+    this.emit({ type: 'agent_message', from: 'user', to: agent.id, mode: 'discuss', text: clip(shown, 1200) });
+    this.emit({ type: 'agent_start', agent: agent.id, callId, task: oneLine(shown) });
     this.logger.log(`/talk @${agent.sdkName}: ${oneLine(message, 80)}${resume ? ' (이어서)' : ''}`);
 
     try {
+      const content = await buildPromptContent(workspaceDir, message, attachments);
+      const userMessage = async function* (): AsyncIterable<SDKUserMessage> {
+        yield { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null };
+      };
       const stream = query({
-        prompt: message,
+        prompt: typeof content === 'string' ? content : userMessage(),
         options: {
           abortController: abort,
           cwd: workspaceDir,
@@ -414,10 +421,14 @@ export class AgentRunnerService implements OnModuleDestroy {
       if (this.allowAllThisRun || AUTO_ALLOWED_TOOLS.has(toolName) || this.sessionAllowed.has(toolName)) {
         return Promise.resolve<PermissionResult>({ behavior: 'allow', updatedInput: input });
       }
-      // Codex와의 토론/리뷰는 읽기 전용이라 바로 허용. 구현 위임/이미지 생성(파일 쓰기)은 acceptEdits면 허용, default면 묻는다.
+      // Codex: 에이전트 설정의 권한(Edit/Write/Bash)이 없거나 review면 읽기 전용 샌드박스라 바로 허용. 쓰기면 acceptEdits일 때만 자동, default면 묻는다.
       // 주의: Codex의 workspace-write 샌드박스는 파일 수정뿐 아니라 샌드박스 안 명령 실행도 허용한다.
-      if (isCodexTool(toolName) && (!codexModeWrites(modeOf(input.mode)) || this.settings.get().permissionMode === 'acceptEdits')) {
-        return Promise.resolve<PermissionResult>({ behavior: 'allow', updatedInput: input });
+      if (isCodexTool(toolName)) {
+        const codexAgent = this.registry.codexAgents().find((a) => codexMcpToolName(a) === toolName);
+        // 읽기 전용(권한 없음/리뷰)이면 바로 허용, 쓰기면 acceptEdits일 때만 자동 허용
+        if (!codexAgent || !codexWrites(codexAgent, modeOf(input.mode)) || this.settings.get().permissionMode === 'acceptEdits') {
+          return Promise.resolve<PermissionResult>({ behavior: 'allow', updatedInput: input });
+        }
       }
 
       const id = randomUUID();

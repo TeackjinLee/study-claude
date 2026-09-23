@@ -324,7 +324,7 @@ export function CommandBar() {
                 : talking && talkDef
                   ? `${talkDef.shortName}에게 할 말   ( Esc 로 해제, / 로 시작하면 일반 명령 )`
                   : target === 'codex'
-                    ? '/codex 뒤에 Codex에게 할 말   ( review / implement / image 모드, @에이전트 지정 가능 )'
+                    ? '/codex 뒤에 Codex에게 할 말   ( / 로 모드·모델 선택, @에이전트 지정, 첨부 이미지·파일도 함께 보냄 )'
                     : commandMode === 'chat'
                       ? '무엇이든 물어보세요   ( 채팅: 파일 읽기만, 이전 대화를 이어갑니다 )'
                       : '로그인 기능 만들어줘   ( / 로 명령, /codex 로 Codex에게 직접, 첨부는 버튼·드래그·붙여넣기 )'
