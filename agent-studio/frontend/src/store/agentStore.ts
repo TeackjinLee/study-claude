@@ -20,6 +20,7 @@ import {
   type ArtifactKind,
   type CommandChoices,
   type CommandInfo,
+  type ConversationInfo,
   type PermissionRequest,
   type RunResult,
   type RunSettings,
@@ -81,7 +82,7 @@ interface AgentStoreState {
   /** 모드별로 서버에 이어갈 대화(세션)가 있는지 */
   conversations: Partial<Record<RunMode, boolean>>;
   /** 모드별 이어가는 대화의 id·제목 (대화 화면 제목) */
-  conversationTitles: Partial<Record<RunMode, { id: string; title: string }>>;
+  conversationTitles: Partial<Record<RunMode, ConversationInfo>>;
   /** 지난 대화 목록을 다시 불러오라는 신호 (대화가 생기거나 바뀔 때 올라간다) */
   conversationsVersion: number;
   /** 실행이 끝날 때마다 올라간다 — 변경사항(git diff) 탭이 다시 불러오는 신호 */
@@ -255,6 +256,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
 
     init: () => {
       if (get().source) return;
+      // 저장해 둔 선택은 화면이 붙은 뒤(init은 마운트 후 호출)에 읽는다. 처음부터 읽으면 서버가 그린 HTML과 달라 하이드레이션이 깨진다
+      set({ commandMode: loadCommandMode(), planFirst: loadPlanFirst() });
       const repository = createAgentRepository();
       const source = createEventSource();
       set({ source, repository });
@@ -288,7 +291,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
     undoCheckpoint: async (id, force) =>
       (await get().source?.undoCheckpoint(id, force)) ?? { ok: false, error: '연결되지 않았습니다.', restored: [], skipped: [], complete: false },
 
-    planFirst: loadPlanFirst(),
+    planFirst: false,
     setPlanFirst: (on) => {
       set({ planFirst: on });
       try {
@@ -299,7 +302,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
     },
 
     suggestions: [],
-    commandMode: loadCommandMode(),
+    commandMode: 'code',
     setCommandMode: (mode) => {
       set({ commandMode: mode });
       try {
@@ -451,7 +454,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
         case 'conversation':
           set((s) => ({
             conversations: { ...s.conversations, [evt.mode]: evt.active },
-            conversationTitles: evt.active && evt.id && evt.title ? { ...s.conversationTitles, [evt.mode]: { id: evt.id, title: evt.title } } : evt.active ? s.conversationTitles : { ...s.conversationTitles, [evt.mode]: undefined },
+            conversationTitles: evt.active && evt.id && evt.title ? { ...s.conversationTitles, [evt.mode]: { id: evt.id, title: evt.title, context: s.conversationTitles[evt.mode]?.id === evt.id ? s.conversationTitles[evt.mode]?.context : undefined } } : evt.active ? s.conversationTitles : { ...s.conversationTitles, [evt.mode]: undefined },
             conversationsVersion: s.conversationsVersion + 1,
             // 새 대화: 화면의 대화 목록도 비운다 (마지막 실행 결과는 남겨 둔다)
             thread: !evt.active && s.run?.mode === evt.mode ? [] : s.thread,
@@ -464,11 +467,18 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
           set({ conversations: evt.all, conversationTitles: evt.titles ?? {} });
           return;
 
+        case 'context_usage':
+          set((s) => {
+            const cur = s.conversationTitles[evt.mode];
+            return cur?.id === evt.id ? { conversationTitles: { ...s.conversationTitles, [evt.mode]: { ...cur, context: evt.context } } } : {};
+          });
+          return;
+
         case 'conversation_loaded':
           get().setCommandMode(evt.mode);
           set((s) => ({
             conversations: { ...s.conversations, [evt.mode]: true },
-            conversationTitles: { ...s.conversationTitles, [evt.mode]: { id: evt.id, title: evt.title } },
+            conversationTitles: { ...s.conversationTitles, [evt.mode]: { id: evt.id, title: evt.title, context: evt.context } },
             conversationsVersion: s.conversationsVersion + 1,
             centerView: 'conversation',
           }));

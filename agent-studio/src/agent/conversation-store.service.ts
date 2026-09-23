@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { config } from '../config.js';
 import { clip, oneLine } from './artifact-utils.js';
-import type { RunMode, UiEvent } from './ui-events.js';
+import type { ContextInfo, RunMode, UiEvent } from './ui-events.js';
 
 /** 목록에 보이는 대화 정보 */
 export interface ConversationMeta {
@@ -19,6 +19,8 @@ export interface ConversationMeta {
   updatedAt: number;
   runs: number;
   costUsd: number;
+  /** 마지막으로 잰 컨텍스트 사용량 */
+  context?: ContextInfo;
 }
 
 interface ConversationFile extends ConversationMeta {
@@ -37,7 +39,7 @@ const MAX_EVENTS = 5000;
  * 저장하지 않는 이벤트. 권한 요청은 다시 그리면 승인 배너가 떠 버리고,
  * 대화 상태(conversation)는 다시 열 때 서버가 따로 알려준다 (기록에 "새 대화"가 남으면 다시 그릴 때 화면이 비워진다)
  */
-const SKIP_EVENTS = new Set<UiEvent['type']>(['permission_request', 'permission_resolved', 'settings', 'command_result', 'cleared', 'conversation', 'conversation_loaded', 'assistant_delta']);
+const SKIP_EVENTS = new Set<UiEvent['type']>(['permission_request', 'permission_resolved', 'settings', 'command_result', 'cleared', 'conversation', 'conversation_loaded', 'assistant_delta', 'context_usage']);
 const FLUSH_DELAY_MS = 800;
 
 const isId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f-]{36}$/.test(v);
@@ -127,6 +129,13 @@ export class ConversationStoreService implements OnModuleInit {
     const meta = this.metas.get(id);
     if (!meta || meta.sessionId === sessionId) return;
     meta.sessionId = sessionId;
+    this.markDirty(id);
+  }
+
+  setContext(id: string, context: ContextInfo) {
+    const meta = this.metas.get(id);
+    if (!meta) return;
+    meta.context = context;
     this.markDirty(id);
   }
 

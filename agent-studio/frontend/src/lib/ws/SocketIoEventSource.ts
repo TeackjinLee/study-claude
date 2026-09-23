@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-import type { AgentEventSource, AgentSimEvent, ArtifactKind, CheckpointFile, CommandChoices, CommandInfo, RunMode, RunSettings, ToolDetail, TxAgent, UndoResult } from './types';
+import type { AgentEventSource, AgentSimEvent, ArtifactKind, CheckpointFile, CommandChoices, CommandInfo, ContextInfo, RunMode, RunSettings, ToolDetail, TxAgent, UndoResult } from './types';
 import type { AgentDef, AgentRole, AgentStatus } from '@/types/agent';
 import { withUrls, type Attachment } from '@/lib/uploads';
 
@@ -16,6 +16,12 @@ const isAgentRole = (v: unknown): v is AgentRole => typeof v === 'string' && v.l
 
 /** 대화 화면에 올릴 주인: 총괄(main) 또는 등록된 에이전트 */
 const txAgentOf = (v: unknown): TxAgent | null => (v === 'main' ? 'main' : isAgentRole(v) ? v : null);
+
+function contextOf(v: unknown): ContextInfo | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const c = v as Record<string, unknown>;
+  return typeof c.pct === 'number' && typeof c.max === 'number' ? { tokens: Number(c.tokens) || 0, max: c.max, pct: c.pct, at: Number(c.at) || Date.now() } : undefined;
+}
 
 /** test/deploy 에이전트가 도구를 실행 중일 때는 Testing/Deploying으로 보여준다. */
 function workingStatusFor(agent: AgentRole): AgentStatus {
@@ -50,6 +56,19 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
     case 'conversation': {
       const mode = evt.mode === 'chat' || evt.mode === 'cowork' ? evt.mode : 'code';
       return [{ type: 'conversation', mode, active: Boolean(evt.active), id: typeof evt.id === 'string' ? evt.id : undefined, title: typeof evt.title === 'string' ? evt.title : undefined }];
+    }
+    case 'context_usage': {
+      const mode = evt.mode === 'chat' || evt.mode === 'cowork' ? evt.mode : 'code';
+      const context = contextOf(evt.context);
+      return context && typeof evt.conversationId === 'string' ? [{ type: 'context_usage', mode, id: evt.conversationId, context }] : [];
+    }
+    case 'compacted': {
+      const trigger = evt.trigger === 'auto' ? 'auto' : 'manual';
+      const postTokens = typeof evt.postTokens === 'number' ? evt.postTokens : undefined;
+      return [
+        { type: 'tx', event: { t: 'compacted', trigger, preTokens: Number(evt.preTokens) || 0, postTokens } },
+        { type: 'log', agent: 'system', text: trigger === 'auto' ? '컨텍스트가 차서 대화를 자동으로 압축했습니다.' : '대화를 압축했습니다.' },
+      ];
     }
     case 'agent_start': {
       if (!isAgentRole(evt.agent)) return [];
@@ -302,7 +321,7 @@ export class SocketIoEventSource implements AgentEventSource {
         onEvent({ type: 'cleared' });
         for (const e of Array.isArray(evt.events) ? (evt.events as BackendUiEvent[]) : []) for (const simEvt of mapUiEvent(e)) onEvent(simEvt);
         const mode = evt.mode === 'chat' || evt.mode === 'cowork' ? evt.mode : 'code';
-        onEvent({ type: 'conversation_loaded', mode, id: String(evt.conversationId ?? ''), title: String(evt.title ?? '') });
+        onEvent({ type: 'conversation_loaded', mode, id: String(evt.conversationId ?? ''), title: String(evt.title ?? ''), context: contextOf(evt.context) });
         return;
       }
       for (const simEvt of mapUiEvent(evt)) onEvent(simEvt);

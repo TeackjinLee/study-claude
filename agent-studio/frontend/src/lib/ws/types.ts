@@ -48,6 +48,22 @@ export interface UndoResult {
 /** 에이전트 id 또는 'main'(총괄/코드 모드의 Claude) */
 export type TxAgent = AgentRole | 'main';
 
+/** 대화의 컨텍스트 창 사용량 */
+export interface ContextInfo {
+  tokens: number;
+  max: number;
+  /** 0~100 */
+  pct: number;
+  at: number;
+}
+
+/** 모드별로 이어가는 대화 */
+export interface ConversationInfo {
+  id: string;
+  title: string;
+  context?: ContextInfo;
+}
+
 /** 대화 화면(Claude Code처럼 글·도구 호출이 이어지는 화면)을 그리는 이벤트 */
 export type TxEvent =
   | { t: 'text'; agent: TxAgent; text: string }
@@ -62,6 +78,8 @@ export type TxEvent =
   | { t: 'user_to'; agent: AgentRole; text: string }
   /** 실행이 파일을 바꿨음 → "이 실행 되돌리기" */
   | { t: 'checkpoint'; id: string; files: CheckpointFile[] }
+  /** 대화를 압축했음 (/compact 또는 자동) */
+  | { t: 'compacted'; trigger: 'manual' | 'auto'; preTokens: number; postTokens?: number }
   | { t: 'checkpoint_undone'; id: string; restored: string[]; skipped: { path: string; reason: string }[]; complete: boolean };
 
 /** 명령 종류: code=Claude Code처럼 혼자 직접 코딩(기본, 이전 대화 이어감) / chat=대화만(읽기 전용) / cowork=총괄+서브에이전트+Codex로 팀 작업 */
@@ -131,9 +149,11 @@ export type AgentSimEvent =
   | { type: 'follow_up'; text: string }
   /** 코드·채팅의 이어갈 대화가 생기거나(active) 새 대화로 비워짐. all은 접속 직후 전체 상태 */
   | { type: 'conversation'; mode: RunMode; active: boolean; id?: string; title?: string }
-  | { type: 'conversations'; all: Partial<Record<RunMode, boolean>>; titles?: Partial<Record<RunMode, { id: string; title: string }>> }
+  | { type: 'conversations'; all: Partial<Record<RunMode, boolean>>; titles?: Partial<Record<RunMode, ConversationInfo>> }
   /** 지난 대화를 열었음 (기록 재생이 끝난 뒤 온다) */
-  | { type: 'conversation_loaded'; mode: RunMode; id: string; title: string }
+  | { type: 'conversation_loaded'; mode: RunMode; id: string; title: string; context?: ContextInfo }
+  /** 이어가는 대화의 컨텍스트 사용량 (실행이 끝날 때마다) */
+  | { type: 'context_usage'; mode: RunMode; id: string; context: ContextInfo }
   /** room: 'work'는 "그 에이전트의 담당 작업실"(에이전트 정의의 room)로, 스토어가 실제 방으로 바꾼다 */
   | { type: 'agent_status'; agent: AgentRole; status: AgentStatus; room?: RoomId | 'work'; message?: string; progress?: number }
   | { type: 'log'; agent: AgentRole | 'system'; text: string }

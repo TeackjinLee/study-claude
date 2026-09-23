@@ -15,7 +15,9 @@ export type TxItem =
   | { kind: 'result'; id: string; ok: boolean; costUsd?: number; turns?: number; durationMs?: number; text?: string }
   | { kind: 'notice'; id: string; tone: 'error' | 'warn'; text: string }
   /** 실행이 바꾼 파일과 되돌리기 상태 (restored가 files 전부면 되돌림 완료) */
-  | { kind: 'checkpoint'; id: string; files: CheckpointFile[]; restored: string[]; skipped: { path: string; reason: string }[]; complete: boolean };
+  | { kind: 'checkpoint'; id: string; files: CheckpointFile[]; restored: string[]; skipped: { path: string; reason: string }[]; complete: boolean }
+  /** 대화 압축 경계. 이 위의 내용은 Claude가 요약본으로만 기억한다 */
+  | { kind: 'compact'; id: string; trigger: 'manual' | 'auto'; preTokens: number; postTokens?: number };
 
 const MAX_ITEMS = 1500;
 let seq = 0;
@@ -95,6 +97,8 @@ export function applyTx(items: TxItem[], e: TxEvent): TxItem[] {
       return items.map((i) =>
         i.kind === 'checkpoint' && i.id === e.id ? { ...i, restored: [...new Set([...i.restored, ...e.restored])], skipped: e.skipped, complete: e.complete } : i,
       );
+    case 'compacted':
+      return cap([...items, { kind: 'compact', id: nextId('c'), trigger: e.trigger, preTokens: e.preTokens, postTokens: e.postTokens }]);
     case 'user_to':
       return cap([...items, { kind: 'user', id: nextId('u'), text: e.text, to: e.agent, at: Date.now() }]);
   }

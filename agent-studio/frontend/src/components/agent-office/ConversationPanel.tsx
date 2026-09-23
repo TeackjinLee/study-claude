@@ -77,6 +77,7 @@ export function ConversationPanel() {
               명령 {totals.runs}개 · {totals.turns}턴 · ${totals.cost.toFixed(4)}
             </span>
           )}
+          <ContextMeter />
           <ConversationHistoryMenu />
         </div>
       </div>
@@ -213,7 +214,70 @@ function TxRow({ item }: { item: TxItem }) {
 
     case 'checkpoint':
       return <CheckpointRow item={item} />;
+
+    case 'compact':
+      return (
+        <div className="flex items-center gap-2 py-1 text-[11px] text-slate-500" title="이 위의 대화는 Claude가 요약본으로만 기억합니다">
+          <span className="h-px flex-1 bg-line" />
+          <span className="shrink-0">
+            {item.trigger === 'auto' ? '컨텍스트가 차서 자동으로 압축했습니다' : '대화를 압축했습니다'}
+            {item.preTokens > 0 && ` · ${formatTokens(item.preTokens)}${item.postTokens ? ` → ${formatTokens(item.postTokens)}` : ''} 토큰`}
+          </span>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+      );
   }
+}
+
+function formatTokens(n: number) {
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n);
+}
+
+/** 컨텍스트가 이만큼 차면 압축을 권한다 (Claude Code는 가득 차기 직전에 자동으로 압축한다) */
+const CONTEXT_WARN_PCT = 70;
+
+/**
+ * 이어가는 대화의 컨텍스트 게이지와 압축 버튼.
+ * 사용량은 실행이 끝날 때마다 서버가 재서 알려준다. 압축하면 지난 대화를 요약해 컨텍스트를 비우고 같은 대화를 이어간다.
+ */
+function ContextMeter() {
+  const mode = useAgentStore((s) => s.run?.mode ?? s.commandMode);
+  const info = useAgentStore((s) => (s.conversations[mode] ? s.conversationTitles[mode] : undefined));
+  const running = useAgentStore((s) => s.running);
+  const sendCommand = useAgentStore((s) => s.sendCommand);
+  if (mode === 'cowork' || !info) return null;
+  const ctx = info.context;
+  const warn = !!ctx && ctx.pct >= CONTEXT_WARN_PCT;
+  const tone = !ctx ? 'bg-slate-500' : ctx.pct >= 85 ? 'bg-red-400' : warn ? 'bg-amber-400' : 'bg-blue-400';
+  const compact = () => {
+    if (window.confirm('지금까지의 대화를 요약해 컨텍스트를 비울까요?\n같은 대화를 이어가지만 Claude는 앞부분을 요약본으로만 기억합니다.')) sendCommand('/compact', [], mode);
+  };
+  return (
+    <div className="flex items-center gap-1.5">
+      {ctx && (
+        <span
+          className="hidden items-center gap-1.5 text-[11px] text-muted md:inline-flex"
+          title={`컨텍스트 ${ctx.tokens.toLocaleString()} / ${ctx.max.toLocaleString()} 토큰 (마지막 실행 기준). 가득 차면 자동으로 압축됩니다.`}
+        >
+          <span className="relative h-1.5 w-12 overflow-hidden rounded-full bg-white/10">
+            <span className={`absolute inset-y-0 left-0 rounded-full ${tone}`} style={{ width: `${Math.max(2, ctx.pct)}%` }} />
+          </span>
+          <span className={warn ? 'font-semibold text-amber-300' : undefined}>{ctx.pct}%</span>
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={compact}
+        disabled={running}
+        title={running ? '실행이 끝난 뒤 압축할 수 있습니다' : '대화 압축 (/compact) — 지난 대화를 요약해 컨텍스트를 비웁니다'}
+        className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+          warn ? 'border-amber-400/60 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20' : 'border-line text-slate-300 hover:border-accent/60 hover:text-white'
+        }`}
+      >
+        압축
+      </button>
+    </div>
+  );
 }
 
 const STATUS_DOT = {

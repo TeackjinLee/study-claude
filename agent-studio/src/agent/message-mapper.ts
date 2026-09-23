@@ -118,6 +118,9 @@ export class MessageMapper {
       case 'system':
         if (msg.subtype === 'init') {
           this.emit({ type: 'session', sessionId: msg.session_id, model: msg.model });
+        } else if (msg.subtype === 'compact_boundary') {
+          const m = msg.compact_metadata;
+          this.emit({ type: 'compacted', trigger: m.trigger, preTokens: m.pre_tokens, postTokens: m.post_tokens });
         } else if (msg.subtype === 'api_retry') {
           this.emit({
             type: 'api_retry',

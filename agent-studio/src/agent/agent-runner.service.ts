@@ -13,7 +13,7 @@ import { CodexBridgeService, codexWrites, isCodexTool } from './codex-bridge.ser
 import { codexMcpToolName } from './agents.config.js';
 import { CodexAuthService } from '../auth/codex-auth.service.js';
 import { MessageMapper } from './message-mapper.js';
-import { RUN_MODES, type CodexMode, type RunMode, type UiEvent, type UiEventBody } from './ui-events.js';
+import { RUN_MODES, type CodexMode, type ContextInfo, type RunMode, type UiEvent, type UiEventBody } from './ui-events.js';
 import { parseRunMode, runModeProfile } from './run-modes.js';
 import { InputQueue, RunCompletion } from './input-queue.js';
 import { ConversationStoreService, type ConversationMeta } from './conversation-store.service.js';
@@ -35,6 +35,18 @@ const AUTO_ALLOWED_TOOLS = new Set([
 type AlwaysScope = boolean | 'all';
 
 const MAX_HISTORY = 3000;
+/** 실행 끝에 컨텍스트 사용량을 기다리는 최대 시간 (늦으면 재지 않고 끝낸다) */
+const CONTEXT_TIMEOUT_MS = 4000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('시간 초과')), ms);
+    p.then(
+      (v) => (clearTimeout(t), resolve(v)),
+      (e: unknown) => (clearTimeout(t), reject(e)),
+    );
+  });
+}
 
 /** 직접 대화(/talk)에서 에이전트에게 주지 않는 도구. 서브에이전트 호출과 할 일 목록은 총괄 실행에서만 쓴다 */
 const TALK_ALWAYS_DISALLOWED = ['Agent', 'Task', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskOutput', 'TaskStop', 'Skill', 'EnterPlanMode', 'ExitPlanMode'];
@@ -159,12 +171,12 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** 모드별 이어가는 대화의 id·제목 (대화 화면 제목 표시용) */
-  activeConversations(): Partial<Record<RunMode, { id: string; title: string }>> {
+  activeConversations(): Partial<Record<RunMode, { id: string; title: string; context?: ContextInfo }>> {
     const dir = this.settings.workspaceDir;
-    const out: Partial<Record<RunMode, { id: string; title: string }>> = {};
+    const out: Partial<Record<RunMode, { id: string; title: string; context?: ContextInfo }>> = {};
     for (const m of RUN_MODES) {
       const meta = this.store.activeFor(m, dir);
-      if (meta) out[m] = { id: meta.id, title: meta.title };
+      if (meta) out[m] = { id: meta.id, title: meta.title, context: meta.context };
     }
     return out;
   }
@@ -179,7 +191,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     const events = withTerminalEvent(await this.store.loadEvents(meta.id));
     this.history = events;
     // 기록 자체는 화면 기록(history)으로 이미 넣었으니 이 알림은 기록하지 않고 보낸다
-    this.broadcast({ type: 'conversation_loaded', mode: meta.mode, conversationId: meta.id, title: meta.title, events, at: Date.now() });
+    this.broadcast({ type: 'conversation_loaded', mode: meta.mode, conversationId: meta.id, title: meta.title, events, context: meta.context, at: Date.now() });
     this.logger.log(`대화 열기: ${meta.title} (${meta.mode})`);
     return { ok: true };
   }
@@ -265,6 +277,13 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     if (!config.hasAuth()) return { ok: false, error: '아직 인증되지 않았습니다. 대시보드 상단의 "로그인 필요" 버튼을 눌러 로그인하거나 .env에 ANTHROPIC_API_KEY를 넣으세요.' };
 
     const profile = runModeProfile(mode);
+    // /compact: 이어가는 대화를 요약해 컨텍스트를 비운다 (Claude Code가 처리한다)
+    const compact = /^\/compact(\s|$)/i.test(text);
+    if (compact) {
+      if (!profile.resumable) return { ok: false, error: '대화 압축은 코드·채팅 모드에서만 쓸 수 있습니다.' };
+      if (!this.store.activeFor(mode, this.settings.workspaceDir)?.sessionId) return { ok: false, error: '압축할 대화가 없습니다. 먼저 명령을 실행해 대화를 시작하세요.' };
+      if (files.length > 0) return { ok: false, error: '대화 압축에는 파일을 첨부할 수 없습니다.' };
+    }
     // 기다리는(await) 동안 다른 명령이 끼어들지 않게 먼저 "실행 중"으로 표시한다
     const abort = new AbortController();
     this.abort = abort;
@@ -278,8 +297,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     this.sessionAllowed.clear();
     this.allowAllThisRun = false;
     this.currentAttachments = files;
-    const planFirst = planFirstInput === true && profile.canPlan;
-    void this.run(text || '첨부한 파일을 확인하고 적절히 처리해줘.', files, abort, mode, { resume, planFirst, conversation });
+    const planFirst = planFirstInput === true && profile.canPlan && !compact;
+    void this.run(text || '첨부한 파일을 확인하고 적절히 처리해줘.', files, abort, mode, { resume, planFirst, conversation, compact });
     return { ok: true };
   }
 
@@ -438,7 +457,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     for (const listener of this.listeners) listener(event);
   }
 
-  private async run(prompt: string, attachments: Attachment[], abort: AbortController, mode: RunMode, opts: { resume?: string; planFirst: boolean; conversation?: ConversationMeta }) {
+  private async run(prompt: string, attachments: Attachment[], abort: AbortController, mode: RunMode, opts: { resume?: string; planFirst: boolean; conversation?: ConversationMeta; compact?: boolean }) {
     // 실행 도중 /workspace 로 바뀌어도 이번 실행은 시작 시점의 폴더를 끝까지 쓴다
     const workspaceDir = this.settings.workspaceDir;
     const settings = this.settings.get();
@@ -463,6 +482,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     let finishing: Promise<void> | null = null;
     const completion = new RunCompletion(() => {
       finishing = (async () => {
+        // 세션이 닫히기 전에 컨텍스트 사용량을 잰다 (긴 대화 관리: 화면의 게이지와 압축 권유)
+        if (conversation && heldDone && !abort.signal.aborted) await this.measureContext(live.query, mode, conversation.id);
         input.close();
         // 실행 후 스냅샷을 찍은 뒤에 "실행 중"을 푼다 (다음 실행이 먼저 시작되면 그 변경까지 섞인다)
         const checkpoint = before ? await this.recordCheckpoint(before, prompt, conversation?.id) : null;
@@ -513,7 +534,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     this.emit({ type: 'run_start', command: prompt, workspace: workspaceDir, attachments, mode, continued: Boolean(resume), planFirst });
     this.logger.log(`${MODE_LOG[mode]} 시작: ${prompt}${attachments.length ? ` (첨부 ${attachments.length}개)` : ''}${resume ? ' (이어서)' : ''}${planFirst ? ' (계획 먼저)' : ''}`);
     // 실행 되돌리기: 파일을 고칠 수 있는 모드면 실행 전 작업 폴더를 찍어 둔다 (git 저장소일 때만)
-    if (mode !== 'chat') before = await this.checkpoints.capture();
+    if (mode !== 'chat' && !opts.compact) before = await this.checkpoints.capture();
     if (codexAgents.length > 0 && !codexAvailable) {
       this.emit({ type: 'main_note', text: '⚠ Codex 협업자가 로그인되지 않아 이번 실행에서는 제외됩니다. 헤더의 Codex 칩에서 로그인하세요.' });
     }
@@ -582,6 +603,20 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
       if (this.abort === abort || this.abort === null) this.denyAllPending();
       if (this.abort === abort) this.abort = null;
       this.logger.log('작업 종료');
+    }
+  }
+
+  /** 실행 중인 세션의 컨텍스트 사용량을 재서 대화에 저장하고 화면에 알린다. 실패하면 그냥 넘어간다 */
+  private async measureContext(q: Query | null, mode: RunMode, conversationId: string) {
+    if (!q) return;
+    try {
+      const u = await withTimeout(q.getContextUsage({ detail: 'summary' }), CONTEXT_TIMEOUT_MS);
+      if (!u.maxTokens) return;
+      const context: ContextInfo = { tokens: u.totalTokens, max: u.maxTokens, pct: Math.min(100, Math.round(u.percentage)), at: Date.now() };
+      this.store.setContext(conversationId, context);
+      this.broadcast({ type: 'context_usage', mode, conversationId, context, at: Date.now() });
+    } catch (err) {
+      this.logger.debug(`컨텍스트 사용량을 재지 못했습니다: ${(err as Error).message}`);
     }
   }
 

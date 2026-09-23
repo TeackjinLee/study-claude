@@ -42,8 +42,12 @@ export type UiEventBody =
   | { type: 'follow_up'; text: string }
   /** 코드·채팅 모드의 이어갈 대화(세션)가 생기거나(active) 새 대화로 비워짐 */
   | { type: 'conversation'; mode: RunMode; active: boolean; id?: string; title?: string }
+  /** 이어가는 대화의 컨텍스트 사용량 (실행이 끝날 때 잰다) */
+  | { type: 'context_usage'; mode: RunMode; conversationId: string; context: ContextInfo }
+  /** 대화를 압축했음 (/compact 또는 컨텍스트가 차서 자동). 토큰 수는 압축 전·후 */
+  | { type: 'compacted'; trigger: 'manual' | 'auto'; preTokens: number; postTokens?: number }
   /** 지난 대화를 열었음: 화면을 비우고 events로 대화 화면을 다시 그린다 (이 이벤트 자체는 기록하지 않음) */
-  | { type: 'conversation_loaded'; mode: RunMode; conversationId: string; title: string; events: UiEvent[] }
+  | { type: 'conversation_loaded'; mode: RunMode; conversationId: string; title: string; events: UiEvent[]; context?: ContextInfo }
   /** 슬래시 명령(/model 등)을 서버가 처리한 결과 */
   | { type: 'command_result'; command: string; ok: boolean; text: string; choices?: CommandChoices }
   /** 실행 설정이 바뀜 (/model, /effort ...) */
@@ -86,3 +90,12 @@ export type UiEventBody =
   | { type: 'run_aborted' };
 
 export type UiEvent = UiEventBody & { at: number };
+
+/** 대화의 컨텍스트 창 사용량 */
+export interface ContextInfo {
+  tokens: number;
+  max: number;
+  /** 0~100 */
+  pct: number;
+  at: number;
+}

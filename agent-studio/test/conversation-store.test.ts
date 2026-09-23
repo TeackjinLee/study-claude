@@ -70,3 +70,18 @@ test('대화 상태 이벤트는 기록에 남기지 않는다 (다시 열 때 �
   s.append(c.id, ev({ type: 'conversation', mode: 'code', active: false }));
   assert.deepEqual((await s.loadEvents(c.id)).map((e) => e.type), ['run_start']);
 });
+
+test('컨텍스트 사용량은 대화 정보로 저장되고, 압축 경계는 기록에 남는다', async () => {
+  const a = new ConversationStoreService();
+  await a.ready;
+  const c = a.create('chat', '/ws-ctx', '구조 설명해줘');
+  a.setContext(c.id, { tokens: 90_000, max: 200_000, pct: 45, at: 1 });
+  a.append(c.id, ev({ type: 'context_usage', mode: 'chat', conversationId: c.id, context: { tokens: 1, max: 2, pct: 50, at: 1 } }));
+  a.append(c.id, ev({ type: 'compacted', trigger: 'manual', preTokens: 90_000, postTokens: 9_000 }));
+  await a.flush();
+
+  const b = new ConversationStoreService();
+  await b.ready;
+  assert.deepEqual(b.get(c.id)?.context, { tokens: 90_000, max: 200_000, pct: 45, at: 1 });
+  assert.deepEqual((await b.loadEvents(c.id)).map((e) => e.type), ['compacted']);
+});

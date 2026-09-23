@@ -66,3 +66,9 @@ test('스트리밍 없이 온 메시지는 전처럼 글을 내보낸다', () =>
   send(assistant('m5', '안녕'));
   assert.deepEqual(texts('assistant_text'), ['안녕', '안녕']);
 });
+
+test('압축 경계(compact_boundary)를 compacted 이벤트로', () => {
+  const { send, events } = setup();
+  send({ type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'auto', pre_tokens: 150_000, post_tokens: 12_000 } });
+  assert.deepEqual(events, [{ type: 'compacted', trigger: 'auto', preTokens: 150_000, postTokens: 12_000 }]);
+});

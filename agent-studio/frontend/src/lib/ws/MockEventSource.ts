@@ -288,7 +288,7 @@ function buildCodeScript(prompt: string, attachments: Attachment[], continued: b
   push(0, { type: 'run_start', command: prompt, workspace: '~/study/agent-studio/workspace', attachments, mode: 'code', continued, planFirst });
   push(0, { type: 'session', model: 'claude-sonnet-5 (mock)' });
   push(0, { type: 'log', agent: 'system', text: `코드 명령 접수: ${prompt}${continued ? ' (이어서)' : ''}` });
-  if (!continued) push(100, { type: 'conversation', mode: 'code', active: true });
+  if (!continued) push(100, { type: 'conversation', mode: 'code', active: true, id: 'mock-code', title: prompt });
   steps.push(...streamText(100, 450, '먼저 인증 라우트와 기존 검증 코드를 확인하겠습니다.'));
   push(500, { type: 'log', agent: 'system', text: '파일 읽는 중: src/routes/auth.js' });
   push(500, { type: 'tx', event: { t: 'tool_start', id: 'mock-read', agent: 'main', tool: 'Read', label: '파일 읽기: src/routes/auth.js', detail: { kind: 'read', path: 'src/routes/auth.js' } } });
@@ -393,7 +393,7 @@ function buildChatScript(prompt: string, attachments: Attachment[], continued: b
     { delay: 0, event: { type: 'run_start', command: prompt, workspace: '~/study/agent-studio/workspace', attachments, mode: 'chat', continued } },
     { delay: 0, event: { type: 'session', model: 'claude-sonnet-5 (mock)' } },
     { delay: 0, event: { type: 'log', agent: 'system', text: `채팅 접수: ${prompt}${continued ? ' (이어서)' : ''}` } },
-    ...(continued ? [] : [{ delay: 100, event: { type: 'conversation', mode: 'chat', active: true } as AgentSimEvent }]),
+    ...(continued ? [] : [{ delay: 100, event: { type: 'conversation', mode: 'chat', active: true, id: 'mock-chat', title: prompt } as AgentSimEvent }]),
     { delay: 700, event: { type: 'log', agent: 'system', text: '파일 읽는 중: src/routes/auth.js' } },
     { delay: 700, event: { type: 'tx', event: { t: 'tool_start', id: 'mock-chat-read', agent: 'main', tool: 'Read', label: '파일 읽기', detail: { kind: 'read', path: 'src/routes/auth.js' } } } },
     { delay: 1000, event: { type: 'tx', event: { t: 'tool_done', id: 'mock-chat-read', ok: true } } },
@@ -481,6 +481,8 @@ export class MockEventSource implements AgentEventSource {
   private alwaysAllow = false;
   /** 모드별로 이어갈 대화가 있는지 (Live 서버의 세션 기억을 흉내) */
   private conversations: Partial<Record<RunMode, boolean>> = {};
+  /** 데모용 컨텍스트 사용량 (명령마다 늘고 압축하면 줄어든다) */
+  private contextPct: Partial<Record<RunMode, number>> = {};
   private running = false;
 
   connect(onEvent: (evt: AgentSimEvent) => void) {
@@ -495,6 +497,10 @@ export class MockEventSource implements AgentEventSource {
 
   sendCommand(prompt: string, agents: AgentDef[], attachments: Attachment[] = [], mode: RunMode = 'code', opts: { planFirst?: boolean } = {}) {
     if (!this.onEvent) return;
+    if (/^\/compact\b/i.test(prompt.trim()) && (mode === 'code' || mode === 'chat')) {
+      this.compact(mode);
+      return;
+    }
     if (/^\/[a-zA-Z]/.test(prompt.trim())) {
       this.handleSlash(prompt.trim(), agents);
       return;
@@ -509,7 +515,10 @@ export class MockEventSource implements AgentEventSource {
       const script = mode === 'code' ? buildCodeScript(prompt, attachments, continued, !!opts.planFirst) : buildChatScript(prompt, attachments, continued);
       this.schedule(script, (evt) => {
         if (evt.type === 'permission_request') this.pendingPermission = evt.request.id;
-        if (evt.type === 'run_done') this.running = false;
+        if (evt.type === 'run_done') {
+          this.running = false;
+          this.reportContext(mode, Math.min(96, (this.contextPct[mode] ?? 8) + 38));
+        }
         return true;
       });
       return;
@@ -528,6 +537,37 @@ export class MockEventSource implements AgentEventSource {
       }
       return true;
     });
+  }
+
+  private reportContext(mode: RunMode, pct: number) {
+    this.contextPct[mode] = pct;
+    const max = 200_000;
+    this.onEvent?.({ type: 'context_usage', mode, id: `mock-${mode}`, context: { tokens: Math.round((max * pct) / 100), max, pct, at: Date.now() } });
+  }
+
+  /** 데모 대화 압축: 요약했다는 경계를 남기고 게이지를 줄인다 */
+  private compact(mode: RunMode) {
+    if (!this.conversations[mode]) {
+      this.onEvent?.({ type: 'log', agent: 'system', text: '압축할 대화가 없습니다. 먼저 명령을 실행하세요.' });
+      return;
+    }
+    const pre = Math.round((200_000 * (this.contextPct[mode] ?? 40)) / 100);
+    this.clearTimers();
+    this.running = true;
+    this.schedule(
+      [
+        { delay: 0, event: { type: 'run_start', command: '/compact', workspace: '~/study/agent-studio/workspace', attachments: [], mode, continued: true } },
+        { delay: 900, event: { type: 'tx', event: { t: 'compacted', trigger: 'manual', preTokens: pre, postTokens: 9_400 } } },
+        { delay: 1000, event: { type: 'run_done', result: { ok: true, result: '', costUsd: 0.0041, turns: 1, durationMs: 1000 } } },
+      ],
+      (evt) => {
+        if (evt.type === 'run_done') {
+          this.running = false;
+          this.reportContext(mode, 5);
+        }
+        return true;
+      },
+    );
   }
 
   followUp(prompt: string) {
