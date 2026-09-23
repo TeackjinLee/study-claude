@@ -85,3 +85,22 @@ test('컨텍스트 사용량은 대화 정보로 저장되고, 압축 경계는 
   assert.deepEqual(b.get(c.id)?.context, { tokens: 90_000, max: 200_000, pct: 45, at: 1 });
   assert.deepEqual((await b.loadEvents(c.id)).map((e) => e.type), ['compacted']);
 });
+
+test('/talk 세션은 재시작 뒤에도 에이전트별로 이어가고, 다른 작업 폴더나 /clear 뒤에는 이어가지 않는다', async () => {
+  const a = new ConversationStoreService();
+  await a.ready;
+  a.setTalkSession('gameplay', { sessionId: 'talk-1', workspaceDir: '/ws-talk' });
+  await a.flush();
+
+  const b = new ConversationStoreService();
+  await b.ready;
+  assert.equal(b.talkSession('gameplay', '/ws-talk'), 'talk-1');
+  assert.equal(b.talkSession('gameplay', '/other'), undefined);
+  assert.equal(b.talkSession('world', '/ws-talk'), undefined);
+  b.clearTalkSessions();
+  await b.flush();
+
+  const c = new ConversationStoreService();
+  await c.ready;
+  assert.equal(c.talkSession('gameplay', '/ws-talk'), undefined);
+});

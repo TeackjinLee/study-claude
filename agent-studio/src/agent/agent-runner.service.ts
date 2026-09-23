@@ -50,6 +50,8 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 /** 직접 대화(/talk)에서 에이전트에게 주지 않는 도구. 서브에이전트 호출과 할 일 목록은 총괄 실행에서만 쓴다 */
 const TALK_ALWAYS_DISALLOWED = ['Agent', 'Task', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskOutput', 'TaskStop', 'Skill', 'EnterPlanMode', 'ExitPlanMode'];
+/** 이 중 하나라도 있는 에이전트와 /talk 하면 실행 되돌리기용 스냅샷을 찍는다 */
+const TALK_WRITE_TOOLS = new Set<string>(['Edit', 'Write', 'Bash']);
 /** 에이전트 정의의 tools에 없으면 막는 도구 (편집기의 체크박스에 대응) */
 const TALK_GATED_TOOLS: Record<string, string[]> = {
   Edit: ['Edit', 'MultiEdit', 'NotebookEdit'],
@@ -122,10 +124,9 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
   private live: { input: InputQueue<SDKUserMessage>; completion: RunCompletion; query: Query | null } | null = null;
   /** 지금 실행 중인 명령이 쓰는 첨부 파일 (자동 정리에서 제외하려고 기억) */
   private currentAttachments: Attachment[] = [];
-  /** /talk 직접 대화: 진행 중인 대화의 중단 컨트롤러와, 에이전트별로 이어갈 세션 */
+  /** /talk 직접 대화: 진행 중인 대화의 중단 컨트롤러 (에이전트별로 이어갈 세션은 ConversationStore가 저장한다) */
   private talkAbort: AbortController | null = null;
   private talkAgent: string | null = null;
-  private talks = new Map<string, { sessionId: string; workspaceDir: string }>();
 
   constructor(
     private readonly registry: AgentRegistryService,
@@ -170,13 +171,13 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 모드별 이어가는 대화의 id·제목 (대화 화면 제목 표시용) */
+  /** 모드별 이어가는 대화의 id·제목 (대화 화면 제목 표시용, 코드·채팅만) */
   activeConversations(): Partial<Record<RunMode, { id: string; title: string; context?: ContextInfo }>> {
     const dir = this.settings.workspaceDir;
     const out: Partial<Record<RunMode, { id: string; title: string; context?: ContextInfo }>> = {};
     for (const m of RUN_MODES) {
       const meta = this.store.activeFor(m, dir);
-      if (meta) out[m] = { id: meta.id, title: meta.title, context: meta.context };
+      if (meta && runModeProfile(m).resumable) out[m] = { id: meta.id, title: meta.title, context: meta.context };
     }
     return out;
   }
@@ -210,7 +211,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
   /** 모드별로 지금 작업 폴더에서 이어갈 대화가 있는지 */
   conversations(): Record<RunMode, boolean> {
     const dir = this.settings.workspaceDir;
-    return Object.fromEntries(RUN_MODES.map((m) => [m, !!this.store.activeFor(m, dir)])) as Record<RunMode, boolean>;
+    // Cowork는 명령마다 새 대화라 "이어가는 대화"가 없다 (저장만 해서 지난 대화에서 다시 열어 본다)
+    return Object.fromEntries(RUN_MODES.map((m) => [m, runModeProfile(m).resumable && !!this.store.activeFor(m, dir)])) as Record<RunMode, boolean>;
   }
 
   /** 새 대화: 이 모드(없으면 코드·채팅 모두)의 이어갈 세션을 잊는다 */
@@ -258,7 +260,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
         clearHistory: () => {
           this.history = [];
           for (const m of RUN_MODES) this.store.setActive(m, undefined);
-          this.talks.clear();
+          this.store.clearTalkSessions();
         },
         emit: (e) => this.emit(e),
         talk: (agent, message, attachments) => this.talk(agent, message, attachments),
@@ -357,8 +359,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
 
     const workspaceDir = this.settings.workspaceDir;
     const settings = this.settings.get();
-    const prev = this.talks.get(agent.id);
-    const resume = prev?.workspaceDir === workspaceDir ? prev.sessionId : undefined;
+    const resume = this.store.talkSession(agent.id, workspaceDir);
     const abort = new AbortController();
     this.talkAbort = abort;
     this.talkAgent = agent.shortName;
@@ -371,7 +372,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     const mapper = new MessageMapper(
       (e) => {
         if (e.type === 'session') {
-          this.talks.set(agent.id, { sessionId: e.sessionId, workspaceDir });
+          this.store.setTalkSession(agent.id, { sessionId: e.sessionId, workspaceDir });
           return;
         }
         if (e.type === 'run_done') {
@@ -394,6 +395,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     this.emit({ type: 'agent_message', from: 'user', to: agent.id, mode: 'discuss', text: clip(shown, 1200) });
     this.emit({ type: 'agent_start', agent: agent.id, callId, task: oneLine(shown) });
     this.logger.log(`/talk @${agent.sdkName}: ${oneLine(message, 80)}${resume ? ' (이어서)' : ''}`);
+    // 실행 되돌리기: 파일을 고칠 수 있는 에이전트면 말하기 전 작업 폴더를 찍어 둔다
+    const before = agent.tools.some((t) => TALK_WRITE_TOOLS.has(t)) ? await this.checkpoints.capture() : null;
 
     try {
       const content = await buildPromptContent(workspaceDir, message, attachments);
@@ -436,6 +439,9 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
       return { ok: false, text };
     } finally {
       this.denyAllPending();
+      // 바뀐 파일이 있으면 "되돌리기"를 남긴다. 다음 명령이 끼어들기 전에(talkAbort를 풀기 전에) 찍는다
+      const checkpoint = before ? await this.recordCheckpoint(before, `/talk @${agent.sdkName} ${message}`) : null;
+      if (checkpoint) this.emit({ type: 'checkpoint', ...checkpoint });
       if (this.talkAbort === abort) {
         this.talkAbort = null;
         this.talkAgent = null;
@@ -463,8 +469,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     const settings = this.settings.get();
     const profile = runModeProfile(mode);
     const { resume, planFirst } = opts;
-    // 코드·채팅은 대화로 저장한다 (없으면 이 명령으로 새 대화를 만든다)
-    const conversation = profile.resumable ? (opts.conversation ?? this.store.create(mode, workspaceDir, prompt)) : undefined;
+    // 대화로 저장한다. 코드·채팅은 이어가는 대화에 붙이고(없으면 새로), Cowork는 명령마다 새 대화 (지난 대화에서 다시 열어 볼 수 있게)
+    const conversation = opts.conversation ?? this.store.create(mode, workspaceDir, prompt);
     this.recording = conversation?.id ?? null;
 
     // Codex 협업자: 등록돼 있고 로그인돼 있을 때만 총괄에게 도구로 붙인다 (Cowork 모드에서만 쓴다)
@@ -483,7 +489,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     const completion = new RunCompletion(() => {
       finishing = (async () => {
         // 세션이 닫히기 전에 컨텍스트 사용량을 잰다 (긴 대화 관리: 화면의 게이지와 압축 권유)
-        if (conversation && heldDone && !abort.signal.aborted) await this.measureContext(live.query, mode, conversation.id);
+        if (profile.resumable && heldDone && !abort.signal.aborted) await this.measureContext(live.query, mode, conversation.id);
         input.close();
         // 실행 후 스냅샷을 찍은 뒤에 "실행 중"을 푼다 (다음 실행이 먼저 시작되면 그 변경까지 섞인다)
         const checkpoint = before ? await this.recordCheckpoint(before, prompt, conversation?.id) : null;
@@ -501,10 +507,11 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
 
     const mapper = new MessageMapper(
       (e) => {
-        if (conversation && e.type === 'session') {
+        if (e.type === 'session') {
           const fresh = !conversation.sessionId;
           this.store.setSession(conversation.id, e.sessionId);
-          if (fresh) this.emit({ type: 'conversation', mode, active: true, id: conversation.id, title: conversation.title });
+          // 이어가는 대화가 생겼다고 알린다 (Cowork는 이어가지 않으므로 알리지 않는다)
+          if (fresh && profile.resumable) this.emit({ type: 'conversation', mode, active: true, id: conversation.id, title: conversation.title });
         }
         // 결과는 추가 지시까지 다 끝났을 때 한 번만 내보낸다 (RunCompletion이 판단)
         // 쓰는 중인 글 조각은 화면에만 보낸다 (블록이 끝나면 전체 글이 따로 기록된다)

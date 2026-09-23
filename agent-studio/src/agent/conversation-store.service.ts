@@ -28,11 +28,18 @@ interface ConversationFile extends ConversationMeta {
   events: UiEvent[];
 }
 
+export interface TalkSession {
+  sessionId: string;
+  workspaceDir: string;
+}
+
 /** 모드별로 지금 이어가는 대화 */
 type ActiveMap = Partial<Record<RunMode, string>>;
 
 const DIR = join(dirname(config.costFile), 'conversations');
 const ACTIVE_FILE = join(DIR, 'active.json');
+/** /talk 직접 대화: 에이전트별로 이어갈 세션 (서버를 재시작해도 이어서 말한다) */
+const TALKS_FILE = join(DIR, 'talks.json');
 /** 대화 하나에 남기는 이벤트 수. 넘으면 오래된 것부터 버린다 */
 const MAX_EVENTS = 5000;
 /**
@@ -45,7 +52,7 @@ const FLUSH_DELAY_MS = 800;
 const isId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f-]{36}$/.test(v);
 
 /**
- * 코드·채팅 대화를 data/conversations/<id>.json 에 저장한다.
+ * 코드·채팅·Cowork 대화를 data/conversations/<id>.json 에 저장한다 (Cowork는 명령마다 새 대화, 다시 열어 보기만 한다).
  * 서버를 재시작해도 이어서 대화하고(세션 id), 지난 대화를 골라 다시 열 수 있게(이벤트 기록) 한다.
  */
 @Injectable()
@@ -56,6 +63,7 @@ export class ConversationStoreService implements OnModuleInit {
   private readonly events = new Map<string, UiEvent[]>();
   private readonly dirty = new Set<string>();
   private active: ActiveMap = {};
+  private talks: Record<string, TalkSession> = {};
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private writing: Promise<void> = Promise.resolve();
   /** 다른 서비스(러너)가 저장된 대화를 읽기 전에 기다린다 */
@@ -80,6 +88,12 @@ export class ConversationStoreService implements OnModuleInit {
     try {
       const raw = JSON.parse(await readFile(ACTIVE_FILE, 'utf8')) as ActiveMap;
       for (const [mode, id] of Object.entries(raw)) if (isId(id) && this.metas.has(id)) this.active[mode as RunMode] = id;
+    } catch {
+      // 처음 실행
+    }
+    try {
+      const raw = JSON.parse(await readFile(TALKS_FILE, 'utf8')) as Record<string, TalkSession>;
+      for (const [agent, t] of Object.entries(raw)) if (typeof t?.sessionId === 'string' && typeof t.workspaceDir === 'string') this.talks[agent] = t;
     } catch {
       // 처음 실행
     }
@@ -139,6 +153,23 @@ export class ConversationStoreService implements OnModuleInit {
     this.markDirty(id);
   }
 
+  /** /talk 로 이 에이전트와 이어갈 세션 (같은 작업 폴더일 때만) */
+  talkSession(agentId: string, workspaceDir: string): string | undefined {
+    const t = this.talks[agentId];
+    return t?.workspaceDir === workspaceDir ? t.sessionId : undefined;
+  }
+
+  setTalkSession(agentId: string, session: TalkSession) {
+    this.talks[agentId] = session;
+    this.scheduleFlush();
+  }
+
+  /** /clear: 에이전트들과의 직접 대화를 모두 잊는다 */
+  clearTalkSessions() {
+    this.talks = {};
+    this.scheduleFlush();
+  }
+
   /** 실행 중 이벤트를 대화 기록에 붙인다 */
   append(id: string, event: UiEvent) {
     if (SKIP_EVENTS.has(event.type)) return;
@@ -194,6 +225,7 @@ export class ConversationStoreService implements OnModuleInit {
     const ids = [...this.dirty];
     this.dirty.clear();
     const active = { ...this.active };
+    const talks = { ...this.talks };
     this.writing = this.writing
       .then(async () => {
         for (const id of ids) {
@@ -203,6 +235,7 @@ export class ConversationStoreService implements OnModuleInit {
           await atomicWrite(join(DIR, `${id}.json`), JSON.stringify(file));
         }
         await atomicWrite(ACTIVE_FILE, JSON.stringify(active));
+        await atomicWrite(TALKS_FILE, JSON.stringify(talks));
       })
       .catch((err: unknown) => this.logger.error(`대화 저장 실패: ${(err as Error).message}`));
     return this.writing;

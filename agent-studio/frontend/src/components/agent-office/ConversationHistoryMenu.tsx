@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAgentStore } from '@/store/agentStore';
 import { conversationsApi, type ConversationMeta } from '@/lib/conversations';
-import { ChatIcon, ClockIcon, CodeIcon, TrashIcon } from '@/components/ui/icons';
+import { ChatIcon, ClockIcon, CodeIcon, CoworkIcon, TrashIcon } from '@/components/ui/icons';
 
 /** "3분 전", "어제 14:05" 같은 짧은 시각 */
 function ago(at: number) {
@@ -21,7 +21,7 @@ function ago(at: number) {
 
 /**
  * 대화 화면 머리의 "지난 대화" 버튼과 목록.
- * 서버(data/conversations)에 저장된 코드·채팅 대화를 최근 순으로 보여주고, 골라서 이어가거나 지운다.
+ * 서버(data/conversations)에 저장된 코드·채팅·Cowork 대화를 최근 순으로 보여주고, 골라서 이어가거나(Cowork는 다시 열어 보기) 지운다.
  */
 export function ConversationHistoryMenu() {
   const [open, setOpen] = useState(false);
@@ -106,14 +106,14 @@ export function ConversationHistoryMenu() {
       </button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 flex max-h-[60vh] w-[min(380px,80vw)] flex-col overflow-hidden rounded-xl border border-line-strong bg-[#0a1428] shadow-[0_12px_32px_rgba(0,0,0,0.55)]">
-          <p className="border-b border-line px-3 py-2 text-[11px] text-muted">지금 작업 폴더의 코드·채팅 대화 · 누르면 이어서 대화합니다</p>
+          <p className="border-b border-line px-3 py-2 text-[11px] text-muted">지금 작업 폴더의 대화 · 누르면 이어서 대화합니다 (Cowork는 기록만 다시 엽니다)</p>
           {error && <p className="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] text-red-300">{error}</p>}
           <ul className="min-h-0 flex-1 overflow-y-auto py-1">
             {items === null && !error && <li className="px-3 py-3 text-[12px] text-slate-500">불러오는 중…</li>}
             {items?.length === 0 && <li className="px-3 py-3 text-[12px] text-slate-500">아직 저장된 대화가 없습니다.</li>}
             {items?.map((c) => {
               const active = activeIds.has(c.id);
-              const Icon = c.mode === 'chat' ? ChatIcon : CodeIcon;
+              const Icon = c.mode === 'chat' ? ChatIcon : c.mode === 'cowork' ? CoworkIcon : CodeIcon;
               return (
                 <li key={c.id} className={`group flex items-center gap-2 px-2 ${active ? 'bg-accent/10' : 'hover:bg-white/[0.04]'}`}>
                   <button
@@ -127,6 +127,7 @@ export function ConversationHistoryMenu() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[12px] font-semibold text-slate-100">{c.title}</span>
                       <span className="block text-[10px] text-muted">
+                        {c.mode === 'cowork' && 'Cowork · '}
                         {ago(c.updatedAt)} · 명령 {c.runs}개 · ${c.costUsd.toFixed(4)}
                         {active && <span className="text-emerald-300"> · 이어가는 중</span>}
                       </span>
