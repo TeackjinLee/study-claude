@@ -13,6 +13,7 @@ import { TaskGraphPanel } from '@/components/agent-office/TaskGraphPanel';
 import { ResultsPanel } from '@/components/agent-office/ResultsPanel';
 import { ConversationPanel } from '@/components/agent-office/ConversationPanel';
 import { PermissionBanner } from '@/components/agent-office/PermissionBanner';
+import { KeyboardShortcuts } from '@/components/agent-office/KeyboardShortcuts';
 import { CenterViewTabs } from '@/components/agent-office/CenterViewTabs';
 import { AgentEditorDialog } from '@/components/agent-office/AgentEditorDialog';
 import { ChoiceDialog } from '@/components/agent-office/ChoiceDialog';
@@ -38,6 +39,7 @@ export default function AgentManagementPage() {
 
   return (
     <div className="h-full w-full overflow-y-auto p-3 xl:overflow-hidden">
+      <KeyboardShortcuts />
       <div className="grid min-h-full gap-3 xl:h-full xl:grid-cols-[270px_minmax(0,1fr)_350px] xl:grid-rows-1">
         <div className="flex min-h-0 flex-col gap-3 xl:h-full">
           <div className="min-h-[420px] xl:min-h-0 xl:flex-1 flex flex-col">

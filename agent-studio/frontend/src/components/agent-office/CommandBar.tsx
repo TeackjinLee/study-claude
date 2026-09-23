@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAgentStore } from '@/store/agentStore';
 import { ACCEPT, MAX_FILES, MAX_FILE_BYTES, formatBytes, isImageFile, uploadFiles, type Attachment } from '@/lib/uploads';
-import { ChatIcon, ClaudeMarkIcon, CodeIcon, CodexMarkIcon, CoworkIcon, ListChecksIcon, MicIcon, PaperclipIcon, PlusIcon, SendIcon, StopIcon, TerminalIcon, XIcon } from '@/components/ui/icons';
+import { ChatIcon, ClaudeMarkIcon, CodeIcon, CodexMarkIcon, CoworkIcon, KeyboardIcon, ListChecksIcon, MicIcon, PaperclipIcon, PlusIcon, SendIcon, StopIcon, TerminalIcon, XIcon } from '@/components/ui/icons';
 import { AgentAvatar } from './AgentAvatar';
 import { CommandControls } from './CommandControls';
 import { useSpeechInput } from '@/lib/useSpeechInput';
@@ -11,6 +11,8 @@ import type { RunMode } from '@/lib/ws';
 import { AttachmentChips } from './AttachmentChips';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { FileMentionMenu } from './FileMentionMenu';
+import { OPEN_SHORTCUTS_EVENT } from './KeyboardShortcuts';
+import { addToHistory, loadDraft, loadHistory, onFirstLine, onLastLine, saveDraft, saveHistory, stepHistory } from '@/lib/inputHistory';
 
 const QUICK_COMMANDS = ['택시 차종 추가해줘', '트럭 제동 거리 튜닝해줘', '헤드리스 검증 4종 돌려줘', '도시에 신호등 교차로 추가해줘'];
 
@@ -70,6 +72,46 @@ export function CommandBar() {
   const registerFileKeyHandler = useCallback((h: ((e: React.KeyboardEvent) => boolean) | null) => {
     fileKeyHandler.current = h;
   }, []);
+  /** 입력 기록(↑/↓): 보낸 명령들과, 기록을 보는 중인 위치(-1 = 안 봄), 기록을 보기 전에 쓰던 글 */
+  const history = useRef<string[]>([]);
+  const historyIndex = useRef(-1);
+  const historyDraft = useRef('');
+  /** 새로고침·서버 재시작에도 쓰던 명령이 남게 초안을 되살린다 (마운트 뒤에 읽어야 하이드레이션이 깨지지 않는다) */
+  const draftLoaded = useRef(false);
+  useEffect(() => {
+    history.current = loadHistory();
+    const draft = loadDraft();
+    if (draft) setValue((v) => v || draft);
+    draftLoaded.current = true;
+  }, []);
+  useEffect(() => {
+    if (!draftLoaded.current) return;
+    const t = setTimeout(() => saveDraft(value), 300);
+    return () => clearTimeout(t);
+  }, [value]);
+  const remember = (text: string) => {
+    history.current = addToHistory(history.current, text);
+    saveHistory(history.current);
+    historyIndex.current = -1;
+    saveDraft('');
+  };
+  /** ↑/↓로 기록 불러오기. 불러왔으면 true */
+  const browseHistory = (dir: 'up' | 'down', el: HTMLTextAreaElement): boolean => {
+    const list = history.current;
+    const caretAt = el.selectionStart;
+    if (el.selectionEnd !== caretAt) return false;
+    if (dir === 'up' && (!onFirstLine(value, caretAt) || list.length === 0)) return false;
+    if (dir === 'down' && (!onLastLine(value, caretAt) || historyIndex.current < 0)) return false;
+    if (historyIndex.current < 0) historyDraft.current = value;
+    const next = stepHistory(list.length, historyIndex.current, dir);
+    if (next === historyIndex.current) return true;
+    historyIndex.current = next;
+    const text = next < 0 ? historyDraft.current : list[list.length - 1 - next];
+    setValue(text);
+    setCaret(text.length);
+    requestAnimationFrame(() => textarea.current?.setSelectionRange(text.length, text.length));
+    return true;
+  };
   /** 입력창 커서 위치 (@파일 자동완성이 커서 앞의 @검색어를 본다) */
   const [caret, setCaret] = useState(0);
   const pickFile = useCallback((next: string, pos: number) => {
@@ -183,6 +225,7 @@ export function CommandBar() {
       }
       if (!prompt) return;
       sendFollowUp(prompt);
+      remember(prompt);
       setValue('');
       return;
     }
@@ -203,6 +246,7 @@ export function CommandBar() {
     // 에이전트에게 직접 말하기: 슬래시 명령이 아니면 /talk 로 감싼다
     if (talkDef && !prompt.startsWith('/')) sendCommand(`/talk @${talkDef.sdkName} ${prompt}`, attachments);
     else sendCommand(prompt, attachments);
+    remember(prompt);
     setValue('');
     setPending([]);
   };
@@ -369,12 +413,23 @@ export function CommandBar() {
             ref={textarea}
             value={value}
             onChange={(e) => {
+              historyIndex.current = -1;
               setValue(e.target.value);
               setCaret(e.target.selectionStart);
             }}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
             onKeyDown={(e) => {
+              // 기록을 보는 중이면 ↑/↓는 메뉴보다 기록이 먼저 (불러온 /명령에 슬래시 메뉴가 떠도 계속 넘길 수 있게)
+              const arrow = !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey && !e.nativeEvent.isComposing && (e.key === 'ArrowUp' ? 'up' : e.key === 'ArrowDown' ? 'down' : null);
+              if (arrow && historyIndex.current >= 0 && browseHistory(arrow, e.currentTarget)) {
+                e.preventDefault();
+                return;
+              }
               if (fileKeyHandler.current?.(e) || menuKeyHandler.current?.(e)) {
+                e.preventDefault();
+                return;
+              }
+              if (arrow && browseHistory(arrow, e.currentTarget)) {
                 e.preventDefault();
                 return;
               }
@@ -490,7 +545,18 @@ export function CommandBar() {
         <CommandControls />
 
         <div>
-          <p className="mb-1.5 text-[11px] text-muted">{suggestions.length ? '다음 추천 작업 — 누르면 입력창에 채워집니다' : '예시 명령어'}</p>
+          <div className="mb-1.5 flex items-center gap-2">
+            <p className="min-w-0 truncate text-[11px] text-muted">{suggestions.length ? '다음 추천 작업 — 누르면 입력창에 채워집니다' : '예시 명령어'}</p>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event(OPEN_SHORTCUTS_EVENT))}
+              title="단축키 보기 (입력창 밖에서 ?)"
+              className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] text-slate-500 hover:text-slate-200"
+            >
+              <KeyboardIcon className="h-3.5 w-3.5" />
+              단축키
+            </button>
+          </div>
           <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
             {suggestions.length
               ? suggestions.map((cmd) => (

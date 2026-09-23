@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, type ReactNode } from 'react';
+import { CopyButton } from '@/components/ui/CopyButton';
 
 /**
  * Claude 답을 읽기 좋게 보여주는 작은 마크다운 렌더러 (의존성 없이).
@@ -101,9 +102,10 @@ export function Markdown({ text, className = '' }: { text: string; className?: s
         switch (b.t) {
           case 'code':
             return (
-              <pre key={i} className="overflow-x-auto rounded-lg border border-line bg-[#060d1a] px-3 py-2 font-mono text-[12px] leading-5 text-slate-200">
-                {b.text}
-              </pre>
+              <div key={i} className="group/code relative">
+                <pre className="overflow-x-auto rounded-lg border border-line bg-[#060d1a] px-3 py-2 font-mono text-[12px] leading-5 text-slate-200">{b.text}</pre>
+                <CopyButton text={b.text} className="absolute right-1.5 top-1.5 opacity-0 focus:opacity-100 group-hover/code:opacity-100" />
+              </div>
             );
           case 'heading':
             return (

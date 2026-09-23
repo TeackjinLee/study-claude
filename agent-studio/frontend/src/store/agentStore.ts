@@ -132,6 +132,8 @@ interface AgentStoreState {
   /** Master가 마지막으로 한 말 (사무실 말풍선용) */
   masterSay: { to: AgentRole; text: string; at: number } | null;
   interrupt: () => void;
+  /** 마지막 실행을 같은 명령·첨부·모드로 다시 실행 (오류·중단 뒤) */
+  retryLastRun: () => void;
   replyPermission: (id: string, allowed: boolean, always: boolean | 'all') => void;
   selectAgent: (id: AgentRole) => void;
   openEditor: (target: Exclude<EditorTarget, null>) => void;
@@ -331,6 +333,12 @@ export const useAgentStore = create<AgentStoreState>((set, get) => {
     masterSay: null,
 
     interrupt: () => get().source?.interrupt(),
+
+    retryLastRun: () => {
+      const { run, running } = get();
+      if (!run || running) return;
+      get().sendCommand(run.command, run.attachments, run.mode);
+    },
 
     replyPermission: (id, allowed, always) => {
       get().source?.replyPermission(id, allowed, always);

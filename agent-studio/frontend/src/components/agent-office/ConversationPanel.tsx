@@ -5,7 +5,8 @@ import { useAgentStore } from '@/store/agentStore';
 import type { TxItem } from '@/store/transcript';
 import type { ToolDetail, TxAgent } from '@/lib/ws';
 import { lineDiff } from '@/lib/lineDiff';
-import { ChatIcon, ChevronDownIcon, ClaudeMarkIcon, UserIcon } from '@/components/ui/icons';
+import { ChatIcon, ChevronDownIcon, ClaudeMarkIcon, RetryIcon, UserIcon } from '@/components/ui/icons';
+import { CopyButton } from '@/components/ui/CopyButton';
 import { AgentAvatar } from './AgentAvatar';
 import { Markdown } from './Markdown';
 import { ConversationHistoryMenu } from './ConversationHistoryMenu';
@@ -38,11 +39,23 @@ export function ConversationPanel() {
   // 새 승인 요청은 위로 올려 읽는 중이어도 보이게 끌어내린다 (답해야 실행이 이어진다)
   const pendingCount = useAgentStore((s) => s.permissions.length);
   const lastPending = useRef(0);
+  /** 위로 올려 읽는 동안 새 글이 왔는지 → "새 메시지" 버튼 */
+  const [unseen, setUnseen] = useState(false);
+  const toBottom = () => {
+    const el = scroller.current;
+    stick.current = true;
+    setUnseen(false);
+    el?.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  };
+  const lastItems = useRef(items);
   useLayoutEffect(() => {
     const el = scroller.current;
     if (pendingCount > lastPending.current) stick.current = true;
     lastPending.current = pendingCount;
+    const changed = lastItems.current !== items;
+    lastItems.current = items;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
+    else if (changed && items.length > 0) setUnseen(true);
   }, [items, running, pendingCount]);
 
   const totals = useMemo(() => {
@@ -58,10 +71,22 @@ export function ConversationPanel() {
   }, [items]);
 
   const last = items[items.length - 1];
+  const retry = useAgentStore((s) => s.retryLastRun);
+  /** 마지막 명령이 실패·중단으로 끝났으면 "다시 시도" (결과 뒤의 되돌리기 기록은 건너뛰고 본다) */
+  const canRetry = useMemo(() => {
+    if (running || !run) return false;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (it.kind === 'result') return !it.ok;
+      if (it.kind === 'notice') return true;
+      if (it.kind === 'user') return false;
+    }
+    return false;
+  }, [items, running, run]);
   const waiting = running && pendingCount === 0 && !(last?.kind === 'tool' && last.status === 'running') && !(last?.kind === 'agent' && last.status === 'running');
 
   return (
-    <section className="panel flex h-full min-h-0 flex-col overflow-hidden">
+    <section className="panel relative flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 text-[12px]">
         <ChatIcon className="h-4 w-4 shrink-0 text-blue-300" />
         <span className="shrink-0 font-bold text-white">대화</span>
@@ -93,6 +118,7 @@ export function ConversationPanel() {
         onScroll={(e) => {
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+          if (stick.current) setUnseen(false);
         }}
         className="min-h-0 flex-1 overflow-y-auto bg-[#08101f] px-4 py-3"
       >
@@ -117,9 +143,31 @@ export function ConversationPanel() {
                 생각하는 중…
               </li>
             )}
+            {canRetry && run && (
+              <li className="pl-8">
+                <button
+                  type="button"
+                  onClick={retry}
+                  title={`같은 명령을 다시 실행합니다${run.attachments.length ? ` (첨부 ${run.attachments.length}개 포함)` : ''}: ${run.command}`}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[12px] font-semibold text-slate-200 hover:border-accent/60 hover:text-white"
+                >
+                  <RetryIcon className="h-3.5 w-3.5" />
+                  다시 시도
+                </button>
+              </li>
+            )}
           </ol>
         )}
       </div>
+      {unseen && (
+        <button
+          type="button"
+          onClick={toBottom}
+          className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-accent/60 bg-[#0a1428]/95 px-3 py-1 text-[11px] font-semibold text-blue-100 shadow-[0_6px_18px_rgba(0,0,0,0.5)] hover:bg-accent/20"
+        >
+          ↓ 새 메시지
+        </button>
+      )}
     </section>
   );
 }
@@ -165,7 +213,10 @@ function TxRow({ item }: { item: TxItem }) {
 
     case 'text':
       return (
-        <div className="flex items-start gap-2">
+        <div className="group/text relative flex items-start gap-2">
+          {item.draft === undefined && item.text && (
+            <CopyButton text={item.text} className="absolute right-0 top-0 z-[1] opacity-0 focus:opacity-100 group-hover/text:opacity-100" />
+          )}
           <Who agent={item.agent} />
           <div className="min-w-0 flex-1 pt-0.5">
             {item.agent !== 'main' && <p className="mb-0.5 text-[11px] font-semibold text-slate-400">{whoName(item.agent, names)}</p>}
