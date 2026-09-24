@@ -63,6 +63,16 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
       const context = contextOf(evt.context);
       return context && typeof evt.conversationId === 'string' ? [{ type: 'context_usage', mode, id: evt.conversationId, context }] : [];
     }
+    case 'notice': {
+      const text = String(evt.text ?? '');
+      const tone = evt.tone === 'warn' ? 'warn' : 'error';
+      return text
+        ? [
+            { type: 'tx', event: { t: 'notice', tone, text } },
+            { type: 'log', agent: 'system', text: `⚠ ${text}` },
+          ]
+        : [];
+    }
     case 'compacted': {
       const trigger = evt.trigger === 'auto' ? 'auto' : 'manual';
       const postTokens = typeof evt.postTokens === 'number' ? evt.postTokens : undefined;

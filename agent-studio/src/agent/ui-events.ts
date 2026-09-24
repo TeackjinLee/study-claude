@@ -84,6 +84,8 @@ export type UiEventBody =
   /** suggestions: 총괄이 요약 끝에 붙인 다음 추천 명령 (명령 입력창의 버튼으로 표시) */
   | { type: 'run_done'; ok: boolean; result: string; costUsd: number; turns: number; durationMs: number; suggestions?: string[] }
   | { type: 'run_error'; message: string }
+  /** 실행을 끝내지는 않지만 사용자가 바로 알아야 할 문제 (예: Codex 모델 설정 오류) */
+  | { type: 'notice'; tone: 'error' | 'warn'; text: string }
   /** 실행이 끝났고 파일이 바뀌었음 → "이 실행 되돌리기" 버튼 (id로 되돌린다) */
   | { type: 'checkpoint'; id: string; files: CheckpointFile[] }
   /** 되돌리기 결과. complete면 이 실행의 변경을 전부 되돌렸다 */

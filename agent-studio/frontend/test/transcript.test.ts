@@ -141,3 +141,12 @@ test('사무실에서 에이전트에게 직접 한 말은 대상이 붙은 사�
   const items = run([{ t: 'user_to', agent: 'plan', text: '안녕?' }]);
   assert.ok(items[0].kind === 'user' && items[0].to === 'plan' && items[0].text === '안녕?');
 });
+
+test('실행 도중 알림(notice)은 도는 중인 도구를 멈춘 것으로 바꾸지 않는다', () => {
+  const items = run([
+    { t: 'tool_start', id: 't1', agent: 'main', tool: 'Bash', label: 'npm test' },
+    { t: 'notice', tone: 'error', text: 'Codex 모델을 쓸 수 없습니다' },
+  ]);
+  assert.deepEqual(kinds(items), ['tool', 'notice']);
+  assert.ok(items[0].kind === 'tool' && items[0].status === 'running');
+});

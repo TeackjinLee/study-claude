@@ -36,6 +36,21 @@ const AUTO_ALLOWED_TOOLS = new Set([
 type AlwaysScope = boolean | 'all';
 
 const MAX_HISTORY = 3000;
+/** 중지를 누른 뒤 부드럽게 멈추기(interrupt)를 기다리는 시간. 넘기면 프로세스를 끊는다 */
+const STOP_GRACE_MS = 8000;
+
+/** 실행 중인 명령: 추가 지시를 넣을 입력 큐, 종료 판정, SDK 세션, 중지 상태 */
+interface LiveRun {
+  input: InputQueue<SDKUserMessage>;
+  completion: RunCompletion;
+  query: Query | null;
+  /** Codex 협업자 호출만 따로 끊는다 (부드럽게 멈추는 동안에도 Codex가 파일을 계속 고치지 않게) */
+  codexAbort: AbortController;
+  /** 사용자가 중지를 눌렀다 */
+  stopping: boolean;
+  /** 중지 뒤 멈춘 턴의 결과(비용 포함)를 받았다 */
+  stopped: boolean;
+}
 /** 실행 끝에 컨텍스트 사용량을 기다리는 최대 시간 (늦으면 재지 않고 끝낸다) */
 const CONTEXT_TIMEOUT_MS = 4000;
 
@@ -122,7 +137,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
   /** 지금 실행의 이벤트를 기록하는 대화 (코드·채팅). 이어가는 세션 자체는 ConversationStore가 모드별로 기억한다 */
   private recording: string | null = null;
   /** 실행 중인 명령의 입력 큐와 종료 판정. 추가 지시(followUp)를 여기로 끼워 넣는다 */
-  private live: { input: InputQueue<SDKUserMessage>; completion: RunCompletion; query: Query | null } | null = null;
+  private live: LiveRun | null = null;
   /** 지금 실행 중인 명령이 쓰는 첨부 파일 (자동 정리에서 제외하려고 기억) */
   private currentAttachments: Attachment[] = [];
   /** /talk 직접 대화: 진행 중인 대화의 중단 컨트롤러 (에이전트별로 이어갈 세션은 ConversationStore가 저장한다) */
@@ -320,10 +335,29 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
       return true;
     }
     this.logger.log('사용자가 작업을 중지했습니다.');
-    this.live?.input.close();
-    this.abort.abort();
+    const abort = this.abort;
+    const live = this.live;
     this.codexBridge.cancelDirect();
     this.denyAllPending();
+    const hardStop = () => {
+      live?.input.close();
+      abort.abort();
+    };
+    if (!live?.query || live.stopping) {
+      hardStop();
+      return true;
+    }
+    // 부드럽게 멈춘다: 지금 턴을 끝내게 하면 결과 메시지(비용 포함)가 와서 비용 기록이 남는다.
+    // Codex 호출은 바로 끊고, 제때 멈추지 않으면 프로세스를 끊는다 (그때는 비용이 기록되지 않는다)
+    live.stopping = true;
+    live.codexAbort.abort();
+    const timer = setTimeout(() => {
+      if (!live.stopped && this.abort === abort) hardStop();
+    }, STOP_GRACE_MS);
+    live.query.interrupt().catch(() => {
+      clearTimeout(timer);
+      if (!live.stopped) hardStop();
+    });
     return true;
   }
 
@@ -477,8 +511,10 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     // Codex 협업자: 등록돼 있고 로그인돼 있을 때만 총괄에게 도구로 붙인다 (Cowork 모드에서만 쓴다)
     const codexAgents = profile.codex ? this.registry.codexAgents() : [];
     const codexAvailable = codexAgents.length > 0 && (await this.codexAuth.status()).hasAuth;
+    const codexAbort = new AbortController();
+    abort.signal.addEventListener('abort', () => codexAbort.abort(), { once: true });
     const session = codexAvailable
-      ? this.codexBridge.createSession({ emit: (e) => this.emit(e), workspaceDir, signal: abort.signal, agents: codexAgents, model: settings.codexModel })
+      ? this.codexBridge.createSession({ emit: (e) => this.emit(e), workspaceDir, signal: codexAbort.signal, agents: codexAgents, model: settings.codexModel })
       : null;
 
     // 스트리밍 입력: 첫 명령을 넣고 시작한 뒤, 실행 도중의 추가 지시를 끼워 넣는다. 끝나면 입력을 닫아 세션을 닫는다
@@ -497,13 +533,15 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
         // 결과가 나오면 스트림이 닫히기 전이라도 다음 명령을 받을 수 있게 먼저 "실행 중"을 푼다 (채팅·코드에서 바로 이어 묻는 경우)
         if (this.abort === abort) this.abort = null;
         if (heldDone) this.emit(heldDone);
+        // 중지로 멈춘 턴: 비용은 기록했고, 화면에는 실패가 아니라 "중단"으로 끝낸다
+        else if (live.stopped) this.emit({ type: 'run_aborted' });
         if (checkpoint) this.emit({ type: 'checkpoint', ...checkpoint });
         // 결과까지 기록했으면 이 실행의 대화 기록은 끝. 바로 파일에 쓴다
         if (conversation && this.recording === conversation.id) this.recording = null;
         void this.store.flush();
       })();
     });
-    const live = { input, completion, query: null as Query | null };
+    const live: LiveRun = { input, completion, query: null, codexAbort, stopping: false, stopped: false };
     this.live = live;
 
     const mapper = new MessageMapper(
@@ -518,6 +556,12 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
         // 쓰는 중인 글 조각은 화면에만 보낸다 (블록이 끝나면 전체 글이 따로 기록된다)
         if (e.type === 'assistant_delta') {
           this.broadcast({ ...e, at: Date.now() });
+          return;
+        }
+        // 중지 뒤에 온 결과: 비용은 onResult에서 이미 기록했다. 추가 지시를 기다리지 않고 바로 끝낸다
+        if (e.type === 'run_done' && live.stopping) {
+          live.stopped = true;
+          completion.finish();
           return;
         }
         if (e.type === 'run_done') {
@@ -594,7 +638,10 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
       completion.finish();
     } catch (err) {
       input.close();
-      if (abort.signal.aborted) {
+      if (live.stopped) {
+        // 부드럽게 멈춘 뒤 스트림이 "오류 결과"로 끝나는 건 정상이다 (중단은 이미 알렸다)
+        this.logger.debug(`중지 후 스트림 종료: ${err instanceof Error ? err.message : String(err)}`);
+      } else if (abort.signal.aborted || live.stopping) {
         this.emit({ type: 'run_aborted' });
       } else {
         const message = err instanceof Error ? err.message : String(err);

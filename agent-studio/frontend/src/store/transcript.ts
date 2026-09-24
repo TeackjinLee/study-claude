@@ -113,6 +113,9 @@ export function applyTx(items: TxItem[], e: TxEvent): TxItem[] {
       return items.map((i) =>
         i.kind === 'checkpoint' && i.id === e.id ? { ...i, restored: [...new Set([...i.restored, ...e.restored])], skipped: e.skipped, complete: e.complete } : i,
       );
+    case 'notice':
+      // 실행 도중 알림: 실행이 끝난 게 아니므로 도는 중인 도구를 멈춘 것으로 바꾸지 않는다
+      return cap([...items, { kind: 'notice', id: nextId('n'), tone: e.tone, text: e.text }]);
     case 'compacted':
       return cap([...items, { kind: 'compact', id: nextId('c'), trigger: e.trigger, preTokens: e.preTokens, postTokens: e.postTokens }]);
     case 'user_to':

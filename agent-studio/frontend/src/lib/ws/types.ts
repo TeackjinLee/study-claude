@@ -82,6 +82,8 @@ export type TxEvent =
   | { t: 'checkpoint'; id: string; files: CheckpointFile[] }
   /** 대화를 압축했음 (/compact 또는 자동) */
   | { t: 'compacted'; trigger: 'manual' | 'auto'; preTokens: number; postTokens?: number }
+  /** 실행 도중 알려야 할 문제 (예: Codex 모델 설정 오류). 실행은 계속된다 */
+  | { t: 'notice'; tone: 'error' | 'warn'; text: string }
   | { t: 'checkpoint_undone'; id: string; restored: string[]; skipped: { path: string; reason: string }[]; complete: boolean };
 
 /** 명령 종류: code=Claude Code처럼 혼자 직접 코딩(기본, 이전 대화 이어감) / chat=대화만(읽기 전용) / cowork=총괄+서브에이전트+Codex로 팀 작업 */

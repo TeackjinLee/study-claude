@@ -27,6 +27,19 @@ export interface CodexSessionCtx {
   /** provider === 'codex' 인 에이전트만 */
   agents: AgentConfig[];
   model?: string;
+  /** 설정 오류(쓸 수 없는 모델 등)로 이 세션에서 Codex를 더 부르지 않을 때 그 이유. 재시도로 비용만 쓰지 않게 한다 */
+  disabled?: string;
+}
+
+/**
+ * Codex 설정 문제(이 계정에서 쓸 수 없는 모델 등)인지. 맞으면 사용자에게 보여 줄 안내를, 아니면 null.
+ * 이런 오류는 다시 시도해도 똑같이 실패하므로 재시도하지 않고 사용자가 설정을 고치게 한다.
+ */
+export function codexConfigError(failure: string, model?: string): string | null {
+  if (!/model/i.test(failure) || !/(not supported|not found|does not exist|unknown model|invalid model|unsupported)/i.test(failure)) return null;
+  const name = /'([^']+)' model|model[ `']+([\w.-]+)[`']/i.exec(failure);
+  const which = model ?? name?.[1] ?? name?.[2] ?? '지금 설정된 모델';
+  return `Codex 모델 "${which}"을(를) 이 계정에서 쓸 수 없습니다. 명령 입력창에서 /codex-model 로 다른 모델을 고르세요 (기본값이 ~/.codex/config.toml 의 같은 모델을 가리키면 기본값도 실패합니다).`;
 }
 
 type AgentThread = { threadId: string | null; introduced: boolean; queue: Promise<unknown> };
@@ -131,6 +144,7 @@ export class CodexBridgeService {
     attachments: Attachment[] = [],
   ): Promise<{ ok: boolean; text: string }> {
     const run = async () => {
+      if (ctx.disabled) return { ok: false, text: `Codex를 쓸 수 없습니다: ${ctx.disabled} 이번 실행에서는 Codex를 다시 부르지 말고 Codex 없이 진행하거나 사용자에게 알려라.` };
       const auth = await this.codexAuth.status();
       if (!auth.hasAuth) {
         ctx.emit({ type: 'agent_note', agent: agent.id, text: 'Codex에 로그인되어 있지 않아 답할 수 없습니다.' });
@@ -193,6 +207,13 @@ export class CodexBridgeService {
       if (failure) {
         this.logger.warn(`Codex(${agent.id}) 턴 실패: ${failure}`);
         ctx.emit({ type: 'agent_note', agent: agent.id, text: oneLine(`오류: ${failure}`, 200) });
+        const configError = codexConfigError(failure, ctx.model);
+        if (configError) {
+          // 설정 문제는 다시 해도 똑같이 실패한다. 화면에 바로 알리고 이 세션의 Codex 호출을 막는다
+          if (!ctx.disabled) ctx.emit({ type: 'notice', tone: 'error', text: configError });
+          ctx.disabled = configError;
+          return { ok: false, text: `Codex 설정 오류 (재시도 금지): ${configError} 이번 실행에서는 Codex를 다시 부르지 말고, Codex 없이 가능한 부분만 진행하거나 사용자에게 알려라.` };
+        }
         return { ok: false, text: `Codex 오류: ${failure}` };
       }
       // Codex는 이미지를 셸 명령(cp)으로 옮기는 경우가 많아 file_change 이벤트가 없다. 답변에 적힌 경로를 확인해 결과 미리보기에 올린다
