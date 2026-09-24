@@ -205,6 +205,8 @@ function mapUiEvent(evt: BackendUiEvent): AgentSimEvent[] {
             title,
             detail: String(evt.detail ?? ''),
             canAlwaysAllow: Boolean(evt.canAlwaysAllow),
+            // 작업 폴더 이미지 경로만 받는다 (다른 주소의 이미지를 띄우지 않게)
+            image: typeof evt.image === 'string' && evt.image.startsWith('/api/workspace-files/') ? evt.image : undefined,
           },
         },
         { type: 'log', agent, text: `승인 요청: ${title}` },

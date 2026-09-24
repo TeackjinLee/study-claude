@@ -78,7 +78,8 @@ export type UiEventBody =
   | { type: 'assistant_delta'; agent: AgentRef; text: string }
   /** image 종류는 text가 작업 폴더 기준 경로이고 url로 파일을 받아 볼 수 있다 */
   | { type: 'artifact'; kind: ArtifactKind; key: string; title: string; lang: string; text: string; url?: string }
-  | { type: 'permission_request'; id: string; agent: AgentRef; tool: string; title: string; detail: string; canAlwaysAllow: boolean }
+  /** image: 함께 보여 줄 이미지 URL (레퍼런스 확인) */
+  | { type: 'permission_request'; id: string; agent: AgentRef; tool: string; title: string; detail: string; canAlwaysAllow: boolean; image?: string }
   | { type: 'permission_resolved'; id: string; allowed: boolean }
   /** suggestions: 총괄이 요약 끝에 붙인 다음 추천 명령 (명령 입력창의 버튼으로 표시) */
   | { type: 'run_done'; ok: boolean; result: string; costUsd: number; turns: number; durationMs: number; suggestions?: string[] }

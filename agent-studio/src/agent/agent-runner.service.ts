@@ -4,7 +4,7 @@ import { query, type CanUseTool, type PermissionMode, type PermissionResult, typ
 import { config } from '../config.js';
 import { AgentRegistryService } from './agent-registry.service.js';
 import type { AgentConfig } from './agents.config.js';
-import { clip, oneLine } from './artifact-utils.js';
+import { clip, oneLine, workspaceFileUrl } from './artifact-utils.js';
 import { buildPromptContent, validateAttachments, type Attachment } from './attachments.js';
 import { SettingsService } from './settings.service.js';
 import { SlashCommandsService } from './slash-commands.service.js';
@@ -13,6 +13,7 @@ import { CodexBridgeService, codexWrites, isCodexTool } from './codex-bridge.ser
 import { codexMcpToolName } from './agents.config.js';
 import { CodexAuthService } from '../auth/codex-auth.service.js';
 import { MessageMapper } from './message-mapper.js';
+import { REFERENCE_TOOL, resolveReferenceImage, studioMcpServer } from './reference-tool.js';
 import { RUN_MODES, type CodexMode, type ContextInfo, type RunMode, type UiEvent, type UiEventBody } from './ui-events.js';
 import { parseRunMode, runModeProfile } from './run-modes.js';
 import { InputQueue, RunCompletion } from './input-queue.js';
@@ -565,7 +566,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
           // 글을 토큰 단위로 받아 대화 화면에 실시간으로 보여준다
           includePartialMessages: true,
           agents: profile.subagents ? this.registry.sdkAgents() : undefined,
-          mcpServers: session ? { codex: session.mcpServer() } : undefined,
+          // Codex(이미지 생성)가 있을 때만 레퍼런스 확인 도구도 붙인다
+          mcpServers: session ? { codex: session.mcpServer(), studio: studioMcpServer() } : undefined,
           disallowedTools: profile.disallowedTools,
           resume,
           systemPrompt: { type: 'preset', preset: 'claude_code', append: planFirst ? `${append}\n${PLAN_FIRST_PROMPT}` : append },
@@ -661,6 +663,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     return (toolName, input, options) => {
       // 계획 승인은 "모두 허용" 중이어도 사용자가 계획을 직접 보고 고른다
       if (toolName === 'ExitPlanMode') return this.askPlanApproval(mapper, input, options, onPlanApproved);
+      // 레퍼런스 이미지 확인도 마찬가지로 늘 사용자가 이미지를 보고 고른다
+      if (toolName === REFERENCE_TOOL) return this.askReferenceApproval(mapper, input, options);
       if (this.allowAllThisRun || AUTO_ALLOWED_TOOLS.has(toolName) || this.sessionAllowed.has(toolName)) {
         return Promise.resolve<PermissionResult>({ behavior: 'allow', updatedInput: input });
       }
@@ -737,6 +741,45 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
         tool: 'ExitPlanMode',
         title: '계획 승인 — 승인하면 이 계획대로 수정을 시작합니다',
         detail: clip(plan, 6000),
+        canAlwaysAllow: false,
+      });
+    });
+  }
+
+  /** 레퍼런스 이미지 확인 카드. 승인하면 도구가 실행되고(= 진행), 거절하면 총괄이 다시 생성한다 */
+  private async askReferenceApproval(mapper: MessageMapper, input: Record<string, unknown>, options: Parameters<CanUseTool>[2]): Promise<PermissionResult> {
+    const image = await resolveReferenceImage(this.settings.workspaceDir, input.image_path);
+    if (!image.ok) return { behavior: 'deny', message: `${image.error} 레퍼런스 이미지를 먼저 만든 뒤 다시 확인을 요청하세요.` };
+    const target = typeof input.target === 'string' ? input.target : '레퍼런스';
+    const summary = typeof input.summary === 'string' ? input.summary.trim() : '';
+    const id = randomUUID();
+    return new Promise<PermissionResult>((resolve) => {
+      const finish = (allowed: boolean) => {
+        if (!this.pending.delete(id)) return;
+        options.signal.removeEventListener('abort', onAbort);
+        this.emit({ type: 'permission_resolved', id, allowed });
+        resolve(
+          allowed
+            ? { behavior: 'allow', updatedInput: input }
+            : {
+                behavior: 'deny',
+                message:
+                  '사용자가 이 레퍼런스를 거절했다. 구현을 시작하지 마라. 사용자가 추가 지시로 원하는 방향을 적었으면 반영해 이미지 프롬프트를 고치고, ' +
+                  '다른 파일 이름으로 다시 생성한 뒤 confirm_reference로 다시 확인받아라. 방향을 모르겠으면 무엇을 바꿀지 사용자에게 물어라.',
+              },
+        );
+      };
+      const onAbort = () => finish(false);
+      this.pending.set(id, { tool: REFERENCE_TOOL, resolve: finish });
+      options.signal.addEventListener('abort', onAbort, { once: true });
+      this.emit({
+        type: 'permission_request',
+        id,
+        agent: mapper.ownerOf(options.toolUseID),
+        tool: 'confirm_reference',
+        title: `레퍼런스 확인 — ${clip(target, 80)}`,
+        detail: [summary, `${image.rel}`, '이 이미지를 기준으로 구현할까요? 다시 생성하려면 원하는 방향을 추가 지시로 적은 뒤 "다시 생성"을 누르세요.'].filter(Boolean).join('\n'),
+        image: `${workspaceFileUrl(image.rel)}?v=${Date.now()}`,
         canAlwaysAllow: false,
       });
     });

@@ -402,6 +402,7 @@ export class MessageMapper {
   private describe(tool: string, input: Record<string, unknown>): string {
     const path = () => this.rel(str(input.file_path));
     switch (tool) {
+      case 'mcp__studio__confirm_reference': return `레퍼런스 확인 요청: ${oneLine(str(input.target) || str(input.image_path), 60)}`;
       case 'Read': return `파일 읽기: ${path()}`;
       case 'Write': return `파일 생성: ${path()}`;
       case 'Edit': return `파일 수정: ${path()}`;

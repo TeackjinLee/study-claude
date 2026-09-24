@@ -22,6 +22,8 @@ export interface PermissionRequest {
   title: string;
   detail: string;
   canAlwaysAllow: boolean;
+  /** 함께 보여 줄 이미지 (백엔드 기준 경로, 레퍼런스 확인) */
+  image?: string;
 }
 
 /** 대화 화면에서 펼쳐 볼 도구 입력 (백엔드 ToolDetail과 같은 모양) */

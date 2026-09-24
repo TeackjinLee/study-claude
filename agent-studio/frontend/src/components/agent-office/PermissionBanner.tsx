@@ -4,6 +4,7 @@ import { useAgentStore } from '@/store/agentStore';
 import type { PermissionRequest } from '@/lib/ws';
 import { ShieldIcon } from '@/components/ui/icons';
 import { AgentAvatar } from './AgentAvatar';
+import { BACKEND_URL } from '@/lib/backend';
 
 /**
  * 에이전트가 도구 실행 승인을 기다릴 때 맵 위에 띄우는 승인 카드 (기존 대시보드의 "승인이 필요합니다").
@@ -16,7 +17,7 @@ export function PermissionBanner() {
 
   return (
     <div
-      className={`absolute inset-x-3 top-3 z-20 flex flex-col gap-2 md:left-auto md:right-3 ${permissions.some((p) => p.tool === 'ExitPlanMode') ? 'md:w-[560px]' : 'md:w-[380px]'}`}
+      className={`absolute inset-x-3 top-3 z-20 flex max-h-[calc(100%-1.5rem)] flex-col gap-2 overflow-y-auto md:left-auto md:right-3 ${permissions.some((p) => p.tool === 'ExitPlanMode' || p.image) ? 'md:w-[560px]' : 'md:w-[380px]'}`}
     >
       {permissions.map((p) => (
         <PermissionCard key={p.id} request={p} floating />
@@ -32,6 +33,9 @@ export function PermissionCard({ request: p, floating = false }: { request: Perm
   const meta = p.agent === 'system' ? null : (defsById[p.agent] ?? null);
   // "계획 먼저": Claude가 세운 계획을 넓게 보여주고 승인/거절만 고른다
   const plan = p.tool === 'ExitPlanMode';
+  // 레퍼런스 확인: GPT로 만든 참고 이미지를 보고 이걸로 진행할지 다시 만들지 고른다
+  const reference = p.tool === 'confirm_reference';
+  const imageUrl = p.image ? `${BACKEND_URL}${p.image}` : null;
   return (
     <div
       role="alertdialog"
@@ -55,11 +59,17 @@ export function PermissionCard({ request: p, floating = false }: { request: Perm
           {p.detail && (
             <pre
               className={`mt-1 overflow-auto rounded-md bg-black/40 px-2 py-1.5 text-slate-300 ${
-                plan ? 'max-h-[45vh] whitespace-pre-wrap font-sans text-[12px] leading-relaxed' : 'max-h-20 font-mono text-[11px]'
+                plan ? 'max-h-[45vh] whitespace-pre-wrap font-sans text-[12px] leading-relaxed' : reference ? 'whitespace-pre-wrap font-sans text-[12px] leading-relaxed' : 'max-h-20 font-mono text-[11px]'
               }`}
             >
               {p.detail}
             </pre>
+          )}
+          {imageUrl && (
+            <a href={imageUrl} target="_blank" rel="noreferrer" title="원본 크기로 보기" className="mt-2 block overflow-hidden rounded-lg border border-line bg-black/40">
+              {/* eslint-disable-next-line @next/next/no-img-element -- 백엔드가 주는 작업 폴더 이미지라 next/image 최적화 대상이 아니다 */}
+              <img src={imageUrl} alt={p.title} className="max-h-[50vh] w-full object-contain" />
+            </a>
           )}
         </div>
       </div>
@@ -69,7 +79,7 @@ export function PermissionCard({ request: p, floating = false }: { request: Perm
           onClick={() => reply(p.id, false, false)}
           className="rounded-md border border-line px-3 py-1 text-[12px] font-semibold text-slate-300 hover:border-red-400/60 hover:text-red-300"
         >
-          {plan ? '계획 거절' : '거부'}
+          {plan ? '계획 거절' : reference ? '다시 생성' : '거부'}
         </button>
         {p.canAlwaysAllow && (
           <>
@@ -92,7 +102,7 @@ export function PermissionCard({ request: p, floating = false }: { request: Perm
           </>
         )}
         <button type="button" onClick={() => reply(p.id, true, false)} className="rounded-md bg-amber-400 px-3 py-1 text-[12px] font-bold text-[#0a1428] hover:bg-amber-300">
-          {plan ? '계획대로 진행' : '허용'}
+          {plan ? '계획대로 진행' : reference ? '이걸로 진행' : '허용'}
         </button>
       </div>
     </div>
