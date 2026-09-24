@@ -72,3 +72,20 @@ test('압축 경계(compact_boundary)를 compacted 이벤트로', () => {
   send({ type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'auto', pre_tokens: 150_000, post_tokens: 12_000 } });
   assert.deepEqual(events, [{ type: 'compacted', trigger: 'auto', preTokens: 150_000, postTokens: 12_000 }]);
 });
+
+test('스크린샷 도구 출력에서 이미지 경로를 뽑는다', async () => {
+  const { screenshotPaths } = await import('../src/agent/message-mapper.js');
+  const out = 'Godot Engine v4.7\nSCREENSHOT OK: /ws/.screenshots/wide.png  1280x720  frames=183  camera=(0, 0) zoom=0.35\nSCREENSHOT OK: /ws/a b/shot.png\n';
+  assert.deepEqual(screenshotPaths(out), ['/ws/.screenshots/wide.png', '/ws/a b/shot.png']);
+  assert.deepEqual(screenshotPaths('SCREENSHOT FAIL: headless'), []);
+});
+
+test('Bash로 찍은 스크린샷은 결과 미리보기에 이미지로 올라간다 (작업 폴더 안만)', () => {
+  const events: UiEventBody[] = [];
+  const mapper = new MessageMapper((e) => events.push(e), '/ws', () => null);
+  const send = (msg: unknown) => mapper.handle(msg as SDKMessage);
+  send({ type: 'assistant', parent_tool_use_id: null, message: { id: 'm', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'godot --path . -s tools/screenshot.gd' } }] } });
+  send({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'SCREENSHOT OK: /ws/.screenshots/shot.png  1280x720\nSCREENSHOT OK: /elsewhere/x.png  1x1' }] } });
+  const images = events.filter((e) => e.type === 'artifact' && e.kind === 'image') as Extract<UiEventBody, { type: 'artifact' }>[];
+  assert.deepEqual(images.map((e) => [e.key, e.url]), [['.screenshots/shot.png', '/api/workspace-files/.screenshots/shot.png']]);
+});

@@ -150,7 +150,8 @@ export class WorkspaceFilesController {
     const root = this.settings.workspaceDir;
     const file = join(root, rel);
     if (relative(root, file).startsWith('..')) throw new NotFoundException();
-    res.sendFile(file, (err) => {
+    // 스크린샷 도구는 .screenshots/ 에 저장한다. 이미지 확장자·작업 폴더 안만 허용하므로 점 폴더도 보낸다
+    res.sendFile(file, { dotfiles: 'allow' }, (err) => {
       if (err && !res.headersSent) res.status(404).end();
     });
   }

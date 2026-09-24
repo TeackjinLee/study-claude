@@ -1,7 +1,7 @@
 import { isAbsolute, relative } from 'node:path';
 import type { SDKMessage, SDKPartialAssistantMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentRef, ArtifactKind, CodexMode, PlanItem, ToolDetail, UiAgentId, UiEventBody } from './ui-events.js';
-import { TEST_COMMAND, artifactKindOf, clip, langOf, oneLine, splitNextSteps, str } from './artifact-utils.js';
+import { TEST_COMMAND, artifactKindOf, clip, isImagePath, langOf, oneLine, splitNextSteps, str, workspaceFileUrl } from './artifact-utils.js';
 
 type Emit = (event: UiEventBody) => void;
 
@@ -52,6 +52,11 @@ function toolResultText(content: unknown): string {
       .join('\n');
   }
   return '';
+}
+
+/** 스크린샷 도구의 출력 줄 "SCREENSHOT OK: <경로>  1280x720 ..."에서 이미지 경로를 뽑는다 */
+export function screenshotPaths(output: string): string[] {
+  return [...output.matchAll(/^SCREENSHOT OK: (.+?\.(?:png|jpe?g|webp))(?:\s{2}|$)/gim)].map((m) => m[1].trim());
 }
 
 const NEXT_STEPS_TAG = '<next-steps>';
@@ -373,6 +378,12 @@ export class MessageMapper {
 
     if (name === 'Bash') {
       const command = str(input.command);
+      // 게임 화면 스크린샷 도구(tools/screenshot.gd 등)가 찍은 이미지는 결과 미리보기에 이미지로 올린다
+      for (const shot of screenshotPaths(output)) {
+        const path = this.rel(shot);
+        if (isAbsolute(path) || !isImagePath(path)) continue;
+        this.emit({ type: 'artifact', kind: 'image', key: path, title: path, lang: langOf(path), text: path, url: workspaceFileUrl(path) });
+      }
       if (owner !== 'test' && !TEST_COMMAND.test(command)) return;
       this.emit({
         type: 'artifact', kind: 'test', key: `bash:${command}`, title: oneLine(command, 60),
