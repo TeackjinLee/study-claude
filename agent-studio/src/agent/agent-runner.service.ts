@@ -105,7 +105,7 @@ const CHAT_PROMPT = `
 const CODE_PROMPT = `
 # 코드 모드
 너는 AI Agent Studio 대시보드에서 사용자의 요청을 받아 작업 폴더의 코드를 직접 다루는 Claude Code다. 지금은 코드 모드다.
-- 서브에이전트나 다른 협업자에게 나누지 않고 네가 직접 코드를 읽고, 고치고, 명령(빌드·테스트·실행)을 돌린다.
+- 작은 일은 네가 직접 코드를 읽고, 고치고, 명령(빌드·테스트·실행)을 돌린다. 영역 작업은 아래 "팀 에이전트에게 맡기기"대로 담당에게 나눈다.
 - 먼저 관련 파일을 읽어 기존 구조와 스타일을 파악한 뒤, 요청받은 범위만 최소한으로 고친다. 고친 뒤에는 가능하면 빌드·테스트로 확인한다.
 - 여러 단계 작업이면 할 일 목록(TodoWrite)으로 진행 상황을 보여준다.
 - 이전 대화를 기억하고 이어서 작업한다.
@@ -133,6 +133,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
   /** "이번 실행 모두 허용"을 눌렀으면 남은 승인 요청을 전부 통과시킨다 (실행마다 초기화) */
   private allowAllThisRun = false;
   private history: UiEvent[] = [];
+  /** 화면 기록(history)이 지금 보여 주는 대화. 이어가는 대화가 화면에 없으면 실행을 시작할 때 다시 불러온다 */
+  private shownConversationId: string | null = null;
   private abort: AbortController | null = null;
   /** 지금 실행의 이벤트를 기록하는 대화 (코드·채팅). 이어가는 세션 자체는 ConversationStore가 모드별로 기억한다 */
   private recording: string | null = null;
@@ -159,7 +161,10 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.store.ready;
     const latest = this.store.latestActive(this.settings.workspaceDir);
-    if (latest) this.history = withTerminalEvent(await this.store.loadEvents(latest.id));
+    if (latest) {
+      this.history = withTerminalEvent(await this.store.loadEvents(latest.id));
+      this.shownConversationId = latest.id;
+    }
   }
 
   get running() {
@@ -207,6 +212,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     this.store.setActive(meta.mode, meta.id);
     const events = withTerminalEvent(await this.store.loadEvents(meta.id));
     this.history = events;
+    this.shownConversationId = meta.id;
     // 기록 자체는 화면 기록(history)으로 이미 넣었으니 이 알림은 기록하지 않고 보낸다
     this.broadcast({ type: 'conversation_loaded', mode: meta.mode, conversationId: meta.id, title: meta.title, events, context: meta.context, at: Date.now() });
     this.logger.log(`대화 열기: ${meta.title} (${meta.mode})`);
@@ -275,6 +281,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
         running: this.running,
         clearHistory: () => {
           this.history = [];
+          this.shownConversationId = null;
           for (const m of RUN_MODES) this.store.setActive(m, undefined);
           this.store.clearTalkSessions();
         },
@@ -310,8 +317,16 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     // 이어 쓰기 전에 기존 기록을 불러 둔다 (안 그러면 새 기록만 남아 앞의 대화가 지워진다)
     const saved = conversation ? await this.store.loadEvents(conversation.id) : [];
     // 이어가는 대화면 화면 기록도 이어 붙인다. 다른 대화를 보고 있었으면 이 대화의 기록으로 바꾼다
-    if (!resume) this.history = [];
-    else if (!this.history.some((e) => e.type === 'run_start' && e.mode === mode)) this.history = withTerminalEvent(saved);
+    if (!resume) {
+      this.history = [];
+      this.shownConversationId = null;
+    } else if (conversation && this.shownConversationId !== conversation.id) {
+      // 다른 대화(다른 모드의 실행 등)를 보고 있었으면 이 대화의 기록을 화면에 다시 불러온다.
+      // 안 그러면 서버는 이어가는데 화면은 새 명령만 남아 대화가 초기화된 것처럼 보인다
+      this.history = withTerminalEvent(saved);
+      this.shownConversationId = conversation.id;
+      this.broadcast({ type: 'conversation_loaded', mode, conversationId: conversation.id, title: conversation.title, events: this.history, context: conversation.context, at: Date.now() });
+    }
     this.sessionAllowed.clear();
     this.allowAllThisRun = false;
     this.currentAttachments = files;
@@ -446,7 +461,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
           model: settings.model,
           effort: settings.effort,
           maxTurns: Math.min(settings.maxTurns, 25),
-          maxBudgetUsd: settings.maxBudgetUsd,
+          maxBudgetUsd: settings.maxBudgetUsd > 0 ? settings.maxBudgetUsd : undefined,
           permissionMode: settings.permissionMode,
           disallowedTools: disallowed,
           resume,
@@ -507,6 +522,9 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     // 대화로 저장한다. 코드·채팅은 이어가는 대화에 붙이고(없으면 새로), Cowork는 명령마다 새 대화 (지난 대화에서 다시 열어 볼 수 있게)
     const conversation = opts.conversation ?? this.store.create(mode, workspaceDir, prompt);
     this.recording = conversation?.id ?? null;
+    this.shownConversationId = conversation.id;
+    /** 실행이 끝난 뒤 자동 압축할지 (대화가 길어졌을 때) */
+    let compactAfter = false;
 
     // Codex 협업자: 등록돼 있고 로그인돼 있을 때만 총괄에게 도구로 붙인다 (Cowork 모드에서만 쓴다)
     const codexAgents = profile.codex ? this.registry.codexAgents() : [];
@@ -526,7 +544,9 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
     const completion = new RunCompletion(() => {
       finishing = (async () => {
         // 세션이 닫히기 전에 컨텍스트 사용량을 잰다 (긴 대화 관리: 화면의 게이지와 압축 권유)
-        if (profile.resumable && heldDone && !abort.signal.aborted) await this.measureContext(live.query, mode, conversation.id);
+        const context = profile.resumable && heldDone && !abort.signal.aborted ? await this.measureContext(live.query, mode, conversation.id) : null;
+        // 대화가 길어졌으면 캐시가 살아 있는 지금 압축해 둔다 (시간이 지난 뒤 이어가면 전체를 다시 읽어 비싸다)
+        compactAfter = !opts.compact && !!context && config.autoCompactTokens > 0 && context.tokens >= config.autoCompactTokens;
         input.close();
         // 실행 후 스냅샷을 찍은 뒤에 "실행 중"을 푼다 (다음 실행이 먼저 시작되면 그 변경까지 섞인다)
         const checkpoint = before ? await this.recordCheckpoint(before, prompt, conversation?.id) : null;
@@ -596,7 +616,8 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
       const content = await buildPromptContent(workspaceDir, prompt, attachments);
       input.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null });
 
-      const append = mode === 'chat' ? CHAT_PROMPT : mode === 'cowork' ? this.registry.orchestratorPrompt({ codexAvailable }) : CODE_PROMPT;
+      const append =
+        mode === 'chat' ? CHAT_PROMPT : mode === 'cowork' ? this.registry.orchestratorPrompt({ codexAvailable }) : CODE_PROMPT + this.registry.codeDelegationPrompt({ codexAvailable });
       const stream = query({
         prompt: input,
         options: {
@@ -605,7 +626,7 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
           model: settings.model,
           effort: settings.effort,
           maxTurns: settings.maxTurns,
-          maxBudgetUsd: settings.maxBudgetUsd,
+          maxBudgetUsd: settings.maxBudgetUsd > 0 ? settings.maxBudgetUsd : undefined,
           permissionMode: planFirst ? 'plan' : settings.permissionMode,
           // 글을 토큰 단위로 받아 대화 화면에 실시간으로 보여준다
           includePartialMessages: true,
@@ -660,19 +681,35 @@ export class AgentRunnerService implements OnModuleInit, OnModuleDestroy {
       if (this.abort === abort) this.abort = null;
       this.logger.log('작업 종료');
     }
+    if (compactAfter) void this.autoCompact(mode);
+  }
+
+  /** 긴 대화 자동 압축. 사용자가 그새 다른 명령을 시작했으면 건너뛴다 (다음 실행이 끝날 때 다시 판단) */
+  private async autoCompact(mode: RunMode) {
+    if (this.running || this.talkAbort) return;
+    const tokens = this.store.activeFor(mode, this.settings.workspaceDir)?.context?.tokens ?? 0;
+    this.emit({
+      type: 'notice',
+      tone: 'warn',
+      text: `대화가 길어져(${Math.round(tokens / 1000)}k 토큰) 자동으로 압축합니다. 대화는 요약으로 이어지고, 다음 실행부터 비용이 줄어듭니다. (AUTO_COMPACT_TOKENS로 조정)`,
+    });
+    const res = await this.start('/compact', [], mode);
+    if (!res.ok) this.logger.warn(`자동 압축을 시작하지 못했습니다: ${res.error}`);
   }
 
   /** 실행 중인 세션의 컨텍스트 사용량을 재서 대화에 저장하고 화면에 알린다. 실패하면 그냥 넘어간다 */
-  private async measureContext(q: Query | null, mode: RunMode, conversationId: string) {
-    if (!q) return;
+  private async measureContext(q: Query | null, mode: RunMode, conversationId: string): Promise<ContextInfo | null> {
+    if (!q) return null;
     try {
       const u = await withTimeout(q.getContextUsage({ detail: 'summary' }), CONTEXT_TIMEOUT_MS);
-      if (!u.maxTokens) return;
+      if (!u.maxTokens) return null;
       const context: ContextInfo = { tokens: u.totalTokens, max: u.maxTokens, pct: Math.min(100, Math.round(u.percentage)), at: Date.now() };
       this.store.setContext(conversationId, context);
       this.broadcast({ type: 'context_usage', mode, conversationId, context, at: Date.now() });
+      return context;
     } catch (err) {
       this.logger.debug(`컨텍스트 사용량을 재지 못했습니다: ${(err as Error).message}`);
+      return null;
     }
   }
 

@@ -86,6 +86,9 @@ const INTERACTIVE_ONLY = new Set([
   'bug', 'release-notes', 'privacy-settings', 'hooks', 'plugin', 'add-dir', 'ide', 'install-github-app', 'review', 'pr-comments',
 ]);
 
+
+/** 비용 한도 표시 (0 = 한도 없음) */
+const budgetText = (usd: number) => (usd > 0 ? `$${usd}` : '없음');
 const USAGE_CACHE_MS = 60_000;
 
 /** 모델 별칭 (Claude Code CLI가 받아들이는 이름) */
@@ -112,7 +115,7 @@ const BUILTIN: CommandInfo[] = [
   { name: 'workspace', description: '에이전트가 작업할 폴더 보기/변경 (예: /workspace ~/projects/my-app)', argumentHint: '[path|default]', source: 'builtin' },
   { name: 'effort', description: '추론 노력 수준 보기/변경', argumentHint: `[${EFFORT_LEVELS.join('|')}|off]`, source: 'builtin' },
   { name: 'permission-mode', description: '권한 모드 보기/변경 (acceptEdits: 파일 수정 자동 허용, default: 모두 확인)', argumentHint: '[acceptEdits|default]', source: 'builtin' },
-  { name: 'budget', description: '명령당 비용 한도(USD) 보기/변경', argumentHint: '[usd]', source: 'builtin' },
+  { name: 'budget', description: '명령당 비용 한도(USD) 보기/변경 (off = 한도 없음)', argumentHint: '[usd|off]', source: 'builtin' },
   { name: 'turns', description: '명령당 최대 턴 수 보기/변경', argumentHint: '[n]', source: 'builtin' },
   { name: 'settings', description: '현재 실행 설정 전체 보기', argumentHint: '', source: 'builtin' },
   { name: 'reset-settings', description: '실행 설정을 .env 기본값으로 되돌리기', argumentHint: '', source: 'builtin' },
@@ -330,9 +333,13 @@ export class SlashCommandsService {
       }
 
       case 'budget': {
-        if (!arg) return { ok: true, text: `현재 명령당 비용 한도: $${s.maxBudgetUsd}\n바꾸려면 /budget <usd> (예: /budget 5)` };
+        if (!arg) return { ok: true, text: `현재 명령당 비용 한도: ${budgetText(s.maxBudgetUsd)}\n바꾸려면 /budget <usd> (예: /budget 5), 한도를 없애려면 /budget off` };
+        if (/^(off|none|없음|무제한|0)$/i.test(arg)) {
+          const next = await this.settings.update({ maxBudgetUsd: 0 });
+          return { ok: true, text: '명령당 비용 한도를 없앴습니다. 긴 작업도 중간에 멈추지 않지만, 비용은 헤더의 사용량 칩과 /cost 로 확인하세요.', settings: next };
+        }
         const n = Number(arg.replace(/^\$/, ''));
-        if (!Number.isFinite(n) || n <= 0) return { ok: false, text: '비용 한도는 0보다 큰 숫자여야 합니다.' };
+        if (!Number.isFinite(n) || n <= 0) return { ok: false, text: '비용 한도는 0보다 큰 숫자이거나 off(한도 없음)여야 합니다.' };
         const next = await this.settings.update({ maxBudgetUsd: n });
         return { ok: true, text: `명령당 비용 한도를 $${n}(으)로 바꿨습니다.`, settings: next };
       }
@@ -591,7 +598,7 @@ export class SlashCommandsService {
       `- Codex 모델: ${s.codexModel ?? '기본값'}`,
       `- 추론 노력: ${s.effort ?? '기본값'}`,
       `- 권한 모드: ${s.permissionMode}`,
-      `- 명령당 비용 한도: $${s.maxBudgetUsd}`,
+      `- 명령당 비용 한도: ${budgetText(s.maxBudgetUsd)}`,
       `- 최대 턴 수: ${s.maxTurns}`,
     ].join('\n');
   }

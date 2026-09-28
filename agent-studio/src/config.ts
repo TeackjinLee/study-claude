@@ -42,6 +42,12 @@ export const config = {
    * 이 컴퓨터가 아닌 곳에서 오는 요청은 로그인해야 쓸 수 있다. 비우면 지금처럼 이 컴퓨터에서만 접속된다.
    */
   accessPassword: process.env.ACCESS_PASSWORD?.trim() || undefined,
+  /**
+   * 코드·채팅 대화의 컨텍스트가 이 토큰 수를 넘으면 실행이 끝난 직후 자동으로 압축한다 (0이면 끔).
+   * 긴 대화는 시간이 지나 캐시가 만료되면 이어가기만 해도 전체를 다시 읽어 비용 한도에 바로 걸린다.
+   * 캐시가 살아 있는 실행 직후에 요약해 두면 싸고, 대화는 요약으로 이어진다.
+   */
+  autoCompactTokens: toIntOrZero(process.env.AUTO_COMPACT_TOKENS, 100_000),
   model: process.env.MODEL?.trim() || undefined,
   maxTurns: toInt(process.env.MAX_TURNS, 60),
   maxBudgetUsd: toFloat(process.env.MAX_BUDGET_USD, 2),

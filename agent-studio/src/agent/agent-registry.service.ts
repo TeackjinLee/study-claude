@@ -8,6 +8,7 @@ import {
   CODEX_TOOLS,
   DEFAULT_AGENTS,
   ROOM_IDS,
+  buildCodeDelegationPrompt,
   buildOrchestratorPrompt,
   type AgentConfig,
   type AgentProvider,
@@ -118,6 +119,11 @@ export class AgentRegistryService implements OnModuleInit {
 
   orchestratorPrompt(opts?: { codexAvailable: boolean }): string {
     return buildOrchestratorPrompt(this.agents, opts);
+  }
+
+  /** 코드 모드의 팀 위임 안내 (등록된 에이전트 목록으로 만든다) */
+  codeDelegationPrompt(opts?: { codexAvailable: boolean }): string {
+    return buildCodeDelegationPrompt(this.agents, opts);
   }
 
   /** 총괄 에이전트가 호출한 subagent_type → 대시보드 id */

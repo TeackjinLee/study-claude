@@ -318,7 +318,12 @@ function formatTokens(n: number) {
 }
 
 /** 컨텍스트가 이만큼 차면 압축을 권한다 (Claude Code는 가득 차기 직전에 자동으로 압축한다) */
-const CONTEXT_WARN_PCT = 70;
+/**
+ * 경고 기준은 창 크기(%)가 아니라 토큰 수다. 100만 토큰 창의 18%(18만 토큰)도 시간이 지나 캐시가 만료된 뒤 이어가면
+ * 전체를 다시 읽어 비용 한도에 바로 걸린다. 서버는 기본 10만 토큰을 넘으면 실행 직후 자동으로 압축한다 (AUTO_COMPACT_TOKENS).
+ */
+const CONTEXT_WARN_TOKENS = 70_000;
+const CONTEXT_DANGER_TOKENS = 100_000;
 
 /**
  * 이어가는 대화의 컨텍스트 게이지와 압축 버튼.
@@ -331,8 +336,11 @@ function ContextMeter() {
   const sendCommand = useAgentStore((s) => s.sendCommand);
   if (mode === 'cowork' || !info) return null;
   const ctx = info.context;
-  const warn = !!ctx && ctx.pct >= CONTEXT_WARN_PCT;
-  const tone = !ctx ? 'bg-slate-500' : ctx.pct >= 85 ? 'bg-red-400' : warn ? 'bg-amber-400' : 'bg-blue-400';
+  const warn = !!ctx && (ctx.tokens >= CONTEXT_WARN_TOKENS || ctx.pct >= 70);
+  const danger = !!ctx && (ctx.tokens >= CONTEXT_DANGER_TOKENS || ctx.pct >= 85);
+  const tone = !ctx ? 'bg-slate-500' : danger ? 'bg-red-400' : warn ? 'bg-amber-400' : 'bg-blue-400';
+  // 막대는 비용 기준(자동 압축 기준인 10만 토큰 = 가득)으로 채운다
+  const fill = ctx ? Math.min(100, Math.max(2, (ctx.tokens / CONTEXT_DANGER_TOKENS) * 100)) : 0;
   const compact = () => {
     if (window.confirm('지금까지의 대화를 요약해 컨텍스트를 비울까요?\n같은 대화를 이어가지만 Claude는 앞부분을 요약본으로만 기억합니다.')) sendCommand('/compact', [], mode);
   };
@@ -341,12 +349,12 @@ function ContextMeter() {
       {ctx && (
         <span
           className="hidden items-center gap-1.5 text-[11px] text-muted md:inline-flex"
-          title={`컨텍스트 ${ctx.tokens.toLocaleString()} / ${ctx.max.toLocaleString()} 토큰 (마지막 실행 기준). 가득 차면 자동으로 압축됩니다.`}
+          title={`컨텍스트 ${ctx.tokens.toLocaleString()} 토큰 (창 ${ctx.max.toLocaleString()}의 ${ctx.pct}%, 마지막 실행 기준).\n대화가 길수록 이어갈 때마다 비용이 커지고, 한참 뒤에 이어가면 전체를 다시 읽어 비용 한도에 걸릴 수 있습니다.\n10만 토큰을 넘으면 실행 직후 자동으로 압축합니다.`}
         >
           <span className="relative h-1.5 w-12 overflow-hidden rounded-full bg-white/10">
-            <span className={`absolute inset-y-0 left-0 rounded-full ${tone}`} style={{ width: `${Math.max(2, ctx.pct)}%` }} />
+            <span className={`absolute inset-y-0 left-0 rounded-full ${tone}`} style={{ width: `${fill}%` }} />
           </span>
-          <span className={warn ? 'font-semibold text-amber-300' : undefined}>{ctx.pct}%</span>
+          <span className={danger ? 'font-semibold text-red-300' : warn ? 'font-semibold text-amber-300' : undefined}>{formatTokens(ctx.tokens)}</span>
         </span>
       )}
       <button

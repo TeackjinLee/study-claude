@@ -25,11 +25,9 @@ export const CHAT_DISALLOWED_TOOLS = [
   'Skill', 'EnterPlanMode', 'ExitPlanMode',
 ];
 
-/** 코드 모드에서 빼는 도구: 서브에이전트 호출만 막고 파일 수정·명령 실행은 그대로 둔다 (Claude Code 단독 작업) */
-export const CODE_DISALLOWED_TOOLS = ['Agent', 'Task', 'TaskOutput', 'TaskStop'];
-
 const PROFILES: Record<RunMode, RunModeProfile> = {
-  code: { resumable: true, subagents: false, codex: false, canPlan: true, disallowedTools: CODE_DISALLOWED_TOOLS },
+  // 코드: 대화를 이어가는 리드 개발자. 직접 고치기도 하고, 전문 영역은 팀 에이전트(서브에이전트·Codex)에게 맡긴다
+  code: { resumable: true, subagents: true, codex: true, canPlan: true },
   chat: { resumable: true, subagents: false, codex: false, canPlan: false, disallowedTools: CHAT_DISALLOWED_TOOLS },
   cowork: { resumable: false, subagents: true, codex: true, canPlan: true },
 };

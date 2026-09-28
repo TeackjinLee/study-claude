@@ -23,9 +23,9 @@ const targetOf = (text: string): Target => (CODEX_PREFIX_RE.test(text) ? 'codex'
 
 /** 코드 = Claude Code처럼 직접 코딩(기본) / 채팅 = 대화만(읽기 전용) / Cowork = 총괄이 서브에이전트·Codex와 팀 작업 */
 const MODE_STYLE: Record<RunMode, { label: string; hint: string; Icon: typeof ChatIcon }> = {
-  code: { label: '코드', hint: 'Claude Code처럼 직접 코드를 읽고 고치고 명령을 실행합니다. 서브에이전트 없이 혼자 작업하며 이전 대화를 이어갑니다', Icon: CodeIcon },
+  code: { label: '코드', hint: '리드 개발자가 이전 대화를 이어가며 작업합니다. 작은 일은 직접 하고, 영역 작업은 팀 에이전트(게임플레이·월드·그래픽·QA·문서 등)에게 나눠 맡깁니다', Icon: CodeIcon },
   chat: { label: '채팅', hint: '대화만 합니다. 파일은 읽기만, 수정·명령 실행·서브에이전트 없음. 이전 대화를 이어갑니다', Icon: ChatIcon },
-  cowork: { label: 'Cowork', hint: '총괄이 계획을 세우고 서브에이전트·Codex와 함께 실제로 작업합니다', Icon: CoworkIcon },
+  cowork: { label: 'Cowork', hint: '명령마다 새로 시작해 총괄이 계획을 세우고 모든 일을 팀 에이전트·Codex에게 나눠 맡깁니다 (이전 대화는 잇지 않음)', Icon: CoworkIcon },
 };
 
 const TARGET_STYLE: Record<Target, { label: string; hint: string; color: string; Icon: typeof ClaudeMarkIcon; send: string; ring: string }> = {

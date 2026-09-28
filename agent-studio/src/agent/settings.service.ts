@@ -92,7 +92,8 @@ export class SettingsService implements OnModuleInit {
     const permissionMode = PERMISSION_MODES.includes(s.permissionMode as (typeof PERMISSION_MODES)[number]) ? s.permissionMode : 'acceptEdits';
     const effort = EFFORT_LEVELS.includes(s.effort as EffortLevel) ? s.effort : undefined;
     const maxTurns = Number.isInteger(s.maxTurns) && s.maxTurns > 0 ? s.maxTurns : config.maxTurns;
-    const maxBudgetUsd = Number.isFinite(s.maxBudgetUsd) && s.maxBudgetUsd > 0 ? s.maxBudgetUsd : config.maxBudgetUsd;
+    // 0 = 한도 없음 (/budget off)
+    const maxBudgetUsd = Number.isFinite(s.maxBudgetUsd) && s.maxBudgetUsd >= 0 ? s.maxBudgetUsd : config.maxBudgetUsd;
     return { model, codexModel, workspaceDir, permissionMode, effort, maxTurns, maxBudgetUsd };
   }
 

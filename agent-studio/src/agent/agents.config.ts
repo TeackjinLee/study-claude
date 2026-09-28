@@ -290,16 +290,8 @@ export const CODEX_MCP_SERVER = 'codex';
 export const codexToolName = (a: Pick<AgentConfig, 'sdkName'>) => `ask_${a.sdkName}`;
 export const codexMcpToolName = (a: Pick<AgentConfig, 'sdkName'>) => `mcp__${CODEX_MCP_SERVER}__${codexToolName(a)}`;
 
-/**
- * 총괄 에이전트(메인 스레드)에 덧붙이는 지시. 서브에이전트/협업자 목록은 현재 등록된 에이전트로 채운다.
- * codexAvailable=false면 Codex 에이전트가 있어도 로그인이 안 된 상태라 호출하지 말라고 알린다.
- */
-export function buildOrchestratorPrompt(agents: AgentConfig[], opts: { codexAvailable: boolean } = { codexAvailable: true }): string {
-  const claude = agents.filter((a) => a.provider === 'claude');
-  const codex = agents.filter((a) => a.provider === 'codex');
-  const list = claude.map((a) => `- ${a.sdkName}: ${a.sdkDescription}`).join('\n');
-  const tags = agents.map((a) => `[${a.taskLabel}]`).join(' ');
-
+/** Codex 협업자 안내 (총괄·코드 모드 공통). 로그인돼 있지 않으면 부르지 말라고만 적는다 */
+function buildCodexSection(codex: AgentConfig[], opts: { codexAvailable: boolean }): string {
   let codexSection = '';
   if (codex.length > 0 && !opts.codexAvailable) {
     codexSection = `
@@ -342,6 +334,49 @@ ${tools}
 5. 최종 요약에 레퍼런스 경로, 마지막 스크린샷 경로, 반영한 점과 못 한 점(코드 그리기의 한계)을 적는다.
 `;
   }
+
+  return codexSection;
+}
+
+/**
+ * 코드 모드의 팀 위임 안내. 코드 모드는 대화를 이어가는 리드 개발자이며, 작은 일은 직접 하고
+ * 영역 작업은 담당 서브에이전트에게 맡긴다 (Cowork는 명령마다 새로 시작해 모든 일을 나눠 맡긴다).
+ */
+export function buildCodeDelegationPrompt(agents: AgentConfig[], opts: { codexAvailable: boolean } = { codexAvailable: true }): string {
+  const claude = agents.filter((a) => a.provider === 'claude');
+  const codex = agents.filter((a) => a.provider === 'codex');
+  if (claude.length === 0 && codex.length === 0) return '';
+  const list = claude.map((a) => `- ${a.sdkName} [${a.taskLabel}]: ${a.sdkDescription}`).join('\n');
+  return `
+## 팀 에이전트에게 맡기기
+너는 이 대화를 이어가는 리드 개발자다. 혼자 다 하지 말고 아래 전문 서브에이전트(Agent 도구)에게 적극적으로 일을 나눈다.
+사용자는 대시보드의 사무실 맵과 대화 화면에서 누가 무슨 일을 하는지 보고 있다.
+${list}
+
+위임 규칙:
+- 기능 추가·버그 수정·튜닝처럼 파일을 고치는 작업은 그 영역 담당 서브에이전트에게 맡긴다. 영역이 여러 개면 나눠서, 서로 기다릴 필요가 없으면 한 번에 함께 호출해 병렬로 진행한다.
+- 기획이 필요한 큰 요청은 계획·분석 담당에게 먼저 작업을 나누게 한다.
+- 코드가 바뀌었으면(네가 직접 고친 경우 포함) 검증/QA 담당을 반드시 불러 확인하고, 실패하면 담당에게 다시 맡긴다.
+- 새로 알게 된 규칙·함정은 문서 담당에게, 엔진 API나 자료 조사는 리서치 담당에게 맡긴다.
+- 질문에 답하기, 파일 찾기, 한두 줄 고치기처럼 작은 일은 네가 직접 한다 (맡기는 비용이 더 크다).
+- 서브에이전트는 이 대화를 보지 못한다. 목표, 이전 대화에서 정해진 내용, 관련 파일 경로, 지켜야 할 규칙(작업 폴더 AGENTS.md와 해당 영역 문서), 완료 기준을 메시지에 담는다.
+- 서브에이전트를 백그라운드(run_in_background)로 띄우지 말고 항상 결과를 기다린다.
+- 할 일 목록 항목 앞에는 담당을 [${claude[0]?.taskLabel ?? '담당'}] 형식으로 붙인다.
+- 최종 요약에는 누가 무엇을 했는지(담당별)를 적는다.
+${buildCodexSection(codex, opts)}`;
+}
+
+/**
+ * 총괄 에이전트(메인 스레드)에 덧붙이는 지시. 서브에이전트/협업자 목록은 현재 등록된 에이전트로 채운다.
+ * codexAvailable=false면 Codex 에이전트가 있어도 로그인이 안 된 상태라 호출하지 말라고 알린다.
+ */
+export function buildOrchestratorPrompt(agents: AgentConfig[], opts: { codexAvailable: boolean } = { codexAvailable: true }): string {
+  const claude = agents.filter((a) => a.provider === 'claude');
+  const codex = agents.filter((a) => a.provider === 'codex');
+  const list = claude.map((a) => `- ${a.sdkName}: ${a.sdkDescription}`).join('\n');
+  const tags = agents.map((a) => `[${a.taskLabel}]`).join(' ');
+
+  const codexSection = buildCodexSection(codex, opts);
 
   return `
 # AI Agent Studio 총괄 에이전트

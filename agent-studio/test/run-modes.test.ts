@@ -9,14 +9,13 @@ test('모르는 모드는 기본인 코드 모드', () => {
   assert.equal(parseRunMode('cowork'), 'cowork');
 });
 
-test('코드 모드: 서브에이전트만 막고 수정·실행은 허용, 대화를 이어간다', () => {
+test('코드 모드: 대화를 이어가며 직접 고치고, 팀 에이전트(서브에이전트·Codex)에게도 맡긴다', () => {
   const p = runModeProfile('code');
   assert.equal(p.resumable, true);
-  assert.equal(p.subagents, false);
-  assert.equal(p.codex, false);
+  assert.equal(p.subagents, true);
+  assert.equal(p.codex, true);
   assert.equal(p.canPlan, true);
-  for (const tool of ['Agent', 'Task']) assert.ok(p.disallowedTools?.includes(tool), tool);
-  for (const tool of ['Edit', 'Write', 'Bash', 'TodoWrite', 'ExitPlanMode']) assert.ok(!p.disallowedTools?.includes(tool), tool);
+  for (const tool of ['Agent', 'Task', 'Edit', 'Write', 'Bash', 'TodoWrite', 'ExitPlanMode']) assert.ok(!p.disallowedTools?.includes(tool), tool);
 });
 
 test('채팅 모드: 읽기 전용, 계획 먼저 불가', () => {
