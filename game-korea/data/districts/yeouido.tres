@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="DistrictType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/district_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"yeouido"
+display_name = "여의도 섬"
+chapter = 3
+gang = &"gangnam"
+blocks = Rect2i(-4, -3, 3, 2)
+color = Color(0.55, 0.8, 1.0, 1)
+sidewalk = Color(0.34, 0.36, 0.42, 1)
+building_weights = {
+&"OFFICE": 3,
+&"APT": 1.5,
+&"OFFICETEL": 1,
+&"COMMERCIAL": 0.5
+}
+plazas = Array[Vector2i]([])
+police_stations = Array[Vector2i]([])
+hospitals = Array[Vector2i]([])
+tagline = "강 위의 금융가"

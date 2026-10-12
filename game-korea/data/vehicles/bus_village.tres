@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/npc/bus_driver.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"BUS_VILLAGE"
+display_name = "마을버스"
+category = &"bus"
+driver_npc = ExtResource("2")
+max_speed = 520
+acceleration = 320
+reverse_speed = 190
+brake_force = 760
+coast_drag = 140
+turn_rate = 2.0
+turn_speed_ref = 160
+steer_response = 5.0
+grip = 1200
+handbrake_grip = 0.3
+handbrake_decel = 300
+drift_turn_boost = 1.2
+mass = 2.2
+durability = 220
+size = Vector2(32, 70)
+height = 33.0
+body_color = Color(0.93, 0.94, 0.95, 1)
+roof_color = Color(0.2, 0.4, 0.85, 1)
+districts = Array[StringName]([&"outskirts", &"jongno", &"hongdae"])

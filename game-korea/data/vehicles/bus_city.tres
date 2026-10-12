@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/npc/bus_driver.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"BUS_CITY"
+display_name = "시내버스"
+category = &"bus"
+driver_npc = ExtResource("2")
+max_speed = 420.0
+acceleration = 230.0
+reverse_speed = 150.0
+brake_force = 700.0
+coast_drag = 150.0
+turn_rate = 1.8
+turn_speed_ref = 160.0
+steer_response = 4.0
+grip = 1200.0
+handbrake_grip = 0.2
+handbrake_decel = 280.0
+drift_turn_boost = 1.2
+mass = 3.0
+durability = 300.0
+size = Vector2(32, 104)
+height = 34.0
+body_color = Color(0.25, 0.7, 0.3, 1)
+roof_color = Color(0.92, 0.94, 0.92, 1)

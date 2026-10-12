@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"FOREIGNER"
+display_name = "외국인"
+walk_speed_min = 50
+walk_speed_max = 65
+run_speed = 170
+idle_chance = 0.45
+reaction = 1.0
+spawn_weight = 0.9
+health = 20.0
+lines = PackedStringArray("Excuse me?", "Wow, Seoul!", "Where is the subway?", "Kimchi!")
+districts = Array[StringName]([&"hongdae", &"jongno"])
+hours = Vector2i(9, 23)
+shirt_colors = Array[Color]([Color(0.9, 0.55, 0.2, 1), Color(0.3, 0.6, 0.85, 1), Color(0.95, 0.95, 0.9, 1)])
+pants_colors = Array[Color]([Color(0.55, 0.5, 0.4, 1), Color(0.2, 0.25, 0.4, 1)])
+hair_colors = Array[Color]([Color(0.85, 0.7, 0.35, 1), Color(0.5, 0.3, 0.15, 1)])

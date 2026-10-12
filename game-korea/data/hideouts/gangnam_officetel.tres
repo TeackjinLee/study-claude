@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="HideoutType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/hideout_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_officetel"
+display_name = "강남 오피스텔"
+door = Vector2(2290, 2784)
+along = Vector2(0, 30)
+price = 0

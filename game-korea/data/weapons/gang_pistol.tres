@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"GANG_PISTOL"
+display_name = "조직 권총"
+slot = 2
+damage = 7.0
+spread = 0.1
+fire_interval = 1.1
+max_range = 380.0
+infinite = true
+pickup_ammo = 0
+max_ammo = 0
+tracer_color = Color(1, 0.75, 0.45, 1)

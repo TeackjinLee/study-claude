@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/weapons/fist.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"THUG"
+display_name = "폭력배"
+walk_speed_min = 55.0
+walk_speed_max = 70.0
+run_speed = 180.0
+idle_chance = 0.5
+reaction = 0.9
+spawn_weight = 0.0
+health = 40.0
+weapon = ExtResource("2")
+gang = &"oldtown"
+shirt_colors = Array[Color]([Color(0.92, 0.92, 0.9, 1), Color(0.15, 0.15, 0.16, 1)])
+pants_colors = Array[Color]([Color(0.2, 0.22, 0.3, 1)])
+hair_colors = Array[Color]([Color(0.04, 0.04, 0.04, 1)])

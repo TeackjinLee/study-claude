@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/npc/soldier.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"SP_ARMY"
+display_name = "군 트럭"
+category = &"army"
+driver_npc = ExtResource("2")
+max_speed = 640.0
+acceleration = 380.0
+reverse_speed = 210.0
+brake_force = 800.0
+coast_drag = 140.0
+turn_rate = 1.9
+turn_speed_ref = 200.0
+steer_response = 5.2
+grip = 1450.0
+handbrake_grip = 0.26
+handbrake_decel = 340.0
+drift_turn_boost = 1.18
+mass = 3.0
+durability = 420.0
+size = Vector2(36, 78)
+height = 30.0
+body_color = Color(0.28, 0.34, 0.2, 1)
+roof_color = Color(0.36, 0.4, 0.26, 1)

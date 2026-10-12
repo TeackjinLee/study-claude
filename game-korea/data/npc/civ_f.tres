@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"CIV_F"
+display_name = "시민 (여성)"
+walk_speed_min = 50.0
+walk_speed_max = 68.0
+run_speed = 165.0
+idle_chance = 0.35
+reaction = 1.0
+spawn_weight = 3.0
+shirt_colors = Array[Color]([Color(0.8, 0.7, 0.55, 1), Color(0.75, 0.35, 0.45, 1), Color(0.9, 0.9, 0.88, 1), Color(0.35, 0.45, 0.35, 1)])
+pants_colors = Array[Color]([Color(0.15, 0.15, 0.16, 1), Color(0.3, 0.25, 0.3, 1)])
+hair_colors = Array[Color]([Color(0.07, 0.06, 0.06, 1), Color(0.3, 0.18, 0.1, 1)])

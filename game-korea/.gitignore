@@ -1,0 +1,5 @@
+.godot/
+.screenshots/
+*.import
+.claude/worktrees/
+.DS_Store

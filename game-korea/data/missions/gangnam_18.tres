@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/sp_swat.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 4
+text = "호송차를 부숴라"
+points = PackedVector2Array(938, -4896)
+headings = PackedFloat32Array(0)
+vehicle = ExtResource("3")
+moving = true
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 5
+text = "경찰을 따돌려라"
+wanted = 3
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_18"
+gang = &"gangnam"
+tier = 2
+phone_set = 1
+order = 0
+title = "호송차 습격"
+briefing = "우리 사람이 특공대 호송차에 실려 간다.\n차를 부숴. 경찰이 벌 떼처럼 올 거다 — 다 떨쳐 내."
+reward = 220000
+respect = 16
+time_limit = 200
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

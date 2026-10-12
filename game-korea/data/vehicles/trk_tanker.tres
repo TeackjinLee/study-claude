@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"TRK_TANKER"
+display_name = "유조차 (SR에너지)"
+category = &"tanker"
+max_speed = 460
+acceleration = 250
+reverse_speed = 170
+brake_force = 650
+coast_drag = 150
+turn_rate = 1.7
+turn_speed_ref = 160
+steer_response = 4.2
+grip = 1050
+handbrake_grip = 0.33
+handbrake_decel = 260
+drift_turn_boost = 1.15
+mass = 3.2
+durability = 90
+size = Vector2(36, 92)
+height = 28.0
+body_color = Color(0.85, 0.15, 0.12, 1)
+roof_color = Color(0.93, 0.93, 0.9, 1)
+explosion_scale = 3.0
+districts = Array[StringName]([&"industrial", &"riverside"])

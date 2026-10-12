@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"OFFICE"
+display_name = "직장인"
+walk_speed_min = 70.0
+walk_speed_max = 85.0
+run_speed = 170.0
+idle_chance = 0.1
+reaction = 0.9
+spawn_weight = 2.0
+shirt_colors = Array[Color]([Color(0.12, 0.13, 0.18, 1), Color(0.25, 0.27, 0.32, 1)])
+pants_colors = Array[Color]([Color(0.12, 0.13, 0.18, 1)])
+hair_colors = Array[Color]([Color(0.07, 0.06, 0.06, 1)])

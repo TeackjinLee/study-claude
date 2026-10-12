@@ -1,0 +1,16 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/visual_sample/profile.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+asphalt = Color(0.105, 0.13, 0.17, 1)
+pavement = Color(0.31, 0.32, 0.36, 1)
+roof = Color(0.17, 0.23, 0.25, 1)
+warm = Color(1, 0.78, 0.47, 1)
+cyan = Color(0.38, 0.86, 0.92, 1)
+pink = Color(0.95, 0.4, 0.65, 1)
+signs = PackedStringArray("별빛 노래방", "밤샘 PC방", "골목 치킨", "우리 약국", "달빛 편의점", "서울 분식", "24시 사우나", "한길 부동산")
+shop_vertical = PackedStringArray("노래방", "PC방", "약국", "치킨")
+texture_seed = 7021
+rain_drops = 90

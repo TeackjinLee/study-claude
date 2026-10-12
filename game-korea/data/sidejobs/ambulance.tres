@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="SideJobType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/jobs/side_job_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ambulance"
+display_name = "응급 이송"
+kind = 3
+vehicles = Array[StringName]([&"SP_AMBULANCE"])
+base_reward = 10000
+reward_step = 3000
+time_base = 60
+time_step = 3
+min_time = 25
+stops = 1
+intro = "쓰러진 환자를 병원으로"
+bonus_text = "병원비 면제"

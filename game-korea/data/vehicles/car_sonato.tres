@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"CAR_SONATO"
+display_name = "한대 소나토"
+category = &"sedan"
+
+max_speed = 740.0
+acceleration = 500.0
+reverse_speed = 240.0
+brake_force = 900.0
+coast_drag = 120.0
+turn_rate = 2.5
+turn_speed_ref = 225.0
+steer_response = 7.0
+grip = 1650.0
+handbrake_grip = 0.22
+handbrake_decel = 420.0
+drift_turn_boost = 1.32
+mass = 1.15
+durability = 130.0
+size = Vector2(29, 60)
+height = 14.0
+body_color = Color(0.1, 0.1, 0.12, 1)
+roof_color = Color(0.2, 0.2, 0.24, 1)
+heal_rate = 0.0

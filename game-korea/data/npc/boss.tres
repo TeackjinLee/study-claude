@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/weapons/gang_pistol.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"BOSS"
+display_name = "조직 보스"
+walk_speed_min = 40
+walk_speed_max = 50
+run_speed = 150
+idle_chance = 0.3
+reaction = 0.8
+spawn_weight = 0.0
+health = 80.0
+weapon = ExtResource("2")
+gang = &"oldtown"
+lines = PackedStringArray("내 구역에서 뭐 하나?")
+shirt_colors = Array[Color]([Color(0.1, 0.1, 0.11, 1)])
+pants_colors = Array[Color]([Color(0.08, 0.08, 0.09, 1)])
+hair_colors = Array[Color]([Color(0.05, 0.05, 0.05, 1)])

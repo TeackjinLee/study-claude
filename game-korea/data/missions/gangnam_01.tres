@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 0
+text = "서류 가방을 찾아라"
+points = PackedVector2Array(754, 2016)
+radius = 40
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 0
+text = "본부로 가져가라"
+points = PackedVector2Array(2510, 2870.4)
+radius = 50
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_01"
+gang = &"gangnam"
+tier = 0
+order = 0
+title = "첫 심부름"
+briefing = "신입이라고? 일단 심부름부터 해 봐.\n서쪽 인도에 둔 서류 가방을 본부로 가져와."
+reward = 30000
+respect = 8
+time_limit = 90
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

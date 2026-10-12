@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"GOSIWON"
+display_name = "고시원"
+style = &"gosiwon"
+footprints = Array[int]([2])
+weight = 1.0
+roof_colors = Array[Color]([Color(0.33, 0.33, 0.35, 1), Color(0.38, 0.35, 0.32, 1)])
+signs = PackedStringArray("청운고시원", "희망고시원")
+accent = Color(1, 0.36, 0.88, 1)
+floors = 5
+wall_color = Color(0.5, 0.5, 0.48, 1)

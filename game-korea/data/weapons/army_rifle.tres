@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ARMY_RIFLE"
+display_name = "군 소총"
+
+slot = 5
+damage = 9.0
+spread = 0.03
+fire_interval = 0.7
+max_range = 620.0
+infinite = true
+pickup_ammo = 0
+max_ammo = 0
+tracer_color = Color(1, 0.95, 0.6, 1)

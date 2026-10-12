@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="DistrictType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/district_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hongdae"
+display_name = "홍대 거리"
+chapter = 2
+gang = &""
+blocks = Rect2i(-5, -8, 5, 3)
+color = Color(1.0, 0.4, 0.85, 1)
+sidewalk = Color(0.33, 0.31, 0.38, 1)
+building_weights = {
+&"COMMERCIAL": 3,
+&"ONEROOM": 2,
+&"MIXED": 2,
+&"GOSIWON": 1,
+&"VILLA": 1,
+&"APT": 0.5,
+&"OFFICE": 0.3
+}
+plazas = Array[Vector2i]([])
+police_stations = Array[Vector2i]([])
+hospitals = Array[Vector2i]([Vector2i(-3, -7)])
+tagline = "클럽과 버스킹 — 주인 없는 거리"

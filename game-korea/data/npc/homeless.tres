@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"HOMELESS"
+display_name = "노숙자"
+walk_speed_min = 25
+walk_speed_max = 35
+run_speed = 120
+idle_chance = 0.7
+reaction = 0.5
+spawn_weight = 0.6
+health = 20.0
+fearless = true
+lines = PackedStringArray("…", "천 원만…", "박스 좀 있어?")
+districts = Array[StringName]([&"jongno", &"riverside"])
+shirt_colors = Array[Color]([Color(0.35, 0.32, 0.28, 1), Color(0.3, 0.3, 0.26, 1)])
+pants_colors = Array[Color]([Color(0.25, 0.24, 0.2, 1)])
+hair_colors = Array[Color]([Color(0.3, 0.28, 0.25, 1)])

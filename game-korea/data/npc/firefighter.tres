@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"FIREFIGHTER"
+display_name = "소방관"
+walk_speed_min = 60
+walk_speed_max = 72
+run_speed = 180
+idle_chance = 0.1
+reaction = 1.1
+spawn_weight = 0.0
+health = 40.0
+lines = PackedStringArray("물러서세요!")
+shirt_colors = Array[Color]([Color(0.9, 0.55, 0.12, 1)])
+pants_colors = Array[Color]([Color(0.85, 0.5, 0.1, 1)])
+hair_colors = Array[Color]([Color(0.95, 0.85, 0.2, 1)])

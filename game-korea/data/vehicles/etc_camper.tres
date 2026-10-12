@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ETC_CAMPER"
+display_name = "캠핑카"
+category = &"camper"
+max_speed = 500
+acceleration = 280
+reverse_speed = 180
+brake_force = 700
+coast_drag = 140
+turn_rate = 1.7
+turn_speed_ref = 170
+steer_response = 4.4
+grip = 1100
+handbrake_grip = 0.32
+handbrake_decel = 280
+drift_turn_boost = 1.15
+mass = 2.6
+durability = 260
+size = Vector2(36, 86)
+height = 32.0
+body_color = Color(0.92, 0.9, 0.84, 1)
+roof_color = Color(0.35, 0.55, 0.75, 1)
+save_point = true
+districts = Array[StringName]([&"riverside"])

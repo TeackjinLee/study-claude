@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"SP_FIRE_HELI"
+display_name = "소방헬기"
+category = &"heli"
+max_speed = 500
+acceleration = 300
+reverse_speed = 0
+brake_force = 500
+coast_drag = 100
+turn_rate = 2.0
+turn_speed_ref = 100
+steer_response = 4.0
+grip = 1000
+handbrake_grip = 1.0
+handbrake_decel = 100
+drift_turn_boost = 1.0
+mass = 2.0
+durability = 200
+size = Vector2(40, 80)
+height = 16.0
+body_color = Color(0.9, 0.15, 0.12, 1)
+roof_color = Color(0.95, 0.95, 0.95, 1)
+enterable = false

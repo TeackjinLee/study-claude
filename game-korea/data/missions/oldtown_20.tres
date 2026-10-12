@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/npc/gang_f.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 3
+text = "강남 간부를 처리해라"
+npc = ExtResource("3")
+npc_points = PackedVector2Array(2674.4, 2510, 2784, 2510, 2893.6, 2510, 3058, 2729.2)
+
+[resource]
+script = ExtResource("1")
+id = &"oldtown_20"
+gang = &"oldtown"
+tier = 2
+phone_set = 1
+order = 2
+title = "최후의 담판"
+briefing = "강남 조직 간부들이 금강개발 앞에 모였다.\n여자들이 더 독하다. 넷 다 끝내."
+reward = 240000
+respect = 16
+time_limit = 220
+steps = Array[ExtResource("2")]([SubResource("step_0")])

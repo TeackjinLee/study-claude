@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"WAREHOUSE"
+display_name = "창고"
+style = &"warehouse"
+footprints = Array[int]([0, 1, 2])
+weight = 0.0
+roof_colors = Array[Color]([Color(0.42, 0.45, 0.4, 1)])
+signs = PackedStringArray("물류 창고")
+accent = Color(0.95, 0.7, 0.2, 1)
+floors = 2
+wall_color = Color(0.5, 0.52, 0.5, 1)

@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/trk_porta.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 1
+text = "포르타에 타라"
+points = PackedVector2Array(2474, -5606.4)
+headings = PackedFloat32Array(0)
+vehicle = ExtResource("3")
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 2
+text = "홍대 창고 앞에 세워라"
+points = PackedVector2Array(-2592, -5206)
+radius = 70
+
+[resource]
+script = ExtResource("1")
+id = &"oldtown_02"
+gang = &"oldtown"
+tier = 0
+order = 1
+title = "포르타 짐"
+briefing = "짐 실은 포르타를 홍대 쪽 창고 앞까지.\n밀수단 구역이니 오래 머물지 마."
+reward = 70000
+respect = 8
+time_limit = 35
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/trk_mixer.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 1
+text = "레미콘에 타라"
+points = PackedVector2Array(3242, -7200)
+headings = PackedFloat32Array(0)
+vehicle = ExtResource("3")
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 2
+text = "다리 한가운데 세워라"
+points = PackedVector2Array(1706, -1824)
+radius = 90
+
+[resource]
+script = ExtResource("1")
+id = &"oldtown_16"
+gang = &"oldtown"
+tier = 1
+phone_set = 1
+order = 1
+title = "다리를 막아라"
+briefing = "레미콘으로 강남 다리를 막아 버려.\n다리 한가운데 세우고 튀어."
+reward = 160000
+respect = 12
+time_limit = 65
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

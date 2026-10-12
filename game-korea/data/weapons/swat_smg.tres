@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"SWAT_SMG"
+display_name = "특공대 기관단총"
+slot = 3
+damage = 5.0
+spread = 0.12
+fire_interval = 0.45
+max_range = 420.0
+infinite = true
+pickup_ammo = 0
+max_ammo = 0
+tracer_color = Color(0.75, 0.9, 1, 1)

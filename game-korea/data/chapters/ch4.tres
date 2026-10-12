@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="ChapterType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/chapter_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+number = 4
+title = "부두"
+target = 10000000
+intro = "외곽 공단 부두 — 밀수단의 본거지. 마지막 판이다."

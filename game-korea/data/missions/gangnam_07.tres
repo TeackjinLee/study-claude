@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/trk_porta.tres" id="3"]
+[ext_resource type="Resource" path="res://data/npc/gang_oldtown.tres" id="4"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 4
+text = "건달파 트럭을 부숴라"
+points = PackedVector2Array(1248, 938)
+headings = PackedFloat32Array(1.5708)
+vehicle = ExtResource("3")
+npc = ExtResource("4")
+npc_points = PackedVector2Array(1210, 974, 1290, 974)
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_07"
+gang = &"gangnam"
+tier = 1
+order = 2
+title = "트럭 폭파"
+briefing = "건달파가 물건 실은 트럭을 연습장 옆에 세워 뒀다.\n통째로 날려 버려. 지키는 놈이 둘 있다."
+reward = 75000
+respect = 12
+time_limit = 150
+steps = Array[ExtResource("2")]([SubResource("step_0")])

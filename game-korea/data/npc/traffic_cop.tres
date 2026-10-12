@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"TRAFFIC_COP"
+display_name = "교통경찰"
+walk_speed_min = 0
+walk_speed_max = 10
+run_speed = 170
+idle_chance = 0.95
+reaction = 1.2
+spawn_weight = 0.4
+health = 30.0
+lines = PackedStringArray("신호 지키세요!", "거기 서요!")
+shirt_colors = Array[Color]([Color(0.95, 0.95, 0.92, 1)])
+pants_colors = Array[Color]([Color(0.1, 0.13, 0.28, 1)])
+hair_colors = Array[Color]([Color(0.95, 0.95, 0.92, 1)])

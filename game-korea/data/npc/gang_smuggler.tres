@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/weapons/gang_pistol.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"GANG_SMUGGLER"
+display_name = "밀수단원"
+walk_speed_min = 58.0
+walk_speed_max = 74.0
+run_speed = 185.0
+idle_chance = 0.35
+reaction = 1.0
+spawn_weight = 0.0
+health = 30.0
+weapon = ExtResource("2")
+gang = &"smuggler"
+shirt_colors = Array[Color]([Color(0.15, 0.45, 0.2, 1), Color(0.1, 0.32, 0.15, 1)])
+pants_colors = Array[Color]([Color(0.1, 0.1, 0.11, 1), Color(0.25, 0.25, 0.22, 1)])
+hair_colors = Array[Color]([Color(0.05, 0.04, 0.04, 1), Color(0.5, 0.45, 0.4, 1)])

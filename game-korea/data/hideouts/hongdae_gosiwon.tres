@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="HideoutType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/hideout_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hongdae_gosiwon"
+display_name = "홍대 고시원"
+door = Vector2(-14, -4262)
+along = Vector2(0, 30)
+price = 0

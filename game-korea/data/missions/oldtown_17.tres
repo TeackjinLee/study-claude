@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 0
+text = "금고를 털어라"
+points = PackedVector2Array(-2866, -1824)
+radius = 40
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 5
+text = "경찰을 따돌려라"
+wanted = 2
+
+[sub_resource type="Resource" id="step_2"]
+script = ExtResource("2")
+kind = 0
+text = "종로 본가로 가져와라"
+points = PackedVector2Array(974, -4980)
+radius = 50
+
+[resource]
+script = ExtResource("1")
+id = &"oldtown_17"
+gang = &"oldtown"
+tier = 1
+phone_set = 1
+order = 2
+title = "여의도 금고"
+briefing = "여의도 사무실 금고를 털어. 경보가 울릴 거다.\n경찰 떼어 내고 종로 본가로."
+reward = 170000
+respect = 12
+time_limit = 220
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2")])

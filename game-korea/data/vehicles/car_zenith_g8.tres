@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"CAR_ZENITH_G8"
+display_name = "제니스 G8"
+category = &"sedan"
+max_speed = 780.0
+acceleration = 500.0
+reverse_speed = 240.0
+brake_force = 920.0
+coast_drag = 110.0
+turn_rate = 2.4
+turn_speed_ref = 230.0
+steer_response = 6.5
+grip = 1700.0
+handbrake_grip = 0.24
+handbrake_decel = 420.0
+drift_turn_boost = 1.3
+mass = 1.3
+durability = 150.0
+size = Vector2(30, 62)
+height = 14.0
+body_color = Color(0.12, 0.25, 0.66, 1)
+roof_color = Color(0.1, 0.18, 0.45, 1)
+districts = Array[StringName]([&"gangnam", &"yeouido"])

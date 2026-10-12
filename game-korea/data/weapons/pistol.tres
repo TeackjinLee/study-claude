@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"PISTOL"
+display_name = "권총"
+crate_label = "권"
+slot = 2
+damage = 12.0
+spread = 0.03
+fire_interval = 0.35
+max_range = 520.0
+pickup_ammo = 12
+max_ammo = 120
+tracer_color = Color(1, 0.9, 0.5, 1)

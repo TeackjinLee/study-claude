@@ -1,0 +1,74 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/car_rumi.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 1
+text = "루미에 타라"
+points = PackedVector2Array(938, -5011.2)
+headings = PackedFloat32Array(0)
+vehicle = ExtResource("3")
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 0
+text = "체크포인트 (1/6)"
+points = PackedVector2Array(864, -5280)
+radius = 90
+need_vehicle = true
+
+[sub_resource type="Resource" id="step_2"]
+script = ExtResource("2")
+kind = 0
+text = "체크포인트 (2/6)"
+points = PackedVector2Array(3168, -5280)
+radius = 90
+need_vehicle = true
+
+[sub_resource type="Resource" id="step_3"]
+script = ExtResource("2")
+kind = 0
+text = "체크포인트 (3/6)"
+points = PackedVector2Array(3168, -4512)
+radius = 90
+need_vehicle = true
+
+[sub_resource type="Resource" id="step_4"]
+script = ExtResource("2")
+kind = 0
+text = "체크포인트 (4/6)"
+points = PackedVector2Array(1632, -4512)
+radius = 90
+need_vehicle = true
+
+[sub_resource type="Resource" id="step_5"]
+script = ExtResource("2")
+kind = 0
+text = "체크포인트 (5/6)"
+points = PackedVector2Array(1632, -3744)
+radius = 90
+need_vehicle = true
+
+[sub_resource type="Resource" id="step_6"]
+script = ExtResource("2")
+kind = 0
+text = "체크포인트 (6/6)"
+points = PackedVector2Array(3936, -3744)
+radius = 90
+need_vehicle = true
+
+[resource]
+script = ExtResource("1")
+id = &"oldtown_04"
+gang = &"oldtown"
+tier = 0
+order = 3
+title = "골목 레이스"
+briefing = "루미로 종로 골목을 한 바퀴.\n좁은 길에서 빠른 놈이 진짜다."
+reward = 80000
+respect = 8
+time_limit = 32
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2"), SubResource("step_3"), SubResource("step_4"), SubResource("step_5"), SubResource("step_6")])

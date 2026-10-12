@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/trk_tanker.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 1
+text = "유조차를 빼앗아라"
+points = PackedVector2Array(1248, -2902)
+headings = PackedFloat32Array(1.5708)
+vehicle = ExtResource("3")
+driver = true
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 2
+text = "여의도 선착장에 세워라"
+points = PackedVector2Array(-1824, -598)
+radius = 80
+min_health = 0.4
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_17"
+gang = &"gangnam"
+tier = 1
+phone_set = 1
+order = 2
+title = "유조차 탈취"
+briefing = "건달파가 기름을 빼돌린다. 강변북로 유조차를 빼앗아\n여의도 선착장으로. 총 맞으면 크게 터진다."
+reward = 170000
+respect = 12
+time_limit = 60
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

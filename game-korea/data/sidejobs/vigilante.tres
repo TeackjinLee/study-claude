@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="SideJobType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/jobs/side_job_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"vigilante"
+display_name = "자경단"
+kind = 5
+vehicles = Array[StringName]([&"SP_POLICE"])
+base_reward = 12000
+reward_step = 3000
+time_base = 80
+time_step = 3
+min_time = 25
+stops = 1
+intro = "수배 차량을 부숴라 — 수배는 풀어 준다"
+bonus_text = "벌금 절반"

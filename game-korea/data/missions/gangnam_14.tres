@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/npc/gang_oldtown.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 3
+text = "건달파 끄나풀을 처리해라"
+npc = ExtResource("3")
+npc_points = PackedVector2Array(-2318, -1110.8, -2318, -1001.2)
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_14"
+gang = &"gangnam"
+tier = 0
+phone_set = 1
+order = 3
+title = "정보원 정리"
+briefing = "건달파 끄나풀 둘이 여의도에서 우리 얘기를 캐고 다닌다.\n조용히 끝내."
+reward = 110000
+respect = 8
+time_limit = 120
+steps = Array[ExtResource("2")]([SubResource("step_0")])

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ONEROOM"
+display_name = "원룸"
+style = &"oneroom"
+footprints = Array[int]([2])
+weight = 0.0
+roof_colors = Array[Color]([Color(0.4, 0.4, 0.44, 1), Color(0.36, 0.38, 0.36, 1)])
+signs = PackedStringArray("원룸", "풀옵션 원룸", "신축 원룸")
+accent = Color(0.4, 0.9, 1.0, 1)
+floors = 4
+wall_color = Color(0.66, 0.64, 0.6, 1)

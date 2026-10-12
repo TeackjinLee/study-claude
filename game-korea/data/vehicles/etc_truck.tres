@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ETC_TRUCK"
+display_name = "대형 화물 트럭"
+category = &"bigtruck"
+max_speed = 470
+acceleration = 220
+reverse_speed = 160
+brake_force = 620
+coast_drag = 160
+turn_rate = 1.55
+turn_speed_ref = 150
+steer_response = 3.8
+grip = 1000
+handbrake_grip = 0.35
+handbrake_decel = 250
+drift_turn_boost = 1.1
+mass = 4.2
+durability = 380
+size = Vector2(38, 118)
+height = 36.0
+body_color = Color(0.18, 0.4, 0.85, 1)
+roof_color = Color(0.22, 0.45, 0.88, 1)
+districts = Array[StringName]([&"industrial"])

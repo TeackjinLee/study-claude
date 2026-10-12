@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 0
+text = "이자 받기 (1/3)"
+points = PackedVector2Array(-288, -7694)
+radius = 40
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 0
+text = "이자 받기 (2/3)"
+points = PackedVector2Array(206, -6432)
+radius = 40
+
+[sub_resource type="Resource" id="step_2"]
+script = ExtResource("2")
+kind = 0
+text = "이자 받기 (3/3)"
+points = PackedVector2Array(2125.6, -7694)
+radius = 40
+
+[resource]
+script = ExtResource("1")
+id = &"oldtown_12"
+gang = &"oldtown"
+tier = 0
+phone_set = 1
+order = 1
+title = "빌라 수금"
+briefing = "빌라촌 사채 이자 받는 날.\n세 집 돌아."
+reward = 100000
+respect = 8
+time_limit = 110
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2")])

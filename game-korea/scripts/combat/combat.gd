@@ -1,0 +1,397 @@
+class_name Combat
+extends Node2D
+## 사격·주먹·폭발과 그 효과(총알 궤적·총구 불꽃·폭발·그을음).
+## 피해는 맞은 쪽에 넘긴다: 차는 Vehicle.take_damage, 사람은 PedestrianManager.damage, 주인공은 Player.take_damage.
+## 차에 불이 붙으면 운전자를 내리게 하고, 터지면 주변에 폭발 피해를 준다 (그 피해로 옆 차가 또 터진다 — 연쇄).
+
+signal gunfire(pos: Vector2, by_player: bool)
+signal vehicle_attacked(vehicle: Vehicle, by_player: bool)   ## 총에 맞은 차 (충돌·폭발 피해는 빼고)
+signal vehicle_exploded(vehicle: Vehicle, by_player: bool)
+
+const SEED := 4404
+const TRACER_TIME := 0.08
+const BLAST_TIME := 0.8
+const SWING_TIME := 0.12
+const SCARE_RADIUS := 320.0          ## 총소리에 겁먹는 거리
+const BLAST_SCARE_RADIUS := 500.0
+const WRECK_TIME := 30.0             ## 잔해는 이만큼 지나고 화면 밖이면 치운다
+const OFFSCREEN := 950.0
+const MAX_SCORCH := 40
+const EJECT_OFFSET := 16.0
+
+var vehicles: Array[Vehicle] = []    ## 도시의 모든 차 (main과 공유)
+var pedestrians: PedestrianManager
+var player: Player
+var director: Director
+var traffic: TrafficSystem
+var police: PoliceDispatcher
+var fires: Fires                     ## 없으면 불이 붙지 않는다
+var rng := RandomNumberGenerator.new()
+var explosions := 0                  ## 지금까지 터진 차 수 (테스트용)
+
+var _tracers: Array = []             ## [from, to, color, age] — 나이는 늘 맨 끝
+var _projectiles: Array[Dictionary] = []   ## 날아가는 수류탄·화염병·로켓 {pos, vel, w, by_player, age, travel, exclude, stopped}
+var _flames: Array = []              ## 화염방사기·물대포 불꽃 [from, dir, w, age]
+var _blasts: Array = []              ## [pos, 크기 배율, age]
+var _swings: Array = []              ## [pos, dir, age]
+var _scorch: Array[Vector2] = []
+var _decals: Node2D
+var _watched := {}                   ## 신호를 연결한 차
+var _wrecks := {}                    ## 잔해 → 터진 뒤 지난 시간
+
+
+func _ready() -> void:
+	rng.seed = SEED
+	z_as_relative = false
+	z_index = 5
+	_decals = Node2D.new()
+	_decals.z_as_relative = false
+	_decals.z_index = -5
+	_decals.draw.connect(_draw_decals)
+	add_child(_decals)
+
+
+func _physics_process(delta: float) -> void:
+	z_index = IsoView.Z_EFFECTS if IsoView.enabled else 5
+	for v in vehicles:
+		if not _watched.has(v):
+			_watched[v] = true
+			v.caught_fire.connect(_on_caught_fire.bind(v))
+			v.exploded.connect(_on_exploded.bind(v))
+	_cleanup_wrecks(delta)
+	_fly(delta)
+	for list: Array in [_tracers, _blasts, _swings, _flames]:
+		for e: Array in list:
+			e[-1] += delta
+	_flames = _flames.filter(func(e: Array): return e[3] < 0.25)
+	_tracers = _tracers.filter(func(e: Array): return e[3] < TRACER_TIME)
+	_blasts = _blasts.filter(func(e: Array): return e[2] < BLAST_TIME)
+	_swings = _swings.filter(func(e: Array): return e[2] < SWING_TIME)
+	queue_redraw()
+
+
+# ── 사격 ──────────────────────────────────────────────────
+
+## from에서 dir 쪽으로 무기 w를 한 번 쏜다(친다). exclude는 맞지 않을 몸(쏜 사람, 탄 차).
+func fire(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID] = [], extra_spread := 0.0) -> void:
+	if w.melee:
+		_melee(from, dir, w, by_player, exclude)
+		return
+	if w.projectile != &"":
+		_launch(from, dir, w, by_player, exclude)
+		return
+	if w.flame or w.water:
+		_spray(from, dir, w, by_player, exclude)
+		return
+	var space := get_world_2d().direct_space_state
+	for d in Ballistics.pellet_dirs(dir, w, rng, extra_spread):
+		var to := from + d * w.max_range
+		# 관통: 맞은 몸을 빼고 다시 재서 pierce개까지 맞힌다 (벽에 닿으면 멈춘다)
+		var skip := exclude.duplicate()
+		for n in w.pierce:
+			var q := PhysicsRayQueryParameters2D.create(from, from + d * w.max_range, Layers.WORLD | Layers.VEHICLES | Layers.PEOPLE, skip)
+			var hit := space.intersect_ray(q)
+			if hit.is_empty():
+				to = from + d * w.max_range
+				break
+			to = hit.position
+			if not (hit.collider is CollisionObject2D) or hit.collider is StaticBody2D:
+				break
+			_hit(hit.collider, d, w.damage, by_player)
+			skip.append((hit.collider as CollisionObject2D).get_rid())
+		# 주인공 총알은 지나는 길의 헬기도 맞힌다 (공중이라 충돌체가 없다)
+		if by_player and police:
+			for h in police.helis:
+				if h.hit_by(from, to):
+					h.take_damage(w.damage, true)
+		_tracers.append([from, to, w.tracer_color, 0.0])
+	gunfire.emit(from, by_player)
+	pedestrians.scare(from, SCARE_RADIUS)
+
+
+## 공중(헬기)에서 땅의 at을 쏜다: at 바로 앞에서부터 광선을 재고, 궤적은 헬기에서 그린다
+func fire_from_air(air: Vector2, at: Vector2, w: WeaponType) -> void:
+	var space := get_world_2d().direct_space_state
+	var d := (at - air).normalized().rotated(rng.randf_range(-w.spread, w.spread))
+	var from := at - d * 60.0 + d.orthogonal() * rng.randf_range(-18.0, 18.0)
+	var to := from + d * 120.0
+	var hit := space.intersect_ray(PhysicsRayQueryParameters2D.create(from, to, Layers.VEHICLES | Layers.PEOPLE))
+	if not hit.is_empty():
+		to = hit.position
+		_hit(hit.collider, d, w.damage, false)
+	_tracers.append([air, to, w.tracer_color, 0.0])
+
+
+# ── 던지는 무기 · 로켓 ─────────────────────────────────────
+
+func _launch(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID]) -> void:
+	var d := dir.rotated(rng.randf_range(-w.spread, w.spread))
+	_projectiles.append({"pos": from, "vel": d * w.projectile_speed, "w": w, "by_player": by_player, "age": 0.0,
+		"travel": 0.0, "exclude": exclude, "stopped": false})
+	if w.projectile == &"rocket":
+		gunfire.emit(from, by_player)
+		pedestrians.scare(from, SCARE_RADIUS)
+
+
+func _fly(delta: float) -> void:
+	var space := get_world_2d().direct_space_state
+	for p: Dictionary in _projectiles.duplicate():
+		var w: WeaponType = p.w
+		p.age += delta
+		if p.stopped:
+			if p.age >= w.fuse:
+				_detonate(p)
+			continue
+		var step: Vector2 = p.vel * delta
+		var to: Vector2 = p.pos + step
+		var mask := Layers.WORLD | Layers.VEHICLES | Layers.PEOPLE
+		var hit := space.intersect_ray(PhysicsRayQueryParameters2D.create(p.pos, to, mask, p.exclude))
+		if not hit.is_empty():
+			p.pos = hit.position - step.normalized() * 4.0
+			if w.fuse > 0.0:
+				p.stopped = true      # 수류탄은 부딪히면 멈춰 있다가 터진다
+			else:
+				_detonate(p)
+			continue
+		p.pos = to
+		p.travel += step.length()
+		if p.travel >= w.max_range:
+			if w.fuse > 0.0:
+				p.stopped = true
+			else:
+				_detonate(p)
+		elif w.fuse > 0.0 and p.age >= w.fuse:
+			_detonate(p)
+
+
+func _detonate(p: Dictionary) -> void:
+	_projectiles.erase(p)
+	var w: WeaponType = p.w
+	if w.explosion_scale > 0.0:
+		explode(p.pos, p.by_player, null, w.explosion_scale)
+	if w.fire_radius > 0.0 and fires:
+		fires.start(p.pos, w.fire_radius, p.by_player)
+		pedestrians.scare(p.pos, SCARE_RADIUS)
+		gunfire.emit(p.pos, p.by_player)
+
+
+# ── 화염방사기 · 물대포 ───────────────────────────────────
+
+## 짧은 부채꼴: 불은 사람·차를 태우고 끝에 불을 놓는다. 물은 사람·차를 밀고 불을 끈다
+func _spray(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID]) -> void:
+	var space := get_world_2d().direct_space_state
+	# 벽에 막히면 거기까지만
+	var reach := w.max_range
+	var wall := space.intersect_ray(PhysicsRayQueryParameters2D.create(from, from + dir * reach, Layers.WORLD, exclude))
+	if not wall.is_empty():
+		reach = from.distance_to(wall.position)
+	_flames.append([from, dir, w, 0.0])
+	for p: Pedestrian in pedestrians.peds.duplicate():
+		if p.is_dead() or exclude.has(p.get_rid()) or not _in_cone(from, dir, reach, w.spread, p.global_position):
+			continue
+		if w.water:
+			p.knock_down(p.global_position - from)
+		else:
+			pedestrians.damage(p, w.damage, dir, by_player, false)
+	for v in vehicles:
+		if v.wrecked or exclude.has(v.get_rid()) or not _in_cone(from, dir, reach + v.stats.size.x * 0.5, w.spread, v.global_position):
+			continue
+		if w.water:
+			v.motor.velocity += dir * w.push * get_physics_process_delta_time() * 6.0 / v.stats.mass
+			if v.burning >= 0.0:   # 물을 뿌리면 불붙은 차가 꺼진다 (간신히 버틴다)
+				v.burning = -1.0
+				v.health = 1.0
+		else:
+			damage_vehicle(v, w.damage, by_player)
+	if not by_player and player.visible and _in_cone(from, dir, reach, w.spread, player.global_position):
+		player.take_damage(w.damage)
+	if fires:
+		if w.water:
+			# 물줄기 부채꼴에 걸린 불은 다 맞는다
+			for f in fires.fires:
+				if _in_cone(from, dir, reach + f.radius, w.spread + 0.2, f.pos):
+					f.left = minf(f.left, Fires.DOUSED) - 0.25
+		elif rng.randf() < 0.35:
+			fires.start(from + dir * reach * 0.85, w.fire_radius, by_player, 4.0)
+	if w.flame:
+		gunfire.emit(from, by_player)
+
+
+static func _in_cone(from: Vector2, dir: Vector2, reach: float, spread: float, at: Vector2) -> bool:
+	var rel := at - from
+	return rel.length() < reach and (rel.length() < 12.0 or absf(dir.angle_to(rel)) < spread)
+
+
+func _hit(collider: Object, dir: Vector2, amount: float, by_player: bool) -> void:
+	if collider is Vehicle:
+		damage_vehicle(collider, amount, by_player)
+	elif collider is Pedestrian:
+		pedestrians.damage(collider, amount, dir, by_player, false)
+	elif collider is Player:
+		(collider as Player).take_damage(amount)
+
+
+## 주먹: 앞쪽 부채꼴 안, 손이 닿는 가장 가까운 사람 하나 (NPC가 휘두르면 주인공도 맞는다)
+func _melee(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID]) -> void:
+	_swings.append([from + dir * 12.0, dir, 0.0])
+	var best: Pedestrian = null
+	var best_d := w.max_range + Pedestrian.RADIUS
+	for p in pedestrians.peds:
+		if p.is_dead() or exclude.has(p.get_rid()):
+			continue
+		var rel := p.global_position - from
+		var d := rel.length()
+		if d < best_d and (d < Pedestrian.RADIUS or absf(dir.angle_to(rel)) < w.spread):
+			best_d = d
+			best = p
+	if not by_player and player.visible and not exclude.has(player.get_rid()):
+		var rel := player.global_position - from
+		if rel.length() < best_d and (rel.length() < Player.RADIUS or absf(dir.angle_to(rel)) < w.spread):
+			player.take_damage(w.damage)
+			return
+	if best:
+		pedestrians.damage(best, w.damage, dir, by_player, w.knockdown)
+
+
+func damage_vehicle(v: Vehicle, amount: float, by_player: bool) -> void:
+	if v.wrecked:
+		return
+	v.take_damage(amount, by_player)
+	vehicle_attacked.emit(v, by_player)
+
+
+# ── 화재 · 폭발 ───────────────────────────────────────────
+
+## 체력이 0이 된 차: 타고 있던 사람이 뛰어내린다 (경찰은 내려서 쫓아온다)
+func _on_caught_fire(v: Vehicle) -> void:
+	if traffic:
+		traffic.remove_ai(v)
+	if v.has_driver:
+		v.has_driver = false
+		var door := v.door_position(false)
+		var out := (door - v.global_position).normalized()
+		if police and police.owns(v):
+			police.eject_crew(v, door + out * EJECT_OFFSET)
+		else:
+			pedestrians.spawn_fleeing(door + out * EJECT_OFFSET, out, v.stats.driver_npc)
+	if police:
+		police.abandon(v)
+
+
+func _on_exploded(by_player: bool, v: Vehicle) -> void:
+	explosions += 1
+	_wrecks[v] = 0.0
+	if v == director.current_vehicle:
+		director.exit_vehicle()
+		player.take_damage(player.health)
+	explode(v.global_position, by_player, v)
+	vehicle_exploded.emit(v, by_player)
+
+
+## pos에서 폭발: 가까운 차는 밀려나고 크게 다쳐 곧 터지고, 사람은 죽거나 넘어진다.
+## scale이 0이면 터지는 차의 explosion_scale(없으면 1)을 쓴다
+func explode(pos: Vector2, by_player: bool, source: Vehicle = null, scale := 0.0) -> void:
+	if scale <= 0.0:
+		scale = source.stats.explosion_scale if source else 1.0
+	for v in vehicles:
+		if v == source or v.wrecked:
+			continue
+		var k := DamageModel.explosion_falloff(v.global_position.distance_to(pos), scale)
+		if k <= 0.0:
+			continue
+		v.motor.velocity += (v.global_position - pos).normalized() * DamageModel.EXPLOSION_IMPULSE * k / v.stats.mass
+		v.take_damage(DamageModel.EXPLOSION_VEHICLE_DAMAGE * k, by_player,
+			rng.randf_range(DamageModel.CHAIN_FUSE_MIN, DamageModel.CHAIN_FUSE_MAX))
+	for p: Pedestrian in pedestrians.peds.duplicate():
+		if p.is_dead():
+			continue
+		var k := DamageModel.explosion_falloff(p.global_position.distance_to(pos), scale)
+		if k > 0.0:
+			pedestrians.damage(p, DamageModel.EXPLOSION_PERSON_DAMAGE * k, p.global_position - pos, by_player, true)
+	if player.visible:
+		player.take_damage(DamageModel.EXPLOSION_PERSON_DAMAGE * DamageModel.explosion_falloff(player.global_position.distance_to(pos), scale))
+	_blasts.append([pos, scale, 0.0])
+	_scorch.append(pos)
+	if _scorch.size() > MAX_SCORCH:
+		_scorch.remove_at(0)
+	_decals.queue_redraw()
+	pedestrians.scare(pos, BLAST_SCARE_RADIUS * sqrt(scale))
+	gunfire.emit(pos, by_player)
+
+
+func _cleanup_wrecks(delta: float) -> void:
+	var camera := ChaseCamera.current_cam()
+	for v: Vehicle in _wrecks.keys():
+		_wrecks[v] += delta
+		if _wrecks[v] < WRECK_TIME or camera == null or v.global_position.distance_to(camera.global_position) < OFFSCREEN:
+			continue
+		_wrecks.erase(v)
+		_watched.erase(v)
+		vehicles.erase(v)
+		v.queue_free()
+
+
+# ── 그리기 ────────────────────────────────────────────────
+
+func _draw() -> void:
+	# 2.5D: 총알·투사체·불길은 가슴 높이로 띄운다
+	if IsoView.enabled:
+		draw_set_transform(IsoView.lift(12.0), 0.0, Vector2.ONE)
+	for e: Array in _tracers:
+		var k: float = 1.0 - e[3] / TRACER_TIME
+		var c: Color = e[2]
+		draw_line(e[0], e[1], Color(c, 0.85 * k), 2.0)
+		draw_circle(e[0], 5.0 * k, Color(1.0, 0.95, 0.6, k))
+		draw_circle(e[1], 2.5 * k, Color(1.0, 0.8, 0.4, k))
+	for p in _projectiles:
+		var w: WeaponType = p.w
+		var pos: Vector2 = p.pos
+		match w.projectile:
+			&"rocket":
+				var back: Vector2 = -(p.vel as Vector2).normalized()
+				draw_line(pos, pos + back * 26.0, Color(1.0, 0.85, 0.5, 0.6), 4.0)
+				draw_circle(pos + back * 30.0, 6.0, Color(0.6, 0.6, 0.6, 0.4))
+				draw_circle(pos, 4.0, Color(0.3, 0.32, 0.3))
+			&"molotov":
+				draw_circle(pos, 4.0, Color(0.45, 0.6, 0.3))
+				draw_circle(pos + Vector2(0, -4), 3.0, Color(1.0, 0.6, 0.2))
+			_:
+				var blink: bool = w.fuse > 0.0 and p.stopped and int(p.age * 8.0) % 2 == 0
+				draw_circle(pos, 5.0, Color(0.25, 0.3, 0.2))
+				draw_circle(pos, 2.0, Color(1, 0.2, 0.2) if blink else Color(0.5, 0.55, 0.4))
+	for e: Array in _flames:
+		var w: WeaponType = e[2]
+		var from: Vector2 = e[0]
+		var dir: Vector2 = e[1]
+		var k: float = e[3] / 0.25
+		for i in 5:
+			var t := (i + 1) / 5.0
+			var p := from + dir.rotated(sin(i * 2.3 + e[3] * 30.0) * w.spread * 0.6) * w.max_range * t * (0.6 + 0.4 * k)
+			var col := Color(0.6, 0.85, 1.0, 0.5 * (1.0 - k)) if w.water else Color(1.0, 0.5 - 0.3 * t, 0.1, 0.7 * (1.0 - k))
+			draw_circle(p, 4.0 + t * 10.0, col)
+	for e: Array in _swings:
+		var k: float = 1.0 - e[2] / SWING_TIME
+		var a: float = (e[1] as Vector2).angle()
+		draw_arc(e[0], 10.0, a - 0.9, a + 0.9, 8, Color(1, 1, 1, 0.7 * k), 2.0)
+	for e: Array in _blasts:
+		var t: float = e[2] / BLAST_TIME
+		var pos: Vector2 = e[0]
+		var r := lerpf(30.0, DamageModel.EXPLOSION_RADIUS * 0.75 * e[1], sqrt(t))
+		if IsoView.enabled:
+			# 2.5D: 바닥에 번진 빛 위로 둥근 불덩이가 솟는다 (화면 기준 원)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			draw_circle(pos, r * 1.25, Color(1.0, 0.45, 0.1, 0.3 * (1.0 - t)))
+			draw_set_transform_matrix(IsoView.screen_frame(pos, r * 0.45))
+			pos = Vector2.ZERO
+			r *= 0.85
+		draw_circle(pos, r * 1.25, Color(0.3, 0.3, 0.32, 0.35 * (1.0 - t)))
+		draw_circle(pos, r, Color(1.0, 0.45, 0.1, 0.8 * (1.0 - t)))
+		draw_circle(pos, r * 0.6, Color(1.0, 0.8, 0.3, 0.9 * (1.0 - t)))
+		draw_circle(pos, r * 0.3, Color(1.0, 1.0, 0.85, 1.0 - t))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _draw_decals() -> void:
+	for pos in _scorch:
+		_decals.draw_circle(pos, 46.0, Color(0.02, 0.02, 0.02, 0.35))
+		_decals.draw_circle(pos, 28.0, Color(0.02, 0.02, 0.02, 0.4))

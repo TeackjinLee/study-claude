@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"BAT"
+display_name = "야구방망이"
+crate_label = "방"
+slot = 1
+melee = true
+damage = 14.0
+spread = 1.0
+fire_interval = 0.55
+max_range = 34.0
+knockdown = true
+drive_by = false
+infinite = true
+pickup_ammo = 0
+max_ammo = 0

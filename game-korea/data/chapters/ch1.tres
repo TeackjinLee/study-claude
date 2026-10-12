@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="ChapterType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/chapter_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+number = 1
+title = "상경"
+target = 1000000
+intro = "빚 갚으러 올라온 서울. 강남 조직 공중전화가 울린다."

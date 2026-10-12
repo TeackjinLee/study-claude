@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"CAR_RUMI"
+display_name = "키온 루미"
+category = &"light"
+
+max_speed = 600.0
+acceleration = 480.0
+reverse_speed = 220.0
+brake_force = 900.0
+coast_drag = 130.0
+turn_rate = 3.0
+turn_speed_ref = 190.0
+steer_response = 8.0
+grip = 1700.0
+handbrake_grip = 0.22
+handbrake_decel = 420.0
+drift_turn_boost = 1.4
+mass = 0.7
+durability = 80.0
+size = Vector2(26, 44)
+height = 15.0
+body_color = Color(0.85, 0.12, 0.16, 1)
+roof_color = Color(0.7, 0.1, 0.12, 1)
+heal_rate = 0.0

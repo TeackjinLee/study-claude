@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 0
+text = "가게에서 돈 받기 (1/3)"
+points = PackedVector2Array(3552, 3058)
+radius = 40
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 0
+text = "가게에서 돈 받기 (2/3)"
+points = PackedVector2Array(2016, 3278)
+radius = 40
+
+[sub_resource type="Resource" id="step_2"]
+script = ExtResource("2")
+kind = 0
+text = "가게에서 돈 받기 (3/3)"
+points = PackedVector2Array(2510, 1248)
+radius = 40
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_03"
+gang = &"gangnam"
+tier = 0
+order = 2
+title = "수금"
+briefing = "가게 세 곳에서 이번 달 몫을 받아 와.\n순서대로 돌아. 늦으면 사장님들이 문 닫는다."
+reward = 45000
+respect = 8
+time_limit = 120
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2")])

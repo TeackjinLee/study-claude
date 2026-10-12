@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"CAMPSITE"
+display_name = "캠핑장"
+style = &"campsite"
+footprints = Array[int]([0, 1])
+weight = 0.0
+roof_colors = Array[Color]([Color(0.25, 0.4, 0.25, 1)])
+signs = PackedStringArray("한강 캠핑장", "오토캠핑장")
+accent = Color(1.0, 0.6, 0.2, 1)
+floors = 0
+wall_color = Color(0.4, 0.4, 0.4, 1)

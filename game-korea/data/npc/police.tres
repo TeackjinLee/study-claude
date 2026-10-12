@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/weapons/police_pistol.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"POLICE"
+display_name = "경찰"
+walk_speed_min = 70.0
+walk_speed_max = 80.0
+run_speed = 172.0
+idle_chance = 0.0
+reaction = 1.3
+spawn_weight = 0.0
+health = 30.0
+weapon = ExtResource("2")
+shirt_colors = Array[Color]([Color(0.72, 0.9, 0.18, 1)])
+pants_colors = Array[Color]([Color(0.1, 0.13, 0.28, 1)])
+hair_colors = Array[Color]([Color(0.08, 0.1, 0.24, 1)])

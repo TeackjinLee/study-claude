@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ETC_BICYCLE"
+display_name = "자전거"
+category = &"bicycle"
+max_speed = 300
+acceleration = 260
+reverse_speed = 90
+brake_force = 700
+coast_drag = 120
+turn_rate = 3.4
+turn_speed_ref = 90
+steer_response = 9.0
+grip = 2400
+handbrake_grip = 0.12
+handbrake_decel = 300
+drift_turn_boost = 1.9
+mass = 0.5
+durability = 30
+size = Vector2(10, 30)
+height = 6.0
+body_color = Color(0.3, 0.75, 0.25, 1)
+roof_color = Color(0.15, 0.15, 0.17, 1)
+silent = true
+districts = Array[StringName]([&"riverside", &"hongdae"])

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="ChapterType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/chapter_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+number = 2
+title = "구도심"
+target = 3000000
+intro = "다리 통제가 풀렸다. 종로 건달파와 홍대 밀수단이 일손을 찾는다."

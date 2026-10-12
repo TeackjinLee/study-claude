@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"VILLA"
+display_name = "빌라"
+style = &"villa"
+footprints = Array[int]([1, 2])
+weight = 1.5
+roof_colors = Array[Color]([Color(0.55, 0.26, 0.2, 1), Color(0.6, 0.32, 0.24, 1)])
+signs = PackedStringArray("행복빌라", "그린빌라", "장미빌라", "한솔빌라")
+accent = Color(1, 0.82, 0.23, 1)
+floors = 4
+wall_color = Color(0.55, 0.36, 0.3, 1)

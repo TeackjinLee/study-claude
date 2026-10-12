@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/car_zenith_g8.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 4
+text = "건달파 회장의 제니스를 부숴라"
+points = PackedVector2Array(938, 2016)
+headings = PackedFloat32Array(0)
+vehicle = ExtResource("3")
+moving = true
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_09"
+gang = &"gangnam"
+tier = 2
+order = 1
+title = "회장 차 습격"
+briefing = "건달파 회장이 제니스를 타고 강남을 돈다.\n멈추지 않으니 쫓아가서 부숴."
+reward = 130000
+respect = 16
+time_limit = 150
+steps = Array[ExtResource("2")]([SubResource("step_0")])

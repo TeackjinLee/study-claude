@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/npc/gang_gangnam.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 3
+text = "강남 조직원을 처리해라"
+npc = ExtResource("3")
+npc_points = PackedVector2Array(3278, 2893.6, 3278, 2784, 3278, 2674.4)
+
+[resource]
+script = ExtResource("1")
+id = &"smuggler_06"
+gang = &"smuggler"
+tier = 1
+order = 1
+title = "단속반"
+briefing = "강남 조직이 우리 판매책을 쫓는다.\n강남 놈들 셋, 오피스텔 앞에 있다."
+reward = 110000
+respect = 12
+time_limit = 160
+steps = Array[ExtResource("2")]([SubResource("step_0")])

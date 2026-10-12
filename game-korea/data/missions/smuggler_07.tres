@@ -1,0 +1,67 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/car_taxi.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 1
+text = "택시를 빼앗아라"
+points = PackedVector2Array(-598, -5664)
+headings = PackedFloat32Array(0)
+vehicle = ExtResource("3")
+driver = true
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 0
+text = "배달 지점 (1/5)"
+points = PackedVector2Array(-672, -3744)
+radius = 90
+need_vehicle = true
+
+[sub_resource type="Resource" id="step_2"]
+script = ExtResource("2")
+kind = 0
+text = "배달 지점 (2/5)"
+points = PackedVector2Array(864, -3744)
+radius = 90
+need_vehicle = true
+
+[sub_resource type="Resource" id="step_3"]
+script = ExtResource("2")
+kind = 0
+text = "배달 지점 (3/5)"
+points = PackedVector2Array(864, -5280)
+radius = 90
+need_vehicle = true
+
+[sub_resource type="Resource" id="step_4"]
+script = ExtResource("2")
+kind = 0
+text = "배달 지점 (4/5)"
+points = PackedVector2Array(2400, -5280)
+radius = 90
+need_vehicle = true
+
+[sub_resource type="Resource" id="step_5"]
+script = ExtResource("2")
+kind = 0
+text = "배달 지점 (5/5)"
+points = PackedVector2Array(2400, -3744)
+radius = 90
+need_vehicle = true
+
+[resource]
+script = ExtResource("1")
+id = &"smuggler_07"
+gang = &"smuggler"
+tier = 1
+order = 2
+title = "택시 위장"
+briefing = "택시로 위장해서 물건을 돌린다.\n택시 빼앗아서 정해진 길로 돌아."
+reward = 120000
+respect = 12
+time_limit = 30
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2"), SubResource("step_3"), SubResource("step_4"), SubResource("step_5")])

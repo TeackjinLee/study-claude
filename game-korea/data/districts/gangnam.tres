@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DistrictType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/district_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam"
+display_name = "강남대로"
+chapter = 1
+gang = &"gangnam"
+blocks = Rect2i(0, 0, 6, 6)
+color = Color(0.95, 0.75, 0.25, 1)
+sidewalk = Color(0.33, 0.34, 0.4, 1)
+building_weights = {}
+plazas = Array[Vector2i]([Vector2i(1, 1)])
+police_stations = Array[Vector2i]([Vector2i(4, 2)])
+hospitals = Array[Vector2i]([Vector2i(1, 4)])
+tagline = "고층 빌딩과 네온 — 강남 조직의 땅"

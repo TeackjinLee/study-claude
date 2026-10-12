@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/etc_bike.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 1
+text = "오토바이에 타라"
+points = PackedVector2Array(-1366, -4780.8)
+headings = PackedFloat32Array(0)
+vehicle = ExtResource("3")
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 2
+text = "강남 클럽 앞에 세워라"
+points = PackedVector2Array(2784, 3242)
+radius = 70
+
+[resource]
+script = ExtResource("1")
+id = &"smuggler_02"
+gang = &"smuggler"
+tier = 0
+order = 1
+title = "오토바이 퀵"
+briefing = "오토바이로 강 건너 강남 클럽까지 소포 하나.\n다리 하나 건너면 된다. 빨리."
+reward = 70000
+respect = 8
+time_limit = 38
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

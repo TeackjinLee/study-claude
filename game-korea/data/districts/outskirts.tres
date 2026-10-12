@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="DistrictType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/district_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"outskirts"
+display_name = "변두리 주택가"
+chapter = 3
+gang = &"oldtown"
+blocks = Rect2i(-5, -11, 11, 3)
+color = Color(0.9, 0.78, 0.5, 1)
+sidewalk = Color(0.35, 0.35, 0.36, 1)
+building_weights = {
+&"APT": 2,
+&"VILLA": 2,
+&"ROWHOUSE": 2,
+&"HOUSE": 2.5,
+&"MIXED": 1
+}
+plazas = Array[Vector2i]([])
+police_stations = Array[Vector2i]([Vector2i(3, -10)])
+hospitals = Array[Vector2i]([Vector2i(-1, -10)])
+tagline = "아파트 단지와 빌라촌"

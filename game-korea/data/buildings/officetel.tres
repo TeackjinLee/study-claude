@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"OFFICETEL"
+display_name = "오피스텔"
+style = &"officetel"
+footprints = Array[int]([1])
+weight = 1.0
+roof_colors = Array[Color]([Color(0.3, 0.34, 0.36, 1), Color(0.34, 0.33, 0.38, 1)])
+signs = PackedStringArray("리버뷰", "스카이힐", "강남 센트럴")
+accent = Color(0.4, 1, 0.6, 1)
+floors = 7
+wall_color = Color(0.55, 0.56, 0.6, 1)

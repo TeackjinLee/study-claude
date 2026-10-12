@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/etc_bicycle.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 1
+text = "자전거를 빼앗아라"
+points = PackedVector2Array(-2902, -4128)
+headings = PackedFloat32Array(0)
+vehicle = ExtResource("3")
+driver = true
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 2
+text = "아지트 차고에 세워라"
+points = PackedVector2Array(-1056, -4438)
+radius = 60
+
+[resource]
+script = ExtResource("1")
+id = &"smuggler_04"
+gang = &"smuggler"
+tier = 0
+order = 3
+title = "자전거 도둑"
+briefing = "자전거 탄 놈 가방에 우리 물건이 있다.\n자전거째 빼앗아. 자전거는 아무도 신고 안 한다."
+reward = 80000
+respect = 8
+time_limit = 18
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

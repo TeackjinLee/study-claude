@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="SideJobType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/jobs/side_job_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bus"
+display_name = "버스 노선"
+kind = 1
+vehicles = Array[StringName]([&"BUS_CITY", &"BUS_VILLAGE", &"BUS_EXPRESS"])
+base_reward = 8000
+reward_step = 2000
+time_base = 80
+time_step = 3
+min_time = 40
+stops = 3
+intro = "정류장 세 곳에 차례로 서라"
+bonus_text = "버스 체력 +50%"

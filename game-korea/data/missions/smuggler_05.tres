@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/car_striker.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 1
+text = "스트라이커를 빼앗아라"
+points = PackedVector2Array(3242, 1248)
+headings = PackedFloat32Array(0)
+vehicle = ExtResource("3")
+driver = true
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 2
+text = "홍대 아지트 차고에 세워라 (체력 70% 이상)"
+points = PackedVector2Array(-1056, -4438)
+radius = 70
+min_health = 0.7
+
+[resource]
+script = ExtResource("1")
+id = &"smuggler_05"
+gang = &"smuggler"
+tier = 1
+order = 0
+title = "강남 차 털기"
+briefing = "강남 놈들 스트라이커가 다리 건너에 있다.\n빼앗아서 홍대로. 반쯤 망가지면 팔 수가 없다."
+reward = 110000
+respect = 12
+time_limit = 35
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

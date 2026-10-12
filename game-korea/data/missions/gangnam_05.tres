@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/car_zenith_g8.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 1
+text = "제니스 G8을 빼앗아라"
+points = PackedVector2Array(3552, 938)
+headings = PackedFloat32Array(1.5708)
+vehicle = ExtResource("3")
+driver = true
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 2
+text = "본부 차고에 세워라 (체력 70% 이상)"
+points = PackedVector2Array(2784, 3200)
+radius = 70
+min_health = 0.7
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_05"
+gang = &"gangnam"
+tier = 1
+order = 0
+title = "제니스 회수"
+briefing = "회장님 제니스 G8을 어떤 놈이 몰고 다닌다.\n끌어내리고 본부 차고로 가져와. 흠집 나면 네 월급에서 깐다."
+reward = 80000
+respect = 12
+time_limit = 45
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

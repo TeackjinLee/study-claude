@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"CAR_AVELA_R"
+display_name = "한대 아벨라 R"
+category = &"sport"
+max_speed = 940.0
+acceleration = 780.0
+reverse_speed = 260.0
+brake_force = 1000.0
+coast_drag = 110.0
+turn_rate = 2.9
+turn_speed_ref = 240.0
+steer_response = 9.0
+grip = 2400.0
+handbrake_grip = 0.2
+handbrake_decel = 400.0
+drift_turn_boost = 1.3
+mass = 0.9
+durability = 110.0
+size = Vector2(28, 54)
+height = 11.0
+body_color = Color(1, 0.45, 0.12, 1)
+roof_color = Color(0.2, 0.2, 0.22, 1)

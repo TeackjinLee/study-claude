@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"TRK_PORTA"
+display_name = "한대 포르타"
+category = &"truck"
+max_speed = 520.0
+acceleration = 330.0
+reverse_speed = 200.0
+brake_force = 760.0
+coast_drag = 140.0
+turn_rate = 2.0
+turn_speed_ref = 170.0
+steer_response = 5.0
+grip = 1150.0
+handbrake_grip = 0.3
+handbrake_decel = 300.0
+drift_turn_boost = 1.25
+mass = 1.8
+durability = 180.0
+size = Vector2(30, 66)
+height = 25.0
+body_color = Color(0.2, 0.42, 0.85, 1)
+roof_color = Color(0.16, 0.33, 0.7, 1)

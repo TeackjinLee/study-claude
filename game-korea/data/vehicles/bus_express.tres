@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"BUS_EXPRESS"
+display_name = "고속버스"
+category = &"bus"
+max_speed = 620
+acceleration = 300
+reverse_speed = 190
+brake_force = 720
+coast_drag = 130
+turn_rate = 1.6
+turn_speed_ref = 170
+steer_response = 4.4
+grip = 1100
+handbrake_grip = 0.34
+handbrake_decel = 280
+drift_turn_boost = 1.12
+mass = 3.0
+durability = 300
+size = Vector2(38, 108)
+height = 36.0
+body_color = Color(0.15, 0.35, 0.82, 1)
+roof_color = Color(0.92, 0.94, 0.96, 1)
+districts = Array[StringName]([&"riverside", &"yeouido"])

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/weapons/gang_pistol.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"GANG_F"
+display_name = "조직원 (여성)"
+walk_speed_min = 58
+walk_speed_max = 72
+run_speed = 180
+idle_chance = 0.35
+reaction = 1.1
+spawn_weight = 0.0
+health = 30.0
+weapon = ExtResource("2")
+gang = &"gangnam"
+shirt_colors = Array[Color]([Color(0.06, 0.06, 0.07, 1)])
+pants_colors = Array[Color]([Color(0.06, 0.06, 0.07, 1)])
+hair_colors = Array[Color]([Color(0.12, 0.08, 0.06, 1), Color(0.05, 0.04, 0.04, 1)])

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"CAR_STRIKER"
+display_name = "키온 스트라이커"
+category = &"sport"
+max_speed = 800
+acceleration = 600
+reverse_speed = 250
+brake_force = 950
+coast_drag = 110
+turn_rate = 2.8
+turn_speed_ref = 220
+steer_response = 8.0
+grip = 1750
+handbrake_grip = 0.2
+handbrake_decel = 420
+drift_turn_boost = 1.4
+mass = 1.1
+durability = 110
+size = Vector2(28, 58)
+height = 11.0
+body_color = Color(0.96, 0.78, 0.14, 1)
+roof_color = Color(0.15, 0.15, 0.17, 1)
+districts = Array[StringName]([&"gangnam", &"yeouido"])

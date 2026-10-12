@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="SideJobType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/jobs/side_job_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"fire"
+display_name = "소방"
+kind = 4
+vehicles = Array[StringName]([&"SP_FIRE"])
+base_reward = 10000
+reward_step = 3000
+time_base = 70
+time_step = 3
+min_time = 25
+stops = 1
+intro = "불난 곳에 가서 물대포로 꺼라"
+bonus_text = "불 피해 절반"

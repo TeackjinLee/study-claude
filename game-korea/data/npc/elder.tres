@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ELDER"
+display_name = "어르신"
+walk_speed_min = 30
+walk_speed_max = 45
+run_speed = 110
+idle_chance = 0.5
+reaction = 0.6
+spawn_weight = 1.2
+health = 20.0
+lines = PackedStringArray("젊은이, 천천히 다녀", "요즘 애들은 쯧쯧", "허리야…", "우리 때는 말이야")
+districts = Array[StringName]([&"jongno", &"outskirts", &"riverside"])
+hours = Vector2i(7, 20)
+shirt_colors = Array[Color]([Color(0.45, 0.38, 0.3, 1), Color(0.3, 0.33, 0.36, 1), Color(0.55, 0.5, 0.42, 1)])
+pants_colors = Array[Color]([Color(0.3, 0.28, 0.25, 1), Color(0.2, 0.2, 0.22, 1)])
+hair_colors = Array[Color]([Color(0.75, 0.75, 0.75, 1), Color(0.6, 0.6, 0.62, 1)])

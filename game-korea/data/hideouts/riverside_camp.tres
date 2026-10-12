@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="HideoutType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/hideout_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"riverside_camp"
+display_name = "한강 캠핑장"
+door = Vector2(-1824, -3634)
+along = Vector2(30, 0)
+price = 80000

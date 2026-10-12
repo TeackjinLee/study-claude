@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="GangType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/gangs/gang_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/npc/gang_gangnam.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam"
+display_name = "강남 조직"
+color = Color(0.06, 0.06, 0.08, 1)
+accent = Color(0.95, 0.75, 0.25, 1)
+member = ExtResource("2")
+member_count = 6
+home_blocks = Array[Vector2i]([Vector2i(3, 3), Vector2i(2, 3), Vector2i(3, 2), Vector2i(4, 3), Vector2i(-3, -3), Vector2i(-3, -2), Vector2i(-2, -3)])
+normal_respect = 20
+hard_respect = 40
+ally_respect = 40
+hostile_respect = -40
+kill_penalty = 10
+rival = &"oldtown"
+phones = PackedVector2Array(2510, 2930, 2510, 2975, 2510, 3020, -2098, -1830, -2098, -1785, -2098, -1740)

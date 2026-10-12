@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="ChapterType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/chapter_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+number = 3
+title = "강 건너"
+target = 6000000
+intro = "여의도와 변두리까지 판이 커졌다."

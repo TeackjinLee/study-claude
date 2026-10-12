@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="DistrictType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/district_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"industrial"
+display_name = "외곽 공단"
+chapter = 4
+gang = &"smuggler"
+blocks = Rect2i(-5, 0, 5, 6)
+color = Color(0.4, 0.9, 0.45, 1)
+sidewalk = Color(0.31, 0.32, 0.3, 1)
+building_weights = {
+&"FACTORY": 3,
+&"WAREHOUSE": 2,
+&"MIXED": 0.4,
+&"CAMPSITE": 0.3
+}
+plazas = Array[Vector2i]([])
+police_stations = Array[Vector2i]([Vector2i(-3, 1)])
+hospitals = Array[Vector2i]([Vector2i(-2, 4)])
+tagline = "굴뚝과 컨테이너 — 밀수단의 부두"

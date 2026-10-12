@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="DistrictType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/district_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"jongno"
+display_name = "종로 구도심"
+chapter = 2
+gang = &"oldtown"
+blocks = Rect2i(0, -8, 6, 3)
+color = Color(1.0, 0.4, 0.35, 1)
+sidewalk = Color(0.37, 0.34, 0.31, 1)
+building_weights = {
+&"HANOK": 3,
+&"ROWHOUSE": 2,
+&"MIXED": 2,
+&"JJOKBANG": 1,
+&"GOSIWON": 1,
+&"COMMERCIAL": 1
+}
+plazas = Array[Vector2i]([])
+police_stations = Array[Vector2i]([Vector2i(3, -7)])
+hospitals = Array[Vector2i]([])
+tagline = "기와지붕과 골목 — 건달파가 주먹으로 다스린다"

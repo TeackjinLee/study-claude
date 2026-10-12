@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="DistrictType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/district_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"riverside"
+display_name = "한강변"
+chapter = 2
+gang = &""
+blocks = Rect2i(-5, -5, 11, 1)
+color = Color(0.45, 0.9, 0.6, 1)
+sidewalk = Color(0.34, 0.38, 0.34, 1)
+building_weights = {
+&"PARK": 4,
+&"CAMPSITE": 1,
+&"MIXED": 0.6
+}
+plazas = Array[Vector2i]([])
+police_stations = Array[Vector2i]([])
+hospitals = Array[Vector2i]([])
+tagline = "강변북로와 한강공원"

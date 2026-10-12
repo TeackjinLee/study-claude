@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/npc/gang_f.tres" id="3"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 3
+text = "강남 회장과 경호원을 처리해라"
+npc = ExtResource("3")
+npc_points = PackedVector2Array(-3086, 370.4, -3086, 480, -3086, 589.6, -2866, 480)
+
+[sub_resource type="Resource" id="step_1"]
+script = ExtResource("2")
+kind = 5
+text = "경찰을 따돌려라"
+wanted = 3
+
+[sub_resource type="Resource" id="step_2"]
+script = ExtResource("2")
+kind = 0
+text = "공단 아지트로 돌아와라"
+points = PackedVector2Array(-1330, 1940)
+radius = 50
+
+[resource]
+script = ExtResource("1")
+id = &"smuggler_20"
+gang = &"smuggler"
+tier = 2
+phone_set = 1
+order = 2
+title = "서울의 왕"
+briefing = "마지막이다. 강남 회장이 부두에 직접 왔다.\n경호원 다 쓸고, 경찰까지 떼고, 아지트로 돌아와."
+reward = 600000
+respect = 16
+time_limit = 300
+steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2")])

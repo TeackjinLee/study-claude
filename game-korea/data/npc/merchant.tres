@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="NpcType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/actors/npc_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"MERCHANT"
+display_name = "상인"
+walk_speed_min = 35
+walk_speed_max = 50
+run_speed = 160
+idle_chance = 0.7
+reaction = 0.9
+spawn_weight = 0.7
+health = 20.0
+lines = PackedStringArray("골라 골라!", "떨이요 떨이!", "싸다 싸!")
+districts = Array[StringName]([&"jongno", &"outskirts"])
+shirt_colors = Array[Color]([Color(0.6, 0.25, 0.2, 1), Color(0.45, 0.45, 0.3, 1)])
+pants_colors = Array[Color]([Color(0.25, 0.22, 0.2, 1)])
+hair_colors = Array[Color]([Color(0.1, 0.08, 0.07, 1)])

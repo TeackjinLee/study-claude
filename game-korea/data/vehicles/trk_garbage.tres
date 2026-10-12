@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"TRK_GARBAGE"
+display_name = "청소차"
+category = &"garbage"
+max_speed = 420
+acceleration = 240
+reverse_speed = 170
+brake_force = 680
+coast_drag = 160
+turn_rate = 1.75
+turn_speed_ref = 150
+steer_response = 4.2
+grip = 1100
+handbrake_grip = 0.32
+handbrake_decel = 280
+drift_turn_boost = 1.15
+mass = 2.8
+durability = 260
+size = Vector2(34, 78)
+height = 32.0
+body_color = Color(0.25, 0.6, 0.35, 1)
+roof_color = Color(0.2, 0.5, 0.3, 1)

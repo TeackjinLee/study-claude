@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Resource" path="res://data/vehicles/trk_porta.tres" id="3"]
+[ext_resource type="Resource" path="res://data/npc/gang_gangnam.tres" id="4"]
+
+[sub_resource type="Resource" id="step_0"]
+script = ExtResource("2")
+kind = 4
+text = "강남 조직 트럭을 부숴라"
+points = PackedVector2Array(4147.2, 4010, 4320, 4010, 4492.8, 4010)
+headings = PackedFloat32Array(1.5708, 1.5708, 1.5708)
+vehicle = ExtResource("3")
+npc = ExtResource("4")
+npc_points = PackedVector2Array(4429.6, 3826, 4320, 3826, 4210.4, 3826)
+
+[resource]
+script = ExtResource("1")
+id = &"oldtown_19"
+gang = &"oldtown"
+tier = 2
+phone_set = 1
+order = 1
+title = "강남 창고 털기"
+briefing = "강남 물류 창고 앞에 트럭 셋. 지키는 놈들도 셋.\n트럭을 다 날려."
+reward = 220000
+respect = 16
+time_limit = 200
+steps = Array[ExtResource("2")]([SubResource("step_0")])

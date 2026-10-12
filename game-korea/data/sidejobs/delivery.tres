@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="SideJobType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/jobs/side_job_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"delivery"
+display_name = "배달"
+kind = 2
+vehicles = Array[StringName]([&"ETC_BIKE"])
+base_reward = 5000
+reward_step = 2000
+time_base = 50
+time_step = 2
+min_time = 25
+stops = 1
+intro = "가게에서 받아 주소로"
+bonus_text = "오토바이 체력 +50%"

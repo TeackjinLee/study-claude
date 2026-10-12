@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"PARK"
+display_name = "공원"
+style = &"park"
+footprints = Array[int]([0, 1, 2])
+weight = 0.0
+roof_colors = Array[Color]([Color(0.18, 0.34, 0.2, 1), Color(0.2, 0.36, 0.22, 1)])
+signs = PackedStringArray("한강공원", "근린공원")
+accent = Color(0.6, 0.95, 0.6, 1)
+solid = false
+floors = 0
+wall_color = Color(0.4, 0.4, 0.4, 1)

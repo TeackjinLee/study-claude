@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"SP_POLICE"
+display_name = "경찰 순찰차"
+category = &"police"
+max_speed = 800.0
+acceleration = 600.0
+reverse_speed = 260.0
+brake_force = 950.0
+coast_drag = 120.0
+turn_rate = 2.7
+turn_speed_ref = 225.0
+steer_response = 7.5
+grip = 1900.0
+handbrake_grip = 0.22
+handbrake_decel = 420.0
+drift_turn_boost = 1.35
+mass = 1.2
+durability = 160.0
+size = Vector2(28, 58)
+height = 14.0
+body_color = Color(0.93, 0.94, 0.96, 1)
+roof_color = Color(0.1, 0.16, 0.38, 1)

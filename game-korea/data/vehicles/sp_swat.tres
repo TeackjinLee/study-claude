@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/npc/swat.tres" id="2"]
+[resource]
+script = ExtResource("1")
+id = &"SP_SWAT"
+display_name = "경찰특공대 차량"
+category = &"swat"
+driver_npc = ExtResource("2")
+max_speed = 680.0
+acceleration = 430.0
+reverse_speed = 230.0
+brake_force = 850.0
+coast_drag = 130.0
+turn_rate = 2.1
+turn_speed_ref = 220.0
+steer_response = 6.0
+grip = 1600.0
+handbrake_grip = 0.24
+handbrake_decel = 380.0
+drift_turn_boost = 1.2
+mass = 2.2
+durability = 320.0
+size = Vector2(34, 70)
+height = 26.0
+body_color = Color(0.12, 0.13, 0.15, 1)
+roof_color = Color(0.3, 0.32, 0.36, 1)
+heal_rate = 0.0

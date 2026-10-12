@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"TRK_MIXER"
+display_name = "레미콘 차량"
+category = &"mixer"
+max_speed = 400
+acceleration = 220
+reverse_speed = 160
+brake_force = 620
+coast_drag = 170
+turn_rate = 1.6
+turn_speed_ref = 150
+steer_response = 4.0
+grip = 1050
+handbrake_grip = 0.25
+handbrake_decel = 260
+drift_turn_boost = 1.1
+mass = 4.0
+durability = 340
+size = Vector2(36, 80)
+height = 28.0
+body_color = Color(0.85, 0.18, 0.12, 1)
+roof_color = Color(0.92, 0.92, 0.92, 1)
+districts = Array[StringName]([&"industrial", &"outskirts"])

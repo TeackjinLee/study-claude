@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="GangType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/gangs/gang_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/npc/thug.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"oldtown"
+display_name = "구도심 건달파"
+color = Color(0.55, 0.08, 0.1, 1)
+accent = Color(1, 0.35, 0.3, 1)
+member = ExtResource("2")
+member_count = 6
+home_blocks = Array[Vector2i]([Vector2i(0, 4), Vector2i(0, 5), Vector2i(1, 5), Vector2i(0, 3), Vector2i(1, -7), Vector2i(0, -7), Vector2i(2, -7), Vector2i(1, -6), Vector2i(1, -10), Vector2i(0, -9)])
+rival = &"smuggler"
+normal_respect = -30
+hard_respect = 0
+kill_penalty = 10
+phones = PackedVector2Array(974, -4930, 974, -4885, 974, -4840, 974, -7230, 974, -7185, 974, -7140)
