@@ -19,3 +19,7 @@ lines = PackedStringArray("돈 내놔!")
 shirt_colors = Array[Color]([Color(0.12, 0.12, 0.12, 1)])
 pants_colors = Array[Color]([Color(0.2, 0.2, 0.22, 1)])
 hair_colors = Array[Color]([Color(0.12, 0.12, 0.12, 1)])
+outfit = &"jacket"
+trim_color = Color(0.4, 0.4, 0.42, 1)
+hat_color = Color(0.1, 0.1, 0.11, 1)
+face = &"balaclava"

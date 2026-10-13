@@ -14,3 +14,6 @@ signs = PackedStringArray("GO25", "약국", "분식", "부동산", "세탁소", 
 accent = Color(0.23, 0.65, 1, 1)
 floors = 4
 wall_color = Color(0.5, 0.44, 0.4, 1)
+
+surface_detail = true
+visual_floor_scale = 1.6

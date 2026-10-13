@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"GANG_OFFICE"
+display_name = "구도심 건달파 사무실"
+style = &"gang_office"
+footprints = Array[int]([2])
+weight = 0.0
+roof_colors = Array[Color]([Color(0.45, 0.2, 0.18, 1)])
+signs = PackedStringArray("사무실")
+accent = Color(0.82, 0.12, 0.14, 1)
+floors = 2
+visual_floor_scale = 1.4
+surface_detail = true
+wall_color = Color(0.5, 0.22, 0.18, 1)
+top_color = Color(0.3, 0.3, 0.32, 1)

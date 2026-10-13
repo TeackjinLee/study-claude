@@ -13,11 +13,13 @@ const WEATHER_CHECK := 3.0           ## 이만큼(게임 시간) 마다 날씨�
 const RAIN_CHANCE := 0.3
 const RAIN_GRIP := 0.78              ## 비 오면 옆 미끄러짐을 잡는 힘이 이만큼으로
 const RAIN_FADE := 0.25              ## 빗발이 세지고 약해지는 속도 (1/초)
+## 밤 화면 색. 건물 창 불빛·간판은 이 색을 되돌려 밝게 남는다 (BuildingView.set_lights)
+const NIGHT_TINT := Color(0.64, 0.68, 0.88)
 ## [시각, 색] — 사이는 섞는다
 const TINTS := [
-	[0.0, Color(0.8, 0.82, 0.96)], [5.0, Color(0.8, 0.82, 0.96)], [6.5, Color(0.88, 0.8, 0.9)],
-	[8.0, Color(1, 1, 1)], [17.0, Color(1, 1, 1)], [18.5, Color(1.0, 0.86, 0.74)],
-	[20.5, Color(0.8, 0.82, 0.96)], [24.0, Color(0.8, 0.82, 0.96)],
+	[0.0, NIGHT_TINT], [5.0, NIGHT_TINT], [6.5, Color(0.84, 0.78, 0.88)],
+	[8.0, Color(1, 1, 1)], [17.0, Color(1, 1, 1)], [18.5, Color(0.96, 0.82, 0.72)],
+	[20.5, NIGHT_TINT], [24.0, NIGHT_TINT],
 ]
 const RAIN_TINT := Color(0.82, 0.86, 0.92)
 
@@ -81,6 +83,7 @@ func _apply() -> void:
 	_modulate.color = tint(hour).lerp(tint(hour) * RAIN_TINT, rain)
 	VehicleMotor.road_grip = lerpf(1.0, RAIN_GRIP, rain)
 	_rain_view.visible = rain > 0.0
+	BuildingView.set_lights(lights_on(hour), _modulate.color)
 	if pedestrians:
 		pedestrians.hour = hour
 
@@ -92,6 +95,16 @@ static func tint(h: float) -> Color:
 			var b: Array = TINTS[k]
 			return (a[1] as Color).lerp(b[1], (h - a[0]) / (b[0] - a[0]))
 	return TINTS[0][1]
+
+
+## 건물 창에 불 켜진 비율 (0~1). 저녁에 하나둘 켜지고, 새벽엔 절반쯤 꺼졌다가 아침에 다 꺼진다.
+## 창마다 켜지는 차례가 달라 비율이 오르내리면 창이 한 칸씩 켜지고 꺼진다 (BuildingView 불빛 조각)
+static func lights_on(h: float) -> float:
+	if h >= 17.0:
+		return clampf((h - 17.0) / 2.5, 0.0, 1.0)
+	if h < 4.0:
+		return lerpf(1.0, 0.5, h / 4.0)
+	return clampf(lerpf(0.5, 0.0, (h - 4.0) / 2.5), 0.0, 1.0)
 
 
 static func is_night(h: float) -> bool:

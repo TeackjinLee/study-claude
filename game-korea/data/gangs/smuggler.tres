@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="GangType" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="GangType" load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/gangs/gang_type.gd" id="1"]
 [ext_resource type="Resource" path="res://data/npc/gang_smuggler.tres" id="2"]
+[ext_resource type="Resource" path="res://data/buildings/special/gang_dock.tres" id="9"]
 
 [resource]
 script = ExtResource("1")
@@ -12,6 +13,7 @@ accent = Color(0.4, 0.95, 0.45, 1)
 member = ExtResource("2")
 member_count = 6
 home_blocks = Array[Vector2i]([Vector2i(-2, -7), Vector2i(-3, -6), Vector2i(-2, -6), Vector2i(-2, 2), Vector2i(-3, 2), Vector2i(-2, 3), Vector2i(-3, 3), Vector2i(-4, 0)])
+base_look = ExtResource("9")
 rival = &"gangnam"
 normal_respect = -30
 hard_respect = 0

@@ -13,6 +13,8 @@ extends Resource
 ## 라이벌 조직원을 죽이면 이 갱 존경도가 오른다
 @export var rival: StringName
 @export var rival_share := 0.25
+## 아지트 겉모습 (2.5D). 공중전화 묶음마다 가장 가까운 건물을 이 모양으로 그린다 (City.looks)
+@export var base_look: BuildingType
 
 @export_group("Respect")
 @export var normal_respect := 20                ## 보통 미션 전화가 열리는 존경도

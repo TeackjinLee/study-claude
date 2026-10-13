@@ -26,6 +26,7 @@ var wrecked := false          ## 터져서 잔해만 남았다 — 탈 수도 �
 var hit_by_player := false    ## 마지막 피해를 주인공이 줬다 (폭발 피해를 누구 탓으로 할지)
 var paint := Color.WHITE      ## 차체 색 (카센터에서 다시 칠할 수 있다)
 var beam := true              ## 2.5D에서 바닥에 전조등 빛을 그린다 (차량 도감에선 끈다)
+var ground := 0.0             ## 2.5D 땅 높이 (다리 위·경사로). 그림만 올리고 물리는 평면 그대로다
 ## 차 category → 체력 배율 (부업 보너스: 택시·버스·오토바이 +50%). main이 정한다
 static var durability_bonus := {}
 
@@ -98,6 +99,7 @@ func _physics_process(delta: float) -> void:
 	_move(delta)
 	# 2.5D: 깊이(월드 x+y)로 그리는 순서를 정한다
 	z_index = IsoView.z_of(global_position) if IsoView.enabled else 1
+	ground = IsoView.ground(global_position)
 	# 화면 밖(카메라에서 먼) 차는 다시 그리지 않는다 — 다가오면 그때 그린다.
 	# 가까워도 모습이 그대로면(곧게 달리거나 서 있으면) 다시 그리지 않는다 — 노드가 움직이면 그림도 따라간다
 	var cam := ChaseCamera.current_cam()
@@ -111,7 +113,7 @@ func _physics_process(delta: float) -> void:
 ## 그림을 바꾸는 상태: 방향·탑승·브레이크·후진·잔해·도색·경적·화면 방식
 func _look() -> Array:
 	return [snappedf(rotation, 0.002), occupied(), is_braking(), motor.forward_speed() < -5.0, wrecked, paint,
-		ai != null and ai.honking, IsoView.enabled]
+		ai != null and ai.honking, IsoView.enabled, snappedf(ground, 0.5)]
 
 
 ## 매 프레임 움직이는 그림 (경광등·불·연기, 위에서 보기의 레미콘 드럼·잔해 불씨)
@@ -380,6 +382,8 @@ func _draw_iso(w: float, h: float) -> void:
 	var top := -h * 0.5
 	var left := -w * 0.5
 	var two_wheel := stats.category in [&"bike", &"bicycle"]
+	# 다리 위면 그 높이에서부터 그린다 (전조등 빛·그림자·모형 모두)
+	_lift(0.0)
 	if beam and occupied() and not wrecked and not two_wheel:
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(left + 4, top), Vector2(-w * 1.6, top - h * 1.6),
@@ -399,12 +403,12 @@ func _draw_iso(w: float, h: float) -> void:
 
 ## 노드가 회전해 있으므로, 높이 오프셋도 노드 좌표로 돌려 둔다
 func _lift(height: float) -> void:
-	draw_set_transform(IsoView.lift_local(height, rotation), 0.0, Vector2.ONE)
+	draw_set_transform(IsoView.lift_local(height + ground, rotation), 0.0, Vector2.ONE)
 
 
 ## 화면 기준 좌표계 (회전한 노드 안에서): 차 위 글자를 세워 쓴다
 func _screen_local(height: float) -> Transform2D:
-	return Transform2D(-rotation, Vector2.ZERO) * IsoView.screen_frame(Vector2.ZERO, height)
+	return Transform2D(-rotation, Vector2.ZERO) * IsoView.screen_frame(Vector2.ZERO, height + ground)
 
 
 const TRUCKS := [&"truck", &"tanker", &"garbage", &"mixer", &"fire", &"tow", &"bigtruck", &"army"]

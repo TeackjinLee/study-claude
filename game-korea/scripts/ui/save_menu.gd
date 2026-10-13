@@ -67,7 +67,7 @@ func open_save(lines: Array[String]) -> void:
 ## auto는 자동 저장 칸 요약 ("" 이면 줄을 넣지 않는다)
 func open_load(lines: Array[String], auto := "") -> void:
 	mode = Mode.LOAD
-	_title.text = "그랜드 서울 오토 — 이어 하기"
+	_title.text = "서울 거리 프로젝트 — 이어 하기"
 	_hint.text = "↑↓ 고르기   Enter 시작   1·2·3 바로 고르기"
 	_fill(lines, true, auto)
 

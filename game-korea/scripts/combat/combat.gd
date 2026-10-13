@@ -375,7 +375,7 @@ func _draw() -> void:
 		draw_arc(e[0], 10.0, a - 0.9, a + 0.9, 8, Color(1, 1, 1, 0.7 * k), 2.0)
 	for e: Array in _blasts:
 		var t: float = e[2] / BLAST_TIME
-		var pos: Vector2 = e[0]
+		var pos: Vector2 = e[0] + IsoView.lift(IsoView.ground(e[0]))   # 다리 위 폭발은 상판 높이에서
 		var r := lerpf(30.0, DamageModel.EXPLOSION_RADIUS * 0.75 * e[1], sqrt(t))
 		if IsoView.enabled:
 			# 2.5D: 바닥에 번진 빛 위로 둥근 불덩이가 솟는다 (화면 기준 원)

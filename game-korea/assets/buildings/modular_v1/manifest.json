@@ -1,0 +1,98 @@
+[
+	{
+		"alpha": 2,
+		"file": "01_wall_brick_windows.png",
+		"height": 333,
+		"width": 291
+	},
+	{
+		"alpha": 2,
+		"file": "02_wall_brick_plain.png",
+		"height": 332,
+		"width": 262
+	},
+	{
+		"alpha": 2,
+		"file": "03_wall_concrete_windows.png",
+		"height": 357,
+		"width": 291
+	},
+	{
+		"alpha": 2,
+		"file": "04_wall_glass.png",
+		"height": 357,
+		"width": 273
+	},
+	{
+		"alpha": 2,
+		"file": "05_roof_flat_green.png",
+		"height": 234,
+		"width": 313
+	},
+	{
+		"alpha": 2,
+		"file": "06_roof_hanok.png",
+		"height": 256,
+		"width": 314
+	},
+	{
+		"alpha": 2,
+		"file": "07_roof_red_tile.png",
+		"height": 255,
+		"width": 313
+	},
+	{
+		"alpha": 2,
+		"file": "08_roof_metal.png",
+		"height": 259,
+		"width": 314
+	},
+	{
+		"alpha": 2,
+		"file": "09_door_shop.png",
+		"height": 291,
+		"width": 253
+	},
+	{
+		"alpha": 2,
+		"file": "10_door_residential.png",
+		"height": 295,
+		"width": 231
+	},
+	{
+		"alpha": 2,
+		"file": "11_awning_green.png",
+		"height": 272,
+		"width": 306
+	},
+	{
+		"alpha": 2,
+		"file": "12_balcony.png",
+		"height": 287,
+		"width": 281
+	},
+	{
+		"alpha": 2,
+		"file": "13_sign_karaoke.png",
+		"height": 319,
+		"width": 227
+	},
+	{
+		"alpha": 2,
+		"file": "14_sign_snack_shop.png",
+		"height": 287,
+		"width": 295
+	},
+	{
+		"alpha": 2,
+		"file": "15_air_conditioner.png",
+		"height": 285,
+		"width": 277
+	},
+	{
+		"alpha": 2,
+		"file": "16_water_tank.png",
+		"height": 319,
+		"width": 238
+	}
+]

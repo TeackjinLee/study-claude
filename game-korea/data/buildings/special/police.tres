@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"POLICE"
+display_name = "경찰서"
+style = &"police"
+footprints = Array[int]([0])
+weight = 0.0
+roof_colors = Array[Color]([Color(0.78, 0.8, 0.84, 1)])
+signs = PackedStringArray("경찰서")
+accent = Color(0.1, 0.2, 0.5, 1)
+floors = 4
+visual_floor_scale = 1.6
+surface_detail = true
+wall_color = Color(0.74, 0.76, 0.8, 1)
+top_color = Color(0.36, 0.37, 0.4, 1)

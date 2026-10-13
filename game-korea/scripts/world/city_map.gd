@@ -21,6 +21,11 @@ const MIN := Vector2i(-5, -11)
 const MAX := Vector2i(5, 5)
 ## 한강을 건너는 세로 도로 번호
 const BRIDGES: Array[int] = [-3, 2, 5]
+## 다리 위 도로 높이 (2.5D 화면 px). 다리는 강물 위로 이만큼 떠 있고, 양끝은 경사로로 땅에 닿는다.
+## 그림에만 쓴다 — 다리 밑으로 지나는 길이 없어서(밑은 강물) 물리·충돌은 평면 그대로다
+const DECK_HEIGHT := 46.0
+## 경사로 길이 (월드 px). 짧은 다리는 길이의 40%까지 줄인다
+const RAMP := 380.0
 const STEPS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]   ## 북 동 남 서
 const LAST_CHAPTER := 4
 
@@ -30,6 +35,7 @@ static var _blocks := {}       ## Vector2i 블록 → DistrictType (물은 없�
 static var _open_cache := {}   ## 교차로 → 열림 (장이 바뀌면 비운다)
 static var _road_cache := {}   ## Vector3i(교차로, 방향) → 도로 있음 (지도는 안 바뀐다)
 static var _open_road_cache := {}
+static var _spans := {}        ## 다리 세로 도로 번호 → Array[Vector2] (다리 위 구간 y 시작·끝, 교차로 포함)
 
 
 static func _ensure() -> void:
@@ -165,6 +171,42 @@ static func _bridge_open(c: Vector2i) -> bool:
 					return false
 				break
 	return true
+
+
+## 다리가 놓인 구간들: 세로 도로 k번에서 강 위를 지나는 y 구간 (이어진 다리 구간과 그 사이 강 한가운데 교차로를 합친다)
+static func bridge_spans(k: int) -> Array[Vector2]:
+	if _spans.has(k):
+		return _spans[k]
+	var out: Array[Vector2] = []
+	for j in range(MIN.y, MAX.y + 1):
+		if not is_bridge(Vector2i(k, j), 2):
+			continue
+		var y0 := j * City.PITCH + City.ROAD
+		var y1 := y0 + City.BLOCK
+		if not out.is_empty() and is_equal_approx(out[-1].y + City.ROAD, y0):
+			out[-1].y = y1
+		else:
+			out.append(Vector2(y0, y1))
+	_spans[k] = out
+	return out
+
+
+## 그 자리 땅 높이 (2.5D 화면 px): 다리 위면 DECK_HEIGHT, 경사로면 그 사이, 나머지는 0
+static func ground_height(pos: Vector2) -> float:
+	for k in BRIDGES:
+		if absf(pos.x - City.road_center(k)) > City.ROAD * 0.5 + 8.0:
+			continue
+		for span in bridge_spans(k):
+			if pos.y > span.x and pos.y < span.y:
+				return deck_height_at(span, pos.y)
+	return 0.0
+
+
+## 다리 구간 span 안의 y에서 다리 높이 (양끝 경사로는 부드럽게)
+static func deck_height_at(span: Vector2, y: float) -> float:
+	var ramp := minf(RAMP, (span.y - span.x) * 0.4)
+	var t := clampf(minf(y - span.x, span.y - y) / ramp, 0.0, 1.0)
+	return DECK_HEIGHT * smoothstep(0.0, 1.0, t)
 
 
 ## 열린 도로 구간인가 (양끝 교차로가 다 열려 있다)

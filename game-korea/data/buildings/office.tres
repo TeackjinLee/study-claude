@@ -10,7 +10,10 @@ style = &"office"
 footprints = Array[int]([0, 1])
 weight = 2.0
 roof_colors = Array[Color]([Color(0.2, 0.26, 0.34, 1), Color(0.24, 0.3, 0.32, 1)])
-signs = PackedStringArray("한빛타워", "세원빌딩", "청림 파이낸스", "누리 IT센터")
+signs = PackedStringArray("꾸벅타워", "야근빌딩", "동전산 파이낸스", "버퍼링 IT센터")
 accent = Color(0.55, 0.8, 1, 1)
 floors = 9
 wall_color = Color(0.3, 0.38, 0.46, 1)
+
+surface_detail = true
+visual_floor_scale = 1.7

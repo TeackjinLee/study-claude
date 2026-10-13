@@ -443,6 +443,35 @@ func _frames(n: int) -> void:
 
 
 ## 2.5D 화면: 도보·교차로·전경·주행·낮·헬기, 그리고 F9로 바꾼 위에서 보기 비교
+## 2.5D 다리: 강 위로 뜬 상판·경사로·교각, 그 위의 차와 사람
+func _bridge_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var cx := City.road_center(2)
+	var span: Vector2 = CityMap.bridge_spans(2)[-1]
+	var placed: Array[Vehicle] = []
+	var ids := ["bus_city", "car_sonato", "trk_bongo", "car_taxi", "police_patrol"]
+	for i in ids.size():
+		var v := Vehicle.new()
+		v.stats = load("res://data/vehicles/%s.tres" % ids[i])
+		main.add_child(v)
+		var north := i % 2 == 0
+		v.place(Vector2(cx + (48.0 if north else -48.0), span.y - 60.0 - i * 150.0), 0.0 if north else PI)
+		placed.append(v)
+	var ped: Pedestrian = main.pedestrians.peds[7]
+	ped.global_position = Vector2(cx + 80.0, span.y - 420.0)
+	cam.target = null
+	cam.global_position = Vector2(cx, span.y - 380.0)
+	cam.zoom = Vector2(1.0, 1.0)
+	await _frames(5)
+	await _save("iso_bridge")
+	cam.global_position = Vector2(cx, (span.x + span.y) * 0.5)
+	cam.zoom = Vector2(0.4, 0.4)
+	await _frames(3)
+	await _save("iso_bridge_wide")
+	for v in placed:
+		v.queue_free()
+
+
 func _iso_shots(main: Node2D) -> void:
 	var cam: ChaseCamera = main.camera
 	var player: Player = main.player
@@ -468,6 +497,7 @@ func _iso_shots(main: Node2D) -> void:
 	await _save("iso_vehicles")
 	for v in shown:
 		v.queue_free()
+	await _bridge_shots(main)
 	cam.target = player
 	cam.snap()
 	var loop := City.sidewalk_loop(Vector2i(3, 3))
@@ -486,6 +516,14 @@ func _iso_shots(main: Node2D) -> void:
 	cam.zoom = Vector2(0.45, 0.45)
 	await _frames(2)
 	await _save("iso_overview")
+	# 기능 건물: 경찰서·강남 조직 사옥, 정비소·병원
+	cam.global_position = (City.block_rect(4, 2).get_center() + City.block_rect(3, 3).get_center()) * 0.5
+	cam.zoom = Vector2(0.6, 0.6)
+	await _frames(2)
+	await _save("iso_special_police_hq")
+	cam.global_position = (City.block_rect(1, 3).get_center() + City.block_rect(1, 4).get_center()) * 0.5
+	await _frames(2)
+	await _save("iso_special_hospital")
 	main.set_iso(false)
 	await _frames(2)
 	await _save("iso_off_topdown")
@@ -508,6 +546,9 @@ func _iso_shots(main: Node2D) -> void:
 	main.sky.set_hour(13.0)
 	await _frames(5)
 	await _save("iso_day")
+	main.sky.set_hour(18.7)   # 해 질 녘: 창에 불이 하나둘 켜지는 중
+	await _frames(5)
+	await _save("iso_dusk")
 	main.sky.set_hour(21.0)
 	if main.director.current_vehicle:
 		main.director.request_enter_exit()

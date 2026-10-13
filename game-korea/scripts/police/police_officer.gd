@@ -76,11 +76,7 @@ func _draw() -> void:
 	super._draw()
 	if state != State.KNOCKED and state != State.DEAD:
 		if IsoView.enabled:
-			# 2.5D: 머리 위 경찰 모자
-			draw_set_transform_matrix(IsoView.screen_frame().scaled_local(Vector2(npc.body_scale, npc.body_scale)))
-			draw_rect(Rect2(-4.6, -31, 9.2, 4), Color(0.08, 0.1, 0.22))
-			draw_rect(Rect2(-5.5, -27.5, 11, 1.6), Color(0.05, 0.06, 0.14))
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			# 2.5D: 모자·헬멧은 NpcType 모습(hat)대로 PersonDrawer가 그린다
 			return
 		# 모자 챙
 		draw_set_transform(Vector2.ZERO, facing, Vector2.ONE)

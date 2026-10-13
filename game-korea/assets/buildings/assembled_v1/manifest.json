@@ -1,0 +1,182 @@
+[
+	{
+		"alpha": 2,
+		"file": "buildings/01_house.png",
+		"height": 213,
+		"width": 261
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/02_villa.png",
+		"height": 252,
+		"width": 262
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/03_officetel.png",
+		"height": 261,
+		"width": 198
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/04_apartment.png",
+		"height": 287,
+		"width": 264
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/05_rowhouse.png",
+		"height": 237,
+		"width": 281
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/06_gosiwon.png",
+		"height": 264,
+		"width": 242
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/07_oneroom.png",
+		"height": 317,
+		"width": 242
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/08_mixed_use.png",
+		"height": 274,
+		"width": 261
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/09_commercial.png",
+		"height": 309,
+		"width": 271
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/10_office.png",
+		"height": 284,
+		"width": 265
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/11_warehouse.png",
+		"height": 221,
+		"width": 285
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/12_factory.png",
+		"height": 217,
+		"width": 266
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/13_hanok.png",
+		"height": 247,
+		"width": 271
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/14_jjokbang.png",
+		"height": 252,
+		"width": 295
+	},
+	{
+		"alpha": 2,
+		"file": "buildings/15_campsite.png",
+		"height": 211,
+		"width": 278
+	},
+	{
+		"alpha": 2,
+		"file": "rear/01_house_rear.png",
+		"height": 268,
+		"width": 312
+	},
+	{
+		"alpha": 2,
+		"file": "rear/02_villa_rear.png",
+		"height": 307,
+		"width": 277
+	},
+	{
+		"alpha": 2,
+		"file": "rear/03_officetel_rear.png",
+		"height": 267,
+		"width": 243
+	},
+	{
+		"alpha": 2,
+		"file": "rear/04_apartment_rear.png",
+		"height": 295,
+		"width": 303
+	},
+	{
+		"alpha": 2,
+		"file": "rear/05_rowhouse_rear.png",
+		"height": 236,
+		"width": 288
+	},
+	{
+		"alpha": 2,
+		"file": "rear/06_gosiwon_rear.png",
+		"height": 300,
+		"width": 260
+	},
+	{
+		"alpha": 2,
+		"file": "rear/07_oneroom_rear.png",
+		"height": 301,
+		"width": 276
+	},
+	{
+		"alpha": 2,
+		"file": "rear/08_mixed_use_rear.png",
+		"height": 317,
+		"width": 286
+	},
+	{
+		"alpha": 2,
+		"file": "rear/09_commercial_rear.png",
+		"height": 278,
+		"width": 289
+	},
+	{
+		"alpha": 2,
+		"file": "rear/10_office_rear.png",
+		"height": 301,
+		"width": 292
+	},
+	{
+		"alpha": 2,
+		"file": "rear/11_warehouse_rear.png",
+		"height": 231,
+		"width": 307
+	},
+	{
+		"alpha": 2,
+		"file": "rear/12_factory_rear.png",
+		"height": 266,
+		"width": 289
+	},
+	{
+		"alpha": 2,
+		"file": "rear/13_hanok_rear.png",
+		"height": 291,
+		"width": 312
+	},
+	{
+		"alpha": 2,
+		"file": "rear/14_jjokbang_rear.png",
+		"height": 258,
+		"width": 301
+	},
+	{
+		"alpha": 2,
+		"file": "rear/15_campsite_rear.png",
+		"height": 265,
+		"width": 306
+	}
+]

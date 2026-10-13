@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"GANG_DOCK"
+display_name = "외곽 밀수단 거점"
+style = &"gang_dock"
+footprints = Array[int]([1])
+weight = 0.0
+roof_colors = Array[Color]([Color(0.45, 0.48, 0.46, 1)])
+signs = PackedStringArray()
+accent = Color(0.4, 0.95, 0.45, 1)
+floors = 2
+visual_floor_scale = 1.45
+surface_detail = true
+wall_color = Color(0.22, 0.42, 0.3, 1)

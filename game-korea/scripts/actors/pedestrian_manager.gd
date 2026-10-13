@@ -75,10 +75,19 @@ func _spawn_on_sidewalk() -> Pedestrian:
 		return null
 	var block := blocks[rng.randi() % blocks.size()]
 	var p := Pedestrian.new()
-	p.setup(_pick_type(block), rng, City.sidewalk_loop(block), rng.randi_range(0, 3), rng.randf(),
+	p.setup(_pick_type(block), rng, _walk_loop(block), rng.randi_range(0, 3), rng.randf(),
 		1 if rng.randf() < 0.5 else -1)
 	add(p)
 	return p
+
+
+## 걷게 할 길: 보통은 블록 둘레 인도, 랜드마크 블록이면 셋 중 둘은 부지 안 공터(광장·골목·승강장)
+## (무작위를 더 뽑지 않는다 — 같은 시드면 보행자 배치가 같다)
+func _walk_loop(block: Vector2i) -> PackedVector2Array:
+	var lots: Array = City.lot_loops.get(block, [])
+	if lots.is_empty() or peds.size() % 3 == 0:
+		return City.sidewalk_loop(block)
+	return lots[peds.size() % lots.size()]
 
 
 ## 차에서 끌려 나온 운전자 등: pos에서 away 방향으로 도망치는 보행자를 만든다 (npc가 없으면 일반 시민)
@@ -241,7 +250,7 @@ func _maintain() -> void:
 		return
 	for attempt in 10:
 		var block := blocks[rng.randi() % blocks.size()]
-		var loop := City.sidewalk_loop(block)
+		var loop := _walk_loop(block)
 		var edge := rng.randi_range(0, 3)
 		var t := rng.randf()
 		var pos := loop[edge].lerp(loop[(edge + 1) % 4], t)

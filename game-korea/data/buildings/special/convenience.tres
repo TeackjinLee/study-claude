@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"CONVENIENCE"
+display_name = "편의점"
+style = &"convenience"
+footprints = Array[int]([2])
+weight = 0.0
+roof_colors = Array[Color]([Color(0.85, 0.85, 0.85, 1)])
+signs = PackedStringArray("GO25")
+accent = Color(0.1, 0.6, 0.6, 1)
+floors = 1
+visual_floor_scale = 1.6
+surface_detail = true
+wall_color = Color(0.9, 0.9, 0.88, 1)
+top_color = Color(0.42, 0.43, 0.44, 1)
+replaces = Array[StringName]([&"MIXED", &"ONEROOM", &"COMMERCIAL", &"VILLA"])
+scatter = 0.2

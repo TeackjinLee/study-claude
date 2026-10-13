@@ -22,11 +22,12 @@ func _physics_process(_delta: float) -> void:
 			continue
 		var wheels := v.rear_wheel_positions()
 		var prev: Array = _last.get(v, [])
+		var up := IsoView.lift(v.ground)   # 2.5D: 다리 위 자국은 상판 높이에 남긴다
 		for i in prev.size():
 			var d := (prev[i] as Vector2).distance_to(wheels[i])
 			if d > 1.0 and d < MAX_STEP:
-				_segments.append(prev[i])
-				_segments.append(wheels[i])
+				_segments.append(prev[i] + up)
+				_segments.append(wheels[i] + up)
 				added = true
 		_last[v] = wheels
 	if not added:

@@ -10,7 +10,10 @@ style = &"officetel"
 footprints = Array[int]([1])
 weight = 1.0
 roof_colors = Array[Color]([Color(0.3, 0.34, 0.36, 1), Color(0.34, 0.33, 0.38, 1)])
-signs = PackedStringArray("리버뷰", "스카이힐", "강남 센트럴")
+signs = PackedStringArray("구름뷰", "층층하늘", "반짝스테이")
 accent = Color(0.4, 1, 0.6, 1)
 floors = 7
 wall_color = Color(0.55, 0.56, 0.6, 1)
+
+surface_detail = true
+visual_floor_scale = 1.7

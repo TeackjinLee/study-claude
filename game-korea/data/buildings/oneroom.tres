@@ -14,3 +14,7 @@ signs = PackedStringArray("원룸", "풀옵션 원룸", "신축 원룸")
 accent = Color(0.4, 0.9, 1.0, 1)
 floors = 4
 wall_color = Color(0.66, 0.64, 0.6, 1)
+top_color = Color(0.26, 0.4, 0.37, 1)
+
+surface_detail = true
+visual_floor_scale = 1.65

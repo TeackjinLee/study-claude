@@ -29,6 +29,7 @@ var dead_time := 0.0
 var shirt: Color
 var pants: Color
 var hair: Color
+var look_seed := 0                ## 모자·소지품 유무를 정하는 값 (rng를 쓰지 않고 처음 자리로 정한다)
 var speech := ""                  ## 말풍선 (speech_time 동안)
 var speech_time := 0.0
 
@@ -47,6 +48,7 @@ func setup(p_npc: NpcType, p_rng: RandomNumberGenerator, p_loop: PackedVector2Ar
 	var next := wrapi(edge + 1, 0, loop.size())
 	position = loop[edge].lerp(loop[next], t)
 	target_index = next if direction == 1 else edge
+	look_seed = hash(Vector2i(position.round()))
 
 
 func _ready() -> void:
@@ -214,13 +216,13 @@ func _draw() -> void:
 	if IsoView.enabled:
 		# 2.5D: 서 있으면 세워 그리고, 쓰러지면 바닥에 눕힌다
 		if down:
-			PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, true, npc.body_scale)
+			PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, true, npc.body_scale, npc, look_seed)
 		else:
-			PersonDrawer.draw_standing(self, facing, walk_phase, shirt, pants, hair, npc.body_scale)
+			PersonDrawer.draw_standing(self, facing, walk_phase, shirt, pants, hair, npc.body_scale, null, npc, look_seed)
 		if speech_time > 0.0 and speech != "" and state != State.DEAD:
 			PersonDrawer.draw_speech(self, speech, npc.body_scale)
 		return
-	PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, down, npc.body_scale)
+	PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, down, npc.body_scale, npc, look_seed)
 	if speech_time > 0.0 and speech != "" and state != State.DEAD:
 		var font := ThemeDB.fallback_font
 		var w := font.get_string_size(speech, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 12.0

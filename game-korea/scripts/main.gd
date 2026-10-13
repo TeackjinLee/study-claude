@@ -23,6 +23,8 @@ const VEHICLE_TYPES: Array[VehicleType] = [
 	preload("res://data/vehicles/sp_tow.tres"),
 	preload("res://data/vehicles/trk_garbage.tres"),
 ]
+## 터미널 승강장에 세워 두는 차종
+const LANDMARK_BUS: VehicleType = preload("res://data/vehicles/bus_express.tres")
 const DEV_SWITCH_TYPES := 3   ## 1·2·3 키로 바꿀 수 있는 차종 수 (VEHICLE_TYPES 앞쪽)
 
 const GANGS: Array[GangType] = [
@@ -136,6 +138,11 @@ var _last_vehicle: Vehicle
 
 
 func _ready() -> void:
+	# 시험용: `godot --path . -- --chapter=N`으로 켜면 N장(그 장까지 열린 구역)부터 바로 시작한다.
+	# 본편으로 켰을 때만 본다 — 테스트는 Main을 다른 노드 밑에 붙이므로 같은 인자(traffic_test --chapter)에 영향받지 않는다
+	var start := start_chapter_arg() if get_parent() == get_tree().root else 0
+	if start > 0:
+		chapter = start
 	CityMap.set_chapter(chapter)
 	RoadNav.clear_cache()
 	city = City.new()
@@ -147,6 +154,13 @@ func _ready() -> void:
 	for spec: Array in PARKED:
 		vehicles.append(_spawn_parked(spec))
 	start_vehicle = vehicles[0]
+	# 랜드마크 공터에 세워 둔 차 (터미널 승강장의 고속버스 — 훔쳐 탈 수 있다)
+	for spot: Array in city.landmark_parking():
+		var bus := Vehicle.new()
+		bus.stats = LANDMARK_BUS
+		add_child(bus)
+		bus.place(spot[0], spot[1])
+		vehicles.append(bus)
 	skid_marks.vehicles = vehicles
 
 	pedestrians = PedestrianManager.new()
@@ -309,8 +323,18 @@ func _ready() -> void:
 	add_child(save_menu)
 	save_menu.chosen.connect(_on_slot_chosen)
 
-	if load_on_start and get_parent() == get_tree().root and (auto_line() != "" or not slot_lines().all(func(l): return l == "")):
+	if start > 0:
+		hud.banner("%d장 · %s" % [chapter, chapter_type().title], "시험 시작 (--chapter=%d) — 저장 불러오기 없음" % chapter, 3.5, Hud.GOLD)
+	elif load_on_start and get_parent() == get_tree().root and (auto_line() != "" or not slot_lines().all(func(l): return l == "")):
 		save_menu.open_load(slot_lines(), auto_line())
+
+
+## 실행 인자 `--chapter=N` (없으면 0)
+static func start_chapter_arg() -> int:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--chapter="):
+			return clampi(int(a.get_slice("=", 1)), 1, CityMap.LAST_CHAPTER)
+	return 0
 
 
 func _physics_process(delta: float) -> void:

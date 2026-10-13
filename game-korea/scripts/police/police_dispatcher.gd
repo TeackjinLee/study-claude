@@ -606,6 +606,9 @@ func reset() -> void:
 	for car in cars.duplicate():
 		_despawn(car)
 	crews.clear()
+	for rb in roadblocks:
+		if is_instance_valid(rb.get("visual")):
+			rb.visual.queue_free()
 	roadblocks.clear()
 	for h in helis:
 		h.queue_free()
@@ -644,6 +647,8 @@ func _update_roadblocks(delta: float) -> void:
 		for o: PoliceOfficer in rb.officers:
 			if officers.has(o) and o.duty == PoliceOfficer.Duty.GUARD:
 				_remove_officer(o)
+		if is_instance_valid(rb.get("visual")):
+			rb.visual.queue_free()
 		roadblocks.erase(rb)
 	if wanted.level >= CHECKPOINT_LEVEL:
 		_place_checkpoints()
@@ -707,6 +712,12 @@ func _build_roadblock(spot: Vector2, dir: Vector2, checkpoint: bool) -> bool:
 	var guard := _spawn_officer(spot + dir * 50.0, null, PoliceOfficer.Duty.GUARD)
 	guard.post = guard.global_position
 	rb.officers.append(guard)
+	if checkpoint:
+		var visual := CheckpointVisual.new()
+		visual.spot=spot
+		visual.across=across
+		add_child(visual)
+		rb["visual"]=visual
 	roadblocks.append(rb)
 	roadblocks_placed += 1
 	return true

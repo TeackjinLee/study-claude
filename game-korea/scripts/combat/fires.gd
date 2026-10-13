@@ -160,7 +160,7 @@ func _release_truck() -> void:
 
 func _draw() -> void:
 	for f in fires:
-		var pos: Vector2 = f.pos
+		var pos: Vector2 = f.pos + IsoView.lift(IsoView.ground(f.pos))   # 다리 위 불은 상판에서 탄다
 		var r: float = f.radius
 		var fade := clampf(f.left / 1.5, 0.0, 1.0)
 		draw_circle(pos, r, Color(0.15, 0.05, 0.02, 0.35 * fade))

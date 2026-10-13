@@ -30,6 +30,11 @@ static func lift(h: float) -> Vector2:
 	return LIFT * h
 
 
+## 그 자리 땅 높이 (다리 위). 위에서 보기(F9)면 0
+static func ground(pos: Vector2) -> float:
+	return CityMap.ground_height(pos) if enabled else 0.0
+
+
 ## 회전한 노드 안에서 쓸 높이 오프셋
 static func lift_local(h: float, rotation: float) -> Vector2:
 	return (LIFT * h).rotated(-rotation)

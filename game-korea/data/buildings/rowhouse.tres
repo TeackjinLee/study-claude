@@ -14,3 +14,6 @@ signs = PackedStringArray("가동", "나동", "다동")
 accent = Color(0.95, 0.8, 0.5, 1)
 floors = 3
 wall_color = Color(0.58, 0.38, 0.32, 1)
+
+surface_detail = true
+visual_floor_scale = 1.65

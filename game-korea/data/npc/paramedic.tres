@@ -14,6 +14,11 @@ reaction = 1.1
 spawn_weight = 0.0
 health = 25.0
 
-shirt_colors = Array[Color]([Color(0.95, 0.55, 0.12, 1)])
+shirt_colors = Array[Color]([Color(0.92, 0.93, 0.95, 1)])
 pants_colors = Array[Color]([Color(0.12, 0.16, 0.3, 1)])
 hair_colors = Array[Color]([Color(0.07, 0.06, 0.06, 1)])
+outfit = &"stripes"
+trim_color = Color(0.95, 0.55, 0.12, 1)
+hat = &"cap"
+hat_color = Color(0.12, 0.16, 0.3, 1)
+hat_chance = 0.5

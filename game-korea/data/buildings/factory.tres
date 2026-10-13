@@ -10,7 +10,10 @@ style = &"factory"
 footprints = Array[int]([0])
 weight = 0.0
 roof_colors = Array[Color]([Color(0.45, 0.46, 0.42, 1), Color(0.4, 0.42, 0.44, 1)])
-signs = PackedStringArray("대성공업", "한일정밀", "삼우산업", "동진철강")
+signs = PackedStringArray("덜컹정밀", "녹슨나사공업", "쇳가루산업", "꽝꽝철강")
 accent = Color(0.95, 0.55, 0.2, 1)
 floors = 2
 wall_color = Color(0.48, 0.5, 0.52, 1)
+
+surface_detail = true
+visual_floor_scale = 1.35

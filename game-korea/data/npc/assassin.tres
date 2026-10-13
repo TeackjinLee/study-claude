@@ -18,3 +18,7 @@ weapon = ExtResource("2")
 shirt_colors = Array[Color]([Color(0.03, 0.03, 0.04, 1)])
 pants_colors = Array[Color]([Color(0.03, 0.03, 0.04, 1)])
 hair_colors = Array[Color]([Color(0.03, 0.03, 0.04, 1)])
+outfit = &"coat"
+trim_color = Color(0.08, 0.08, 0.09, 1)
+hat = &"hood"
+hat_color = Color(0.04, 0.04, 0.05, 1)

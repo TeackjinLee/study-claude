@@ -32,3 +32,27 @@ extends Resource
 @export var shirt_colors: Array[Color] = [Color(0.5, 0.5, 0.5)]
 @export var pants_colors: Array[Color] = [Color(0.2, 0.22, 0.3)]
 @export var hair_colors: Array[Color] = [Color(0.08, 0.07, 0.07)]
+
+@export_group("모습")
+## 옷 모양 (PersonDrawer가 그린다). plain 셔츠 · jacket 앞이 열린 겉옷 · coat 긴 코트 · suit 정장·넥타이 ·
+## tank 민소매·문신 · tracksuit 줄무늬 운동복 · dress 원피스 · vest 조끼(형광·방탄) · stripes 반사띠 제복 ·
+## camo 얼룩무늬 · apron 앞치마 · hanbok 한복 홍보복 · rags 해진 겉옷
+@export var outfit: StringName = &"plain"
+## 안에 받친 옷·넥타이·줄무늬·조끼·반사띠 색
+@export var trim_color := Color(0.92, 0.92, 0.9)
+## 모자: cap 야구모자 · flatcap 헌팅캡 · beanie 비니 · police 경찰 모자 · helmet 안전모·방탄모 ·
+## fire_helmet 소방 헬멧 · hood 두건 · visor 챙 모자. 비우면 맨머리
+@export var hat: StringName = &""
+@export var hat_color := Color(0.2, 0.2, 0.22)
+## 모자를 쓴 사람 비율 (0~1). 사람마다 정해진다
+@export var hat_chance := 1.0
+## 얼굴: sunglasses 선글라스 · balaclava 복면 · beard 수염 · goggles 보안경
+@export var face: StringName = &""
+## 긴 머리 (어깨까지)
+@export var long_hair := false
+## 든 것: briefcase 서류가방 · handbag 핸드백 · backpack 배낭 · sack 자루 · cane 지팡이 · box 배달 상자 ·
+## guitar 기타 · headphones 헤드폰 · flyers 전단지 · baton 경광봉 · phone 휴대폰
+@export var prop: StringName = &""
+@export var prop_color := Color(0.25, 0.18, 0.12)
+## 든 것을 가진 사람 비율 (0~1)
+@export var prop_chance := 1.0

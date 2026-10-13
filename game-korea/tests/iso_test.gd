@@ -6,6 +6,9 @@ extends Node
 ##     건물 바로 동·남쪽 인도에 선 사람은 그 건물보다 앞에, 북·서쪽은 뒤에 그린다.
 ##  4. 주인공이 건물 뒤에 가면 그 건물이 흐려지고, 나오면 다시 진해진다.
 ##  5. F9: 위에서 보는 화면으로 바꾸면 변환이 회전·기울기 없는 확대로 돌아오고 입체 건물이 숨는다.
+##  6. 다리: 강 위 다리 구간만 떠 있고(가운데 DECK_HEIGHT), 양끝 경사로는 땅에서 매끈하게 오른다.
+##     다리 위에 세운 차는 그 높이로 그리고, 위에서 보기에선 0이다.
+##  7. 랜드마크 부지: 건물·기둥·좌판만 막고 공터(광장·골목·승강장·하역장)는 걷는다. 터미널 승강장엔 고속버스가 서 있다.
 ## 실행: godot --headless --fixed-fps 60 --path . res://tests/iso_test.tscn
 
 var _failures: Array[String] = []
@@ -18,6 +21,9 @@ func _ready() -> void:
 	await _test_buildings()
 	await _test_fade()
 	await _test_toggle()
+	_test_bridge_heights()
+	await _test_bridge_vehicle()
+	await _test_landmarks()
 	IsoView.enabled = true
 	if _failures.is_empty():
 		print("iso_test: PASS")
@@ -28,8 +34,9 @@ func _ready() -> void:
 		get_tree().quit(1)
 
 
-func _make_main() -> Node2D:
+func _make_main(chapter := 1) -> Node2D:
 	var main: Node2D = load("res://scenes/main.tscn").instantiate()
+	main.chapter = chapter
 	main.traffic_count = 0
 	main.bus_count = 0
 	main.police_patrols = 0
@@ -89,17 +96,23 @@ func _test_buildings() -> void:
 		if c is BuildingView:
 			views.append(c)
 	var roofs := {}
+	var piece_roofs := {}
 	var square := true
 	for v in views:
 		if v.roof:
-			roofs[v.idx] = roofs.get(v.idx, 0) + 1
+			roofs[v.idx] = true
+			piece_roofs[v.piece] = piece_roofs.get(v.piece, 0) + 1
+		elif not piece_roofs.has(v.piece):
+			piece_roofs[v.piece] = 0
 		var ratio := maxf(v.part.size.x, v.part.size.y) / minf(v.part.size.x, v.part.size.y)
 		if ratio > 1.5:
 			square = false
 	_expect(roofs.size() == city.buildings.size(), "충돌 건물마다 입체 건물 (%d / %d)" % [roofs.size(), city.buildings.size()])
-	_expect(roofs.values().all(func(n): return n == 1), "지붕은 건물마다 한 번")
+	_expect(piece_roofs.values().all(func(n): return n == 1), "지붕은 덩어리(본채·나무·카라반 등)마다 한 번")
 	_expect(square, "조각은 정사각형에 가깝다")
-	_expect(views.all(func(v): return v.visible and v.height >= IsoView.FLOOR_HEIGHT), "입체 건물이 보이고 높이가 있다")
+	# 랜드마크 부지의 소품(벤치·볼라드·지게차 포크)은 낮아도 된다
+	_expect(views.all(func(v): return v.visible and (v.height >= IsoView.FLOOR_HEIGHT or city.landmark_indices.values().has(v.idx))),
+		"입체 건물이 보이고 높이가 있다")
 	# 건물 동·남쪽 인도의 사람은 앞, 북·서쪽은 뒤 (긴 건물의 끝 쪽에서도)
 	var wrong := 0
 	for idx in city.buildings.size():
@@ -181,6 +194,100 @@ func _test_toggle() -> void:
 	await _frames(2)
 	_expect(absf(get_viewport().canvas_transform.x.y) > 0.01, "다시 2.5D")
 	await _free(main)
+
+
+func _test_bridge_heights() -> void:
+	for k in CityMap.BRIDGES:
+		var spans := CityMap.bridge_spans(k)
+		_expect(not spans.is_empty(), "다리 %d번에 강 위 구간이 있다" % k)
+		var cx := City.road_center(k)
+		for span in spans:
+			_expect(is_equal_approx(CityMap.ground_height(Vector2(cx, (span.x + span.y) * 0.5)), CityMap.DECK_HEIGHT),
+				"다리 %d번 가운데는 상판 높이" % k)
+			_expect(is_zero_approx(CityMap.ground_height(Vector2(cx, span.x - 1.0))), "다리 %d번 북쪽 끝 밖은 땅" % k)
+			_expect(is_zero_approx(CityMap.ground_height(Vector2(cx, span.y + 1.0))), "다리 %d번 남쪽 끝 밖은 땅" % k)
+			var prev := 0.0
+			var smooth := true
+			for i in 41:
+				var h := CityMap.ground_height(Vector2(cx, lerpf(span.y, span.x, i / 40.0)))
+				smooth = smooth and absf(h - prev) < CityMap.DECK_HEIGHT * 0.3
+				prev = h
+			_expect(smooth, "다리 %d번 높이가 갑자기 뛰지 않는다" % k)
+	# 다리 아닌 곳: 땅 위 교차로와 강가 가로 도로
+	_expect(is_zero_approx(CityMap.ground_height(LaneGraph.center(Vector2i(3, 3)))), "강남 교차로는 땅 높이")
+	_expect(is_zero_approx(CityMap.ground_height(Vector2(City.road_center(1), CityMap.bridge_spans(2)[0].x + 500.0))),
+		"다리 없는 세로 줄(강 위)은 0")
+
+
+func _test_bridge_vehicle() -> void:
+	var main := _make_main()
+	await _frames(2)
+	var span: Vector2 = CityMap.bridge_spans(2)[-1]
+	var v := Vehicle.new()
+	v.stats = load("res://data/vehicles/car_sonato.tres")
+	main.add_child(v)
+	v.place(Vector2(City.road_center(2) + 48.0, (span.x + span.y) * 0.5), 0.0)
+	await _frames(3)
+	_expect(is_equal_approx(v.ground, CityMap.DECK_HEIGHT), "다리 위 차는 상판 높이로 그린다 (%.1f)" % v.ground)
+	main.set_iso(false)
+	await _frames(3)
+	_expect(is_zero_approx(v.ground), "위에서 보기에선 다리 높이 0 (%.1f)" % v.ground)
+	main.set_iso(true)
+	await _free(main)
+
+
+func _test_landmarks() -> void:
+	var main := _make_main(CityMap.LAST_CHAPTER)
+	await _frames(3)
+	var city: City = main.city
+	var space := city.get_world_2d().direct_space_state
+	_expect(city.landmark_indices.size() == 5, "랜드마크 다섯 곳 (%d)" % city.landmark_indices.size())
+	for key in city.landmark_indices:
+		var idx: int = city.landmark_indices[key]
+		var r := city.buildings[idx]
+		var t: BuildingType = city.looks[idx]
+		var blocked := 0
+		var loops := LandmarkBuilding.walk_loops(r, t)
+		for loop in loops:
+			for k in loop.size():
+				for f in [0.0, 0.25, 0.5, 0.75]:
+					if _hits(space, loop[k].lerp(loop[(k + 1) % loop.size()], f), Pedestrian.RADIUS):
+						blocked += 1
+		_expect(not loops.is_empty() and blocked == 0, "%s: 공터 길이 막히지 않는다 (길 %d, 막힘 %d)" % [key, loops.size(), blocked])
+		var solid := LandmarkBuilding.collision_rects(r, t, idx)
+		var area := 0.0
+		for q in solid:
+			area += q.get_area()
+		_expect(not solid.is_empty() and _hits(space, solid[0].get_center(), 2.0), "%s: 건물은 막는다" % key)
+		_expect(area < r.get_area() * 0.75, "%s: 부지의 1/4 넘게 공터 (막힌 곳 %.0f%%)" % [key, area / r.get_area() * 100.0])
+		_expect(city.lot_loops.has(city._owners[idx]), "%s: 보행자가 공터 길을 쓴다" % key)
+	var terminal := city.buildings[city.landmark_indices["terminal"]]
+	var buses := 0
+	for v: Vehicle in main.vehicles:
+		if v.stats == main.LANDMARK_BUS and terminal.has_point(v.global_position):
+			buses += 1
+	_expect(buses == 3, "터미널 승강장에 고속버스 3대 (%d)" % buses)
+	# 시장 남쪽 인도에서 입구 문 밑을 지나 골목 안으로 걸어 들어간다
+	var market := city.buildings[city.landmark_indices["market"]]
+	var player: Player = main.player
+	player.screen_walk = false
+	player.global_position = Vector2(market.get_center().x, market.end.y + 12.0)
+	main.camera.snap()
+	Input.action_press("accelerate")
+	await _frames(90)
+	Input.action_release("accelerate")
+	_expect(player.global_position.y < market.end.y - 70.0, "시장 골목 안으로 걸어 들어간다 (%.0f, 부지 끝 %.0f)" % [player.global_position.y, market.end.y])
+	await _free(main)
+
+
+func _hits(space: PhysicsDirectSpaceState2D, at: Vector2, radius: float) -> bool:
+	var circle := CircleShape2D.new()
+	circle.radius = radius
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = circle
+	query.transform = Transform2D(0.0, at)
+	query.collision_mask = Layers.WORLD
+	return not space.intersect_shape(query, 1).is_empty()
 
 
 func _views_of(city: City, idx: int) -> Array[BuildingView]:

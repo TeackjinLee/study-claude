@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"SAUNA"
+display_name = "24시 사우나"
+style = &"sauna"
+footprints = Array[int]([2, 1])
+weight = 0.0
+roof_colors = Array[Color]([Color(0.4, 0.32, 0.3, 1)])
+signs = PackedStringArray("24시 사우나")
+accent = Color(0.82, 0.12, 0.14, 1)
+floors = 5
+visual_floor_scale = 1.3
+surface_detail = true
+wall_color = Color(0.58, 0.42, 0.34, 1)
+top_color = Color(0.33, 0.33, 0.34, 1)
+replaces = Array[StringName]([&"COMMERCIAL", &"MIXED", &"OFFICETEL"])
+scatter = 0.1

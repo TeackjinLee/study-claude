@@ -13,4 +13,6 @@ roof_colors = Array[Color]([Color(0.36, 0.3, 0.3, 1), Color(0.28, 0.33, 0.38, 1)
 signs = PackedStringArray("PC방", "노래방", "치킨", "BAR", "성형외과", "카페", "24시 사우나")
 accent = Color(1, 0.23, 0.36, 1)
 floors = 5
+visual_floor_scale = 2.0
+surface_detail = true
 wall_color = Color(0.42, 0.36, 0.38, 1)

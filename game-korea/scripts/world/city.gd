@@ -50,6 +50,44 @@ const BUILDING_TYPES: Array[BuildingType] = [
 	preload("res://data/buildings/campsite.tres"),
 	preload("res://data/buildings/park.tres"),
 ]
+## 2.5D 기능 건물 겉모습 (SpecialBuilding). 충돌·위에서 보기는 그대로 두고 2.5D 모양만 바꾼다 (looks).
+## 경찰서·병원·본부·카센터는 정해 둔 부지, 갱 아지트는 공중전화 묶음 옆 건물(GangType.base_look),
+## 사우나·편의점은 자동 배치 부지에 흩뿌린다(BuildingType.replaces·scatter).
+const LOOK_POLICE := preload("res://data/buildings/special/police.tres")
+const LOOK_HOSPITAL := preload("res://data/buildings/special/hospital.tres")
+const LOOK_CAR_CENTER := preload("res://data/buildings/special/car_center.tres")
+const SCATTER_LOOKS: Array[BuildingType] = [
+	preload("res://data/buildings/special/sauna.tres"),
+	preload("res://data/buildings/special/convenience.tres"),
+]
+## 각 구역에서 기존 기능 건물을 제외한 부지 하나에 랜드마크를 고정 배치한다.
+const LANDMARK_PLACEMENTS := [
+
+	["landmark_tower", &"jongno", Vector2i(2,-6)],
+	["market", &"jongno", Vector2i(0,-8)],
+	["terminal", &"gangnam", Vector2i(0,1)],
+	["broadcast", &"yeouido", Vector2i(-3,-2)],
+	["industrial_dock", &"industrial", Vector2i(-4,0)],
+	["church", &"jongno", Vector2i(4,-6)],
+	["motel", &"gangnam", Vector2i(4,2)],
+	["gas_station", &"industrial", Vector2i(-2,2)],
+	["nightlife", &"hongdae", Vector2i(-2,-7)],
+	["parking_tower", &"gangnam", Vector2i(3,1)],
+	["school", &"jongno", Vector2i(3,-8)],
+	["subway", &"hongdae", Vector2i(-4,-6)],
+	["fire_station", &"industrial", Vector2i(-2,4)],
+	["finance_tower", &"yeouido", Vector2i(-2,-2)],
+	["print_alley", &"jongno", Vector2i(1,-7)],
+]
+var landmark_indices := {}
+## 블록 → 그 블록 랜드마크 부지 안 공터를 오가는 보행자 길들 (PedestrianManager가 인도 대신 쓰기도 한다)
+static var lot_loops := {}
+
+const GANGS: Array[GangType] = [
+	preload("res://data/gangs/gangnam.tres"),
+	preload("res://data/gangs/oldtown.tres"),
+	preload("res://data/gangs/smuggler.tres"),
+]
 
 const ASPHALT := Color(0.16, 0.17, 0.22)
 const WATER := Color(0.07, 0.13, 0.24)
@@ -68,6 +106,7 @@ const NEON := [
 
 var buildings: Array[Rect2] = []         ## 충돌하는 건물 (공원 제외)
 var kinds: Array[BuildingType] = []      ## buildings와 같은 순서. 특수 건물(경찰서·병원·카센터)은 null
+var looks := {}                          ## 건물 번호 → 2.5D 기능 건물 겉모습 (경찰서·병원·아지트·정비소·사우나·편의점)
 var parks: Array[Rect2] = []             ## 공원 부지 (지나갈 수 있다)
 var park_kinds: Array[BuildingType] = []
 var station := Rect2()                   ## 강남 경찰서
@@ -83,8 +122,10 @@ var barriers: Array[Rect2] = []          ## 통제 바리케이드 (잠긴 도�
 var water: Array[Rect2] = []             ## 강물 사각형 (미니맵용)
 var _lock_body: StaticBody2D
 var _lock_layer: Node2D
+var _bridge_layer: Node2D
 var _owners := {}                        ## 건물 번호 → 블록 (청크 그리기용)
-var _views := {}                         ## 건물 번호 → Array[BuildingView] (2.5D 입체 건물)
+var _views := {}                         ## 건물 번호 → Array[BuildingView] (2.5D 입체 건물, 덩어리마다 조각들)
+var _tops := {}                          ## 건물 번호 → 2.5D 꼭대기 높이
 var _fade := {}                          ## 건물 번호 → 지금 불투명도 (흐려진 건물만. 주인공이 뒤에 있으면 흐려진다)
 var _by_block := {}                      ## 블록 → 그 블록의 건물 번호들
 var _chunks: Array[Chunk] = []
@@ -105,6 +146,15 @@ class Chunk extends Node2D:
 		city.draw_chunk(self, area)
 
 
+## 2.5D 다리: 강물 위로 띄운 상판·교각·난간 (위에서 보기에서는 청크가 평면으로 그린다)
+class BridgeLayer extends Node2D:
+	var city: City
+
+	func _draw() -> void:
+		if IsoView.enabled:
+			city.draw_bridges(self)
+
+
 ## 잠긴 구역 그늘과 바리케이드
 class LockLayer extends Node2D:
 	var city: City
@@ -119,6 +169,9 @@ func _ready() -> void:
 	_build_collision()
 	_make_chunks()
 	_make_views()
+	_bridge_layer = BridgeLayer.new()
+	_bridge_layer.city = self
+	add_child(_bridge_layer)
 	_lock_layer = LockLayer.new()
 	_lock_layer.city = self
 	add_child(_lock_layer)
@@ -312,6 +365,99 @@ func _build_layout() -> void:
 				else:
 					_add(r, _pick_kind(dist, footprint, i * 131 + j * 37 + n * 11), cell)
 
+	_assign_looks()
+	_assign_landmarks()
+
+
+## 2.5D 기능 건물 겉모습을 정한다 (RNG 없이 건물 번호로만 — 늘 같은 도시)
+func _assign_looks() -> void:
+	looks.clear()
+	for idx in buildings.size():
+		var r := buildings[idx]
+		if stations.has(r):
+			looks[idx] = LOOK_POLICE
+		elif hospitals.has(r):
+			looks[idx] = LOOK_HOSPITAL
+		elif r == spray:
+			looks[idx] = LOOK_CAR_CENTER
+		elif r == hq:
+			looks[idx] = GANGS[0].base_look
+	# 갱 아지트: 공중전화 묶음마다 가장 가까운 보통 건물
+	for gang in GANGS:
+		if gang.base_look == null:
+			continue
+		for k in range(0, gang.phones.size(), 3):
+			var best := -1
+			var best_d := INF
+			for idx in buildings.size():
+				var d := _rect_distance(buildings[idx], gang.phones[k])
+				if d < best_d:
+					best_d = d
+					best = idx
+			if best >= 0 and not looks.has(best) and kinds[best] != null and buildings[best] != hideout:
+				looks[best] = gang.base_look
+	# 사우나·편의점: 원래 종류가 replaces에 있고 부지 크기가 맞는 건물 중 일부
+	for idx in buildings.size():
+		var kind := kinds[idx]
+		var r := buildings[idx]
+		if looks.has(idx) or kind == null or r == hideout or r == warehouse:
+			continue
+		for k in SCATTER_LOOKS.size():
+			var look := SCATTER_LOOKS[k]
+			if kind.id in look.replaces and _footprint(r) in look.footprints \
+					and BuildingModel.hash01(idx, 600 + k * 17) < look.scatter:
+				looks[idx] = look
+				break
+
+
+func _assign_landmarks() -> void:
+	landmark_indices.clear()
+	lot_loops.clear()
+	for spec in LANDMARK_PLACEMENTS:
+		var best := -1
+		var score := INF
+		for idx in buildings.size():
+			var r := buildings[idx]
+			if looks.has(idx) or kinds[idx] == null or r == hideout or r == warehouse:
+				continue
+			var dist := CityMap.district_of(_owners[idx])
+			if dist == null or dist.id != spec[1]:
+				continue
+			var d := Vector2(_owners[idx]).distance_squared_to(Vector2(spec[2])) * 1000000.0 - r.get_area()
+			if _footprint(r) != 0:
+				d += 1000000000.0
+			if d < score:
+				score = d
+				best = idx
+		if best >= 0:
+			looks[best] = load("res://data/buildings/landmarks/%s.tres" % spec[0])
+			landmark_indices[spec[0]] = best
+			var loops := LandmarkBuilding.walk_loops(buildings[best], looks[best])
+			if not loops.is_empty():
+				lot_loops[_owners[best]] = loops
+
+
+## 랜드마크 공터에 세워 둘 차 [위치, 방향] (열린 구역만). 차종은 Main이 정한다
+func landmark_parking() -> Array:
+	var out := []
+	for key in landmark_indices:
+		var idx: int = landmark_indices[key]
+		if CityMap.is_open_block(_owners[idx]):
+			out.append_array(LandmarkBuilding.parking(buildings[idx], looks[idx]))
+	return out
+
+
+static func _rect_distance(r: Rect2, p: Vector2) -> float:
+	return (p - p.clamp(r.position, r.end)).length()
+
+
+## 부지 크기 → 0 블록 통째 · 1 블록 절반 · 2 블록 1/4
+static func _footprint(r: Rect2) -> int:
+	var full := BLOCK - SIDEWALK * 2.0 - 1.0
+	if r.size.x >= full and r.size.y >= full:
+		return 0
+	return 1 if r.size.x >= full or r.size.y >= full else 2
+
 
 func _add(r: Rect2, kind: BuildingType, cell: Vector2i) -> void:
 	if kind and not kind.solid:
@@ -358,7 +504,12 @@ func _build_collision() -> void:
 	var body := StaticBody2D.new()
 	add_child(body)
 	var w := world_rect()
-	var rects := buildings.duplicate()
+	var rects: Array[Rect2] = []
+	for idx in buildings.size():
+		if looks.has(idx) and LandmarkBuilding.owns(looks[idx].style):
+			rects.append_array(LandmarkBuilding.collision_rects(buildings[idx],looks[idx],idx))
+		else:
+			rects.append(buildings[idx])
 	rects.append(Rect2(w.position.x - WALL, w.position.y - WALL, w.size.x + WALL * 2, WALL))
 	rects.append(Rect2(w.position.x - WALL, w.end.y, w.size.x + WALL * 2, WALL))
 	rects.append(Rect2(w.position.x - WALL, w.position.y, WALL, w.size.y))
@@ -504,10 +655,10 @@ func draw_chunk(ci: CanvasItem, area: Rect2i) -> void:
 	for j in range(area.position.y, area.end.y):
 		for i in range(area.position.x, area.end.x):
 			var c := Vector2i(i, j)
-			if CityMap.node_exists(c):
+			if CityMap.node_exists(c) and not _on_deck(c):
 				ci.draw_rect(node_rect(c), ASPHALT)
 			for d in [1, 2]:
-				if CityMap.road(c, d):
+				if CityMap.road(c, d) and not (IsoView.enabled and CityMap.is_bridge(c, d)):
 					ci.draw_rect(segment_rect(c, d), ASPHALT)
 	for j in range(area.position.y, area.end.y):
 		for i in range(area.position.x, area.end.x):
@@ -527,7 +678,7 @@ func draw_chunk(ci: CanvasItem, area: Rect2i) -> void:
 		for i in range(area.position.x, area.end.x):
 			var c := Vector2i(i, j)
 			for d in [2, 1]:
-				if not CityMap.road(c, d):
+				if not CityMap.road(c, d) or (IsoView.enabled and CityMap.is_bridge(c, d)):
 					continue
 				var fl := CityMap.flanks(c, d)
 				var water_sides: Array[float] = []
@@ -540,7 +691,7 @@ func draw_chunk(ci: CanvasItem, area: Rect2i) -> void:
 				else:
 					_draw_road_segment(ci, j, i, false, water_sides)
 			# 교차로 둘레 중 강 쪽 (도로가 끊긴 쪽) 난간
-			if CityMap.node_exists(c):
+			if CityMap.node_exists(c) and not _on_deck(c):
 				var box := node_rect(c)
 				for d in 4:
 					if CityMap.road(c, d):
@@ -554,7 +705,11 @@ func draw_chunk(ci: CanvasItem, area: Rect2i) -> void:
 		if area.has_point(CityMap.block_at(parks[idx].get_center())):
 			BuildingDrawer.draw(ci, parks[idx], park_kinds[idx], idx, font)
 	if IsoView.enabled:
-		return   # 2.5D에서는 BuildingView가 벽과 지붕을 세워 그린다
+		# 2.5D: 바닥(마당·화단·담장)만 그리고, 벽과 지붕은 BuildingView가 세워 그린다
+		for idx in buildings.size():
+			if area.has_point(_owners[idx]):
+				BuildingModel.draw_ground(ci, buildings[idx], _ground_kind(idx), idx)
+		return
 	for idx in buildings.size():
 		if area.has_point(_owners[idx]):
 			_draw_building(ci, buildings[idx], idx, font)
@@ -564,28 +719,36 @@ func draw_chunk(ci: CanvasItem, area: Rect2i) -> void:
 
 func _make_views() -> void:
 	for idx in buildings.size():
-		var r := buildings[idx]
-		var kind := kinds[idx]
-		var parts := BuildingView.split(r)
 		var list: Array[BuildingView] = []
-		for k in parts.size():
-			var v := BuildingView.new()
-			v.city = self
-			v.idx = idx
-			v.rect = r
-			v.part = parts[k]
-			v.roof = k == parts.size() - 1
-			v.kind = kind
-			v.height = building_height(idx)
-			v.wall = kind.wall_color if kind else _special_wall(r)
-			v.style = kind.style if kind else &"special"
-			v.visible = IsoView.enabled
-			add_child(v)
-			list.append(v)
+		var top := 0.0
+		for p in _pieces(idx):
+			for v in BuildingView.make(self, self, idx, p):
+				v.visible = IsoView.enabled
+				list.append(v)
+			top = maxf(top, p.top())
 		_views[idx] = list
+		_tops[idx] = top
 		if not _by_block.has(_owners[idx]):
 			_by_block[_owners[idx]] = []
 		_by_block[_owners[idx]].append(idx)
+
+
+## 건물 하나의 2.5D 덩어리들. 특수 건물은 부지 꽉 찬 상자에 위에서 본 지붕 그림
+func _pieces(idx: int) -> Array[BuildingModel.Piece]:
+	var r := buildings[idx]
+	var kind := kinds[idx]
+	var h := building_height(idx)
+	if looks.has(idx):
+		return BuildingModel.build(r, looks[idx], idx, h)
+	if kind == null or r == hq or r == hideout:
+		var windows := &"glass" if kind and kind.style == &"office" else (&"officetel" if kind else &"punched")
+		return BuildingModel.special(r, h, kind.wall_color if kind else _special_wall(r), windows, idx)
+	return BuildingModel.build(r, kind, idx, h)
+
+
+## 2.5D에서 건물이 화면에 차지하는 높이 (지붕·굴뚝 포함) — 주인공을 가리는지 볼 때 쓴다
+func building_top(idx: int) -> float:
+	return _tops.get(idx, building_height(idx))
 
 
 ## 2.5D 건물 높이 (화면 px). 같은 종류라도 번호에 따라 한 층씩 들쭉날쭉하다
@@ -593,7 +756,9 @@ func building_height(idx: int) -> float:
 	var r := buildings[idx]
 	var kind := kinds[idx]
 	var floors := 0
-	if kind:
+	if looks.has(idx):
+		floors = looks[idx].floors
+	elif kind:
 		floors = kind.floors
 		if floors >= 3:
 			floors += posmod(idx, 3) - 1
@@ -604,6 +769,14 @@ func building_height(idx: int) -> float:
 	else:
 		floors = SPRAY_FLOORS
 	return maxf(floors, 1) * IsoView.FLOOR_HEIGHT
+
+
+## 바닥 그림 종류 (특수 건물은 부지를 꽉 채우므로 없음)
+func _ground_kind(idx: int) -> BuildingType:
+	if looks.has(idx):
+		return looks[idx]
+	var r := buildings[idx]
+	return null if r == hq or r == hideout else kinds[idx]
 
 
 func _special_wall(r: Rect2) -> Color:
@@ -621,6 +794,7 @@ func set_iso(on: bool) -> void:
 			v.visible = on
 	for c in _chunks:
 		c.queue_redraw()
+	_bridge_layer.queue_redraw()
 
 
 func _process(delta: float) -> void:
@@ -641,10 +815,13 @@ func _process(delta: float) -> void:
 			for idx: int in _by_block.get(Vector2i(i, j), []):
 				check[idx] = true
 	for idx: int in check:
+		if looks.has(idx) and LandmarkBuilding.owns(looks[idx].style):
+			_fade_pieces(idx, p, head, delta)
+			continue
 		var r := buildings[idx]
 		var goal := 1.0
 		if not r.has_point(p) and p.x < r.end.x and p.y < r.end.y \
-				and Geometry2D.is_point_in_polygon(head, BuildingView.silhouette(r, building_height(idx))):
+				and Geometry2D.is_point_in_polygon(head, BuildingView.silhouette(r, building_top(idx))):
 			goal = FADE_ALPHA
 		var now: float = _fade.get(idx, 1.0)
 		if is_equal_approx(now, goal):
@@ -658,12 +835,121 @@ func _process(delta: float) -> void:
 			v.modulate.a = now
 
 
+## 랜드마크는 부지 안 공터를 걸어 다닌다: 부지 전체가 아니라 주인공을 가리는 덩어리(탑·캐노피·크레인…)만 흐린다
+func _fade_pieces(idx: int, p: Vector2, head: Vector2, delta: float) -> void:
+	var faded := false
+	for v: BuildingView in _views[idx]:
+		var r := v.rect
+		var goal := 1.0
+		if p.x < r.end.x and p.y < r.end.y and Geometry2D.is_point_in_polygon(head, BuildingView.silhouette(r, v.height)):
+			goal = FADE_ALPHA
+		v.modulate.a = move_toward(v.modulate.a, goal, delta * 3.0)
+		faded = faded or v.modulate.a < 1.0
+	if faded:
+		_fade[idx] = FADE_ALPHA
+	else:
+		_fade.erase(idx)
+
+
 ## 잠긴 구역의 건물은 어둡게
 func _shade_locked_views() -> void:
 	for idx: int in _views:
 		var locked := locked_blocks.has(_owners[idx])
 		for v: BuildingView in _views[idx]:
 			v.self_modulate = Color(0.38, 0.38, 0.45) if locked else Color.WHITE
+			if v.glow:
+				v.glow.visible = not locked   # 잠긴 구역은 불도 꺼져 있다
+
+
+## 2.5D에서 다리 상판이 덮는 강 한가운데 교차로 (BridgeLayer가 띄워 그린다)
+static func _on_deck(c: Vector2i) -> bool:
+	if not IsoView.enabled or not CityMap.BRIDGES.has(c.x):
+		return false
+	for b in CityMap.node_blocks(c):
+		if CityMap.is_land(b):
+			return false
+	return true
+
+
+const DECK_SLAB := 7.0          ## 다리 상판 두께 (화면 px)
+const DECK_RAIL := 6.0          ## 난간 높이
+const PIER_GAP := 300.0         ## 교각 사이 (월드 px)
+const CONCRETE := Color(0.5, 0.51, 0.55)
+const DECK_STEP := 24.0         ## 상판을 나눠 그리는 간격 (경사로가 매끈하게)
+
+
+## 2.5D 다리: 물 위 그림자 → 교각 → 상판 옆면 → 상판 → 차선 → 난간 순으로 그린다
+func draw_bridges(ci: CanvasItem) -> void:
+	var hw := ROAD * 0.5
+	for k in CityMap.BRIDGES:
+		var cx := road_center(k)
+		for span in CityMap.bridge_spans(k):
+			var ys: Array[float] = []
+			var y := span.x
+			while y < span.y:
+				ys.append(y)
+				y += DECK_STEP
+			ys.append(span.y)
+			var hs: Array[float] = []
+			for v in ys:
+				hs.append(CityMap.deck_height_at(span, v))
+			var at := func(x: float, i: int, dh := 0.0) -> Vector2:
+				return Vector2(x, ys[i]) + IsoView.lift(maxf(hs[i] + dh, 0.0))
+			# 물 위 그림자 (상판이 떠 있는 만큼 오른쪽 아래로 드러난다)
+			ci.draw_rect(Rect2(cx - hw, span.x, ROAD, span.y - span.x), Color(0, 0, 0, 0.32))
+			# 교각: 물에서 상판 밑까지 기둥 둘과 가로보
+			var ramp := minf(CityMap.RAMP, (span.y - span.x) * 0.4)
+			var n := maxi(1, int((span.y - span.x - ramp) / PIER_GAP))
+			for p in n:
+				var py := lerpf(span.x + ramp * 0.5, span.y - ramp * 0.5, (p + 0.5) / n)
+				var top := CityMap.deck_height_at(span, py) - DECK_SLAB
+				if top < 6.0:
+					continue
+				# 물에 닿는 받침 (물결 테)
+				for sx in [-1.0, 1.0]:
+					var foot := Vector2(cx + sx * (hw - 20.0), py)
+					ci.draw_circle(foot + Vector2(4, 4), 26.0, Color(WATER_LIGHT, 0.35))
+					_pillar(ci, Rect2(foot - Vector2(16, 16), Vector2(32, 32)), 0.0, top)
+				_pillar(ci, Rect2(cx - hw + 2.0, py - 12.0, ROAD - 4.0, 24.0), top - 8.0, top)
+			# 상판 옆면 (오른쪽 아래를 보는 동쪽 면)
+			for i in ys.size() - 1:
+				ci.draw_primitive(PackedVector2Array([at.call(cx + hw, i), at.call(cx + hw, i + 1),
+					at.call(cx + hw, i + 1, -DECK_SLAB), at.call(cx + hw, i, -DECK_SLAB)]),
+					PackedColorArray([CONCRETE.darkened(0.3)]), PackedVector2Array())
+			# 상판 (아스팔트)
+			for i in ys.size() - 1:
+				ci.draw_primitive(PackedVector2Array([at.call(cx - hw, i), at.call(cx + hw, i),
+					at.call(cx + hw, i + 1), at.call(cx - hw, i + 1)]),
+					PackedColorArray([ASPHALT]), PackedVector2Array())
+			# 차선: 가운데 노랑 겹선, 흰 점선
+			for off in [-3.0, 3.0]:
+				var line := PackedVector2Array()
+				for i in ys.size():
+					line.append(at.call(cx + off, i))
+				ci.draw_polyline(line, LANE_YELLOW, 2.0)
+			for i in ys.size() - 1:
+				if i % 2 == 0:
+					for lane in [-ROAD * 0.25, ROAD * 0.25]:
+						ci.draw_line(at.call(cx + lane, i), at.call(cx + lane, i + 1), LANE_WHITE, 2.0)
+			# 난간: 서쪽은 안쪽 면, 동쪽은 바깥 면이 보인다. 윗선은 밝게
+			for x in [cx - hw + 3.0, cx + hw - 1.0]:
+				for i in ys.size() - 1:
+					ci.draw_primitive(PackedVector2Array([at.call(x, i), at.call(x, i + 1),
+						at.call(x, i + 1, DECK_RAIL), at.call(x, i, DECK_RAIL)]),
+						PackedColorArray([RAIL.darkened(0.35)]), PackedVector2Array())
+				var rail := PackedVector2Array()
+				for i in ys.size():
+					rail.append(at.call(x, i, DECK_RAIL))
+				ci.draw_polyline(rail, RAIL, 2.0)
+
+
+## 교각 상자 (바닥 사각형 r을 높이 h0~h1로 세운다). 보이는 남·동쪽 면만 그린다
+static func _pillar(ci: CanvasItem, r: Rect2, h0: float, h1: float) -> void:
+	var s := Vector2(r.position.x, r.end.y)
+	var e := Vector2(r.end.x, r.position.y)
+	ci.draw_colored_polygon(IsoView.wall(s, r.end, h0, h1), CONCRETE.darkened(IsoView.face_shade(Vector2.DOWN)))
+	ci.draw_colored_polygon(IsoView.wall(e, r.end, h0, h1), CONCRETE.darkened(IsoView.face_shade(Vector2.RIGHT)))
+	ci.draw_rect(Rect2(r.position + IsoView.lift(h1), r.size), CONCRETE)
 
 
 func _draw_water(ci: CanvasItem, r: Rect2, b: Vector2i) -> void:
@@ -732,6 +1018,14 @@ func _draw_plaza(ci: CanvasItem, r: Rect2, practice: bool) -> void:
 
 
 func _draw_building(ci: CanvasItem, r: Rect2, idx: int, font: Font) -> void:
+	if looks.has(idx) and LandmarkBuilding.owns(looks[idx].style):
+		var t: BuildingType = looks[idx]
+		ci.draw_rect(r,Color("535657"))
+		for part in LandmarkBuilding.collision_rects(r,t,idx):
+			ci.draw_rect(part,Color("929990"))
+			ci.draw_rect(part,Color("434b50"),false,2)
+		ci.draw_string(font,r.get_center(),t.display_name,HORIZONTAL_ALIGNMENT_CENTER,-1,16,Color.WHITE)
+		return
 	if stations.has(r):
 		_draw_station(ci, r, font)
 	elif hospitals.has(r):
