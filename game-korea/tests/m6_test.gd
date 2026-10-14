@@ -356,6 +356,20 @@ func _test_army_and_checkpoint() -> void:
 		player.revive()
 	var checkpoints := police.roadblocks.filter(func(rb): return rb.checkpoint)
 	_expect(not checkpoints.is_empty(), "★4: 가까운 다리 끝에 검문소 (%d곳)" % checkpoints.size())
+	# 차단봉: 내려가 있을 때 달리는 차가 닿으면 부러진다 (그림만, 충돌 없음)
+	if not checkpoints.is_empty():
+		var cp: CheckpointVisual = checkpoints[0].visual
+		cp.open = 0.0
+		var car := Vehicle.new()
+		car.stats = load("res://data/vehicles/car_sonato.tres")
+		main.add_child(car)
+		car.place(cp.pivot + cp.reach * CheckpointVisual.ARM_LENGTH * 0.6, Vector2.UP.angle_to(cp.dir))
+		main.vehicles.append(car)
+		car.motor.velocity = cp.dir * 300.0
+		cp.check_hits()
+		_expect(cp.broken, "검문소 차단봉: 달리는 차가 부딪치면 부러진다")
+		main.vehicles.erase(car)
+		car.queue_free()
 	police.wanted.raise_to(6)
 	var trucks := false
 	var soldiers := 0

@@ -321,8 +321,8 @@ func _process(delta: float) -> void:
 	if v:
 		_info.text = "%s\n%d km/h" % [v.stats.display_name, roundi(v.speed() * KMH_PER_PX)]
 		_drift.visible = absf(v.motor.lateral_speed()) > 220.0
-		_prompt.visible = v.burning >= 0.0
-		_prompt.text = "불이 붙었다!  F 내려!"
+		_prompt.visible = v.burning >= 0.0 or v.on_fire
+		_prompt.text = "불이 붙었다!  F 내려!" if v.burning >= 0.0 else "차에 불이 났다! 곧 터진다  F 내려!"
 		var job := jobs.available() if jobs else null
 		if job and not _prompt.visible:
 			_prompt.text = "B  %s 부업 시작 (최고 %d단계)" % [job.display_name, jobs.best.get(job.id, 0)]

@@ -4,6 +4,8 @@ Godot 4.7 / GDScript / 2D 탑다운. 기획은 `docs/`, 단계 계획은 `docs/0
 
 ## Codex 작업 인계 (2026-10-11)
 
+Codex에게 맡길 때의 규칙(작업 범위·worktree 분리·끝내기 전 확인·보고 형식)은 `AGENTS.md`에 있다. Codex가 넘긴 결과는 그 보고 형식대로 받아, 테스트를 다시 돌려 확인한 뒤 합친다.
+
 사용자 요청으로 별도 2.5D 사선 투영 샘플을 추가했다. 본편 물리는 기존 2D 그대로이며 진입점은 `tools/isometric_sample.tscn`이다. 변경 구조·진행 상태·표시 미연결 항목·확인 범위는 `docs/11_Claude_인계_2.5D.md`를 참고한다. M6 완료나 최종 아트 완료로 취급하지 않는다.
 
 - 에셋 파일 없이 코드로 그린다 (M7 아트 단계 전까지).
@@ -62,6 +64,15 @@ godot --headless --fixed-fps 60 --path . res://tests/iso_test.tscn
 화면이 바뀌는 작업이면 `godot --path . res://tools/screenshot.tscn` 후 `.screenshots/*.png`를 확인한다. 2.5D만 빨리 보려면 `-- --only=iso`.
 건물 모양(`building_model.gd`·`building_view.gd`·`special_building.gd`·`special_decor.gd`)을 고쳤으면 `godot --path . res://tools/building_gallery.tscn -- --shot`으로 15종을, `-- --shot --set=special`로 기능 건물 8종을 본다. 새 그림에서 `Invalid polygon` 오류가 나지 않는지 출력도 본다. 벽 위 작은 사각형은 `_quad`(draw_primitive)로 그린다 — 도시 전체에서 `draw_colored_polygon`을 수만 번 부르면 렌더 버퍼 한도를 넘어 창 모드 실행이 멈춘다(헤드리스 테스트로는 안 잡힌다. 창 모드 `screenshot.tscn -- --only=iso`로 본다).
 켜질 창과 간판은 같은 조각을 한 번 더 세운 불빛 조각(`BuildingView.lights`)이 그린다. 밤에도 밝게 남고, 창은 시각에 따라 하나둘 켜진다(`DayNight.lights_on`). 본 조각은 창을 모두 꺼진 유리로 그린다. 창·간판을 고쳤으면 `iso_intersection`(밤)·`iso_day`·`iso_dusk`로 본다(docs/11). 간판은 `BuildingView._board`(금속판·글씨, 색은 `SIGN_STYLES`)로 그린다. `assets/signs` 그림은 쓰지 않는다.
-랜드마크(`landmark_building.gd`·`landmark_decor.gd`, docs/15)는 부지 전체가 아니라 바닥에 선 덩어리만 막는다 — 공터(잔디·골목·승강장)는 바닥 그림이고 사람·차가 다닌다. 덩어리를 더하면 `iso_test`의 랜드마크 공터 검사(보행 길이 막히지 않는가)를 본다. 공중 덩어리는 h0 > 0으로 두면 막지 않는다.
-사람 모습(`person_drawer.gd`·`data/npc`의 outfit·hat·face·prop)을 고쳤으면 `godot --path . res://tools/person_gallery.tscn -- --shot`으로 전 종 앞·뒤를 크게 본다. 모습 값은 데이터에 두고, 보행자 rng를 더 뽑지 않는다(`look_seed`).
+랜드마크(`landmark_building.gd`·`landmark_decor.gd`, docs/15)는 부지 전체가 아니라 바닥에 선 덩어리만 막는다 — 공터(잔디·골목·승강장)는 바닥 그림이고 사람·차가 다닌다. 덩어리를 더하면 `iso_test`의 랜드마크 공터 검사(보행 길이 막히지 않는가)를 본다. 공중 덩어리는 h0 > 0으로 두면 막지 않는다. 등·전구의 밤 불빛은 불빛 조각이 `LandmarkDecor.glow`로 그린다 — `landmark_city_preview.tscn -- --night`로 본다.
+거리 건물 10종(`street_building.gd`·`street_decor.gd`, docs/16)은 `building_gallery.tscn -- --shot --set=street`(한 종씩 `--ids=MOTEL`)로 본다. 밑의 덩어리를 덮는 캐노피·내민 윗층은 `Piece.z_at_end = true`, 긴 담은 토막으로 나눈다 — 아니면 그리는 순서가 꼬여 옆 지붕 위로 올라온다. 바닥 무늬 점을 `hash01`로 x·y 이어 뽑으면 대각선 줄이 된다(`StreetBuilding._h`).
+사람 모습(`person_drawer.gd`·`data/npc`의 outfit·hat·face·prop)을 고쳤으면 `godot --path . res://tools/person_gallery.tscn -- --shot`으로 전 종 앞·뒤를 크게 본다. 설계도 그림과 맞춰 볼 때는 `--ids=office,boss`로 몇 종만 더 크게 본다. 모습 값은 데이터에 두고, 보행자 rng를 더 뽑지 않는다(`look_seed`).
+차는 부딪힌 곳이 찌그러진다(`Vehicle.dents`, 그림만 — 충돌 모양은 그대로). 모형 꼭짓점은 모서리에만 있어 면 가운데는 팬 자국으로 그린다. 체력이 20% 아래면 불이 나고(`on_fire`, 아직 탈 수 있다) 체력이 타들어가 0이 되면 `burning` → 폭발이다(수치는 `DamageModel`).
+불꽃·연기·불씨·불빛·그을음은 `FireFx`(scripts/fx/fire_fx.gd) 한 곳에서 그린다 — 차 화재 단계(`Vehicle._draw_damage`, 잔해 `wreck_age`), 폭발(`Combat._draw_blast`), 땅 불(`Fires`)이 같이 쓴다. 고쳤으면 `godot --path . res://tools/fire_gallery.tscn -- --shot`으로 단계별로 본다.
+성능: 그리는 것·매 프레임 도는 것을 늘렸으면 `godot --path . res://tools/perf_probe.tscn`(봇이 차를 몰고 근처 차를 태워 터뜨린다)으로 주행·폭발 프레임 시간과 끊김 수를 본다. `-- --uncapped`는 프레임 제한 없이 일의 양, `--ablate`·`--burn-ablate`는 종류별로 꺼 보며 몫, `--profile`은 스크립트별 시간, `--census`는 그리기 호출·도형 수.
+- 본편은 화면을 물리(60틱)에 맞춰 60프레임으로 묶고, 늦은 프레임에 물리를 3틱까지만 몰아 돈다(`Main.limit_frame_rate`, 헤드리스 테스트는 그대로).
+- queue_redraw는 `_process`에서 부른다. `_physics_process`에서 부르면 틱마다 그려, 느려질수록 한 프레임에 여러 번 그리는 악순환이 된다.
+- 차 모형(약 0.8ms)은 모습(`Vehicle._look`, 방향은 `ROT_STEP`마다)이 바뀔 때만 다시 그리고, 불·연기는 위층(`Vehicle._fx`)이 따로 매 프레임 그린다. 보행자도 걸음 12단계·방향이 바뀔 때만 그린다.
+- 큰 원·반투명 원은 `FireFx.circle`(원 그림 한 장)로 그린다 — `draw_circle`은 수십 각형이라 많이 겹치면 불난 차 한 대에 2ms가 넘는다.
+- 바닥 청크는 블록 하나씩(`City.CHUNK = 1`) 세 겹(아스팔트·인도·차선)이다 — 청크가 크면 화면에 조금만 걸쳐도 화면 밖 블록까지 매 프레임 그린다.
 차량 모형(`vehicle_model.gd`)을 고쳤으면 `godot --path . res://tools/vehicle_gallery.tscn -- --shot`으로 28종 앞·뒤를 크게 본다. 부품이 늘면 traffic_test 시간도 본다(모습이 바뀔 때만 다시 그리지만, 도는 차는 매 프레임 그린다).

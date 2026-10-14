@@ -171,6 +171,10 @@ func _physics_process(delta: float) -> void:
 	_check_phones()
 	if active():
 		run.update(delta, facts())
+
+
+## 그림은 화면 프레임마다 한 번 (물리 틱마다 부르면 느릴수록 한 프레임에 여러 번 그린다)
+func _process(_delta: float) -> void:
 	queue_redraw()
 
 

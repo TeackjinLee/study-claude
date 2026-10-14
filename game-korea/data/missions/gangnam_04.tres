@@ -70,5 +70,5 @@ title = "시운전"
 briefing = "새로 들인 아벨라 R 길들이기다.\n체크포인트 여섯 곳을 시간 안에 돌아."
 reward = 50000
 respect = 8
-time_limit = 32
+time_limit = 34
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2"), SubResource("step_3"), SubResource("step_4"), SubResource("step_5"), SubResource("step_6")])

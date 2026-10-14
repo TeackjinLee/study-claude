@@ -33,7 +33,6 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_time += delta
-	queue_redraw()
 	var v := director.current_vehicle
 	if v == null:
 		return
@@ -44,6 +43,11 @@ func _physics_process(delta: float) -> void:
 		return
 	_armed = false
 	service(v)
+
+
+## 그림은 화면 프레임마다 한 번 (물리 틱마다 부르면 느릴수록 한 프레임에 여러 번 그린다)
+func _process(_delta: float) -> void:
+	queue_redraw()
 
 
 ## 차 한 대를 받는다. 도색했으면 true (못 했으면 이유를 notice로 알린다)

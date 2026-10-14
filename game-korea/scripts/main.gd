@@ -25,7 +25,8 @@ const VEHICLE_TYPES: Array[VehicleType] = [
 ]
 ## 터미널 승강장에 세워 두는 차종
 const LANDMARK_BUS: VehicleType = preload("res://data/vehicles/bus_express.tres")
-const DEV_SWITCH_TYPES := 3   ## 1·2·3 키로 바꿀 수 있는 차종 수 (VEHICLE_TYPES 앞쪽)
+const DEV_SWITCH_TYPES := 3
+const MAX_CATCH_UP := 3       ## 늦은 프레임에 몰아서 도는 물리 틱 최대 수   ## 1·2·3 키로 바꿀 수 있는 차종 수 (VEHICLE_TYPES 앞쪽)
 
 const GANGS: Array[GangType] = [
 	preload("res://data/gangs/gangnam.tres"),
@@ -145,6 +146,8 @@ func _ready() -> void:
 		chapter = start
 	CityMap.set_chapter(chapter)
 	RoadNav.clear_cache()
+	if DisplayServer.get_name() != "headless":
+		limit_frame_rate()
 	city = City.new()
 	add_child(city)
 
@@ -157,7 +160,7 @@ func _ready() -> void:
 	# 랜드마크 공터에 세워 둔 차 (터미널 승강장의 고속버스 — 훔쳐 탈 수 있다)
 	for spot: Array in city.landmark_parking():
 		var bus := Vehicle.new()
-		bus.stats = LANDMARK_BUS
+		bus.stats = load(spot[2]) if spot.size() > 2 else LANDMARK_BUS   # 소방서 소방차·주유소 택시 (StreetBuilding.parking)
 		add_child(bus)
 		bus.place(spot[0], spot[1])
 		vehicles.append(bus)
@@ -327,6 +330,14 @@ func _ready() -> void:
 		hud.banner("%d장 · %s" % [chapter, chapter_type().title], "시험 시작 (--chapter=%d) — 저장 불러오기 없음" % chapter, 3.5, Hud.GOLD)
 	elif load_on_start and get_parent() == get_tree().root and (auto_line() != "" or not slot_lines().all(func(l): return l == "")):
 		save_menu.open_load(slot_lines(), auto_line())
+
+
+## 화면을 물리(초당 60틱)에 맞춰 60프레임으로 묶는다. 120Hz 화면에서 더 그려 봐야 같은 장면이고,
+## 프레임마다 물리 틱 수가 0·1·2로 들쭉날쭉하면 움직임이 떨린다. 한 프레임이 늦어도 물리를 몰아서 따라잡지 않는다
+## (MAX_CATCH_UP틱까지만) — 따라잡느라 다음 프레임이 더 늦어지는 악순환을 막는다. 헤드리스 테스트는 건드리지 않는다
+static func limit_frame_rate() -> void:
+	Engine.max_fps = Engine.physics_ticks_per_second
+	Engine.max_physics_steps_per_frame = MAX_CATCH_UP
 
 
 ## 실행 인자 `--chapter=N` (없으면 0)

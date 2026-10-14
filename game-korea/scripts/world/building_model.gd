@@ -4,7 +4,7 @@ class_name BuildingModel
 ## 한옥 처마, 아파트 동 번호, 공장 굴뚝, 창고 박공 지붕과 셔터, 쪽방촌 판잣집, 캠핑장 카라반·텐트.
 ## 노드 없는 계산이다. City가 덩어리마다 BuildingView를 세우고, 사람 키보다 낮은 것(담장·화단·마당·팔레트)은
 ## 청크가 바닥에 그린다(draw_ground) — 바닥 것은 늘 사람·차 밑에 깔린다.
-## 충돌은 부지 사각형 그대로다. 본채는 부지 안쪽(INSET)에 세워 화단 띠가 보이게 한다.
+## 충돌은 지면에 닿는 모형에서 만든다. 포장과 마당 전체를 막지 않는다.
 ## seed는 건물 번호: 같은 건물은 늘 같은 모양.
 
 const FH := IsoView.FLOOR_HEIGHT
@@ -25,6 +25,8 @@ const RUST := Color(0.5, 0.3, 0.18)
 ## 덩어리 하나: 바닥 사각형 rect 위에 h0~h1 높이로 세운 벽과 지붕
 class Piece extends RefCounted:
 	var rect: Rect2
+	## 포장·바닥판은 false. 기둥·벽·시설물은 true.
+	var blocks_ground := true
 	var h0 := 0.0                           ## 벽 바닥 높이 (얹힌 것은 아래 덩어리의 h1)
 	var h1 := 18.0                          ## 벽 위 높이
 	var wall := Color(0.5, 0.5, 0.5)
@@ -45,6 +47,8 @@ class Piece extends RefCounted:
 	var seed := 0
 	var floor_height := FH
 	var surface_detail := false
+	## 그리는 순서를 조각 가운데가 아니라 앞 모서리(남동)로 정한다 — 밑의 덩어리를 덮는 캐노피·내민 윗층
+	var z_at_end := false
 
 	func top() -> float:
 		var h := h1 + rise
@@ -501,6 +505,7 @@ static func _yard(ci: CanvasItem, r: Rect2, seed: int, ground: Color, wall: Colo
 	ci.draw_rect(r, ground)
 	# 대문에서 집까지 디딤돌
 	var gate := r.get_center().x
+	var half_gate := minf(40.0,r.size.x*.2)
 	var y := r.end.y - 14.0
 	while y > r.position.y + r.size.y * 0.55:
 		ci.draw_rect(Rect2(gate - 9.0, y - 7.0, 18.0, 10.0), STONE.darkened(0.1))
@@ -513,17 +518,19 @@ static func _yard(ci: CanvasItem, r: Rect2, seed: int, ground: Color, wall: Colo
 	low_box(ci, Rect2(r.position, Vector2(r.size.x, th)), wall_h, wall)
 	low_box(ci, Rect2(r.position, Vector2(th, r.size.y)), wall_h, wall)
 	low_box(ci, Rect2(Vector2(r.end.x - th, r.position.y), Vector2(th, r.size.y)), wall_h, wall)
-	low_box(ci, Rect2(Vector2(r.position.x, r.end.y - th), Vector2(gate - 20.0 - r.position.x, th)), wall_h, wall)
-	low_box(ci, Rect2(Vector2(gate + 20.0, r.end.y - th), Vector2(r.end.x - gate - 20.0, th)), wall_h, wall)
+	low_box(ci, Rect2(Vector2(r.position.x, r.end.y - th), Vector2(gate - half_gate - r.position.x, th)), wall_h, wall)
+	low_box(ci, Rect2(Vector2(gate + half_gate, r.end.y - th), Vector2(r.end.x - gate - half_gate, th)), wall_h, wall)
 	# 담 위 기와(한옥)·갓돌, 대문
-	for seg in [Rect2(Vector2(r.position.x, r.end.y - th), Vector2(gate - 20.0 - r.position.x, th)),
-			Rect2(Vector2(gate + 20.0, r.end.y - th), Vector2(r.end.x - gate - 20.0, th)),
+	for seg in [Rect2(Vector2(r.position.x, r.end.y - th), Vector2(gate - half_gate - r.position.x, th)),
+			Rect2(Vector2(gate + half_gate, r.end.y - th), Vector2(r.end.x - gate - half_gate, th)),
 			Rect2(Vector2(r.end.x - th, r.position.y), Vector2(th, r.size.y))]:
 		var s: Rect2 = seg
 		var l := IsoView.lift(wall_h + 1.0)
 		ci.draw_colored_polygon(PackedVector2Array([s.position + l, Vector2(s.end.x, s.position.y) + l, s.end + l,
 			Vector2(s.position.x, s.end.y) + l]), cap)
-	low_box(ci, Rect2(gate - 20.0, r.end.y - 4.0, 40.0, 3.0), wall_h - 1.0, WOOD)
+	# 열린 문짝은 담장 옆으로 접어 두어 바닥 진입로와 일치시킨다.
+	low_box(ci, Rect2(gate-half_gate,r.end.y-25,3,21),wall_h-1.0,WOOD)
+	low_box(ci, Rect2(gate+half_gate-3,r.end.y-25,3,21),wall_h-1.0,WOOD)
 
 
 static func _apt_ground(ci: CanvasItem, r: Rect2, seed: int) -> void:
@@ -588,3 +595,36 @@ static func _yard_concrete(ci: CanvasItem, r: Rect2, seed: int, pallets: bool) -
 				low_box(ci, Rect2(x, y, 9.0, 9.0), 12.0, [Color(0.2, 0.35, 0.6), Color(0.65, 0.25, 0.2)][k % 2])
 		x += 34.0 + hash01(seed, k) * 20.0
 		k += 1
+
+
+## 시각 모형과 같은 좌표를 사용해 지상 장애물만 추출한다.
+## 높은 캐노피·옥상 소품과 명시적인 바닥판은 통행을 막지 않는다.
+static func ground_obstacles(pieces: Array[Piece]) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for p in pieces:
+		# 통과 가능한 바닥판 위의 주유기처럼 낮게 얹힌 실제 시설물도 보존한다.
+		var children: Array[Piece] = []
+		children.assign(p.on_top)
+		out.append_array(ground_obstacles(children))
+		if not p.blocks_ground or p.h0 >= IsoView.PERSON_HEIGHT or p.h1 <= 0.0:
+			continue
+		if p.roof in LandmarkBuilding.OPEN_ROOFS:
+			continue
+		if p.roof == &"pavilion":
+			out.append_array(LandmarkBuilding._pavilion_posts(p.rect))
+		elif p.roof == &"tree":
+			out.append(Rect2(p.rect.get_center()-Vector2(3,3),Vector2(6,6)))
+		else:
+			out.append(p.rect)
+	return out
+
+
+## 단독주택/한옥 담장. 마당은 비우고 열린 대문으로 사람·차가 들어간다.
+static func yard_walls(r: Rect2) -> Array[Rect2]:
+	var half_gate := minf(40.0,r.size.x*.2)
+	var gate := r.get_center().x
+	return [Rect2(r.position,Vector2(r.size.x,6)),
+		Rect2(r.position,Vector2(6,r.size.y)),
+		Rect2(r.end.x-6,r.position.y,6,r.size.y),
+		Rect2(r.position.x,r.end.y-6,gate-half_gate-r.position.x,6),
+		Rect2(gate+half_gate,r.end.y-6,r.end.x-gate-half_gate,6)]

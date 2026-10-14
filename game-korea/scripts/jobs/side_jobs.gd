@@ -131,7 +131,6 @@ func _next_level() -> void:
 
 func _physics_process(delta: float) -> void:
 	_time += delta
-	queue_redraw()
 	if job == null:
 		return
 	time_left -= delta
@@ -176,6 +175,11 @@ func _physics_process(delta: float) -> void:
 				_level_done()
 			else:
 				goal = target.global_position
+
+
+## 그림은 화면 프레임마다 한 번 (물리 틱마다 부르면 느릴수록 한 프레임에 여러 번 그린다)
+func _process(_delta: float) -> void:
+	queue_redraw()
 
 
 ## 단계 하나를 끝냈다 (테스트에서도 부른다)

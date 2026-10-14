@@ -10,7 +10,7 @@ signal vehicle_exploded(vehicle: Vehicle, by_player: bool)
 
 const SEED := 4404
 const TRACER_TIME := 0.08
-const BLAST_TIME := 0.8
+const BLAST_TIME := 1.8              ## 불덩이는 금방 사라지고 연기·불타는 파편이 조금 더 남는다
 const SWING_TIME := 0.12
 const SCARE_RADIUS := 320.0          ## 총소리에 겁먹는 거리
 const BLAST_SCARE_RADIUS := 500.0
@@ -67,6 +67,10 @@ func _physics_process(delta: float) -> void:
 	_tracers = _tracers.filter(func(e: Array): return e[3] < TRACER_TIME)
 	_blasts = _blasts.filter(func(e: Array): return e[2] < BLAST_TIME)
 	_swings = _swings.filter(func(e: Array): return e[2] < SWING_TIME)
+
+
+## 그림은 화면 프레임마다 한 번 (물리 틱마다 부르면 느릴수록 한 프레임에 여러 번 그린다)
+func _process(_delta: float) -> void:
 	queue_redraw()
 
 
@@ -198,9 +202,10 @@ func _spray(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude
 			continue
 		if w.water:
 			v.motor.velocity += dir * w.push * get_physics_process_delta_time() * 6.0 / v.stats.mass
-			if v.burning >= 0.0:   # 물을 뿌리면 불붙은 차가 꺼진다 (간신히 버틴다)
+			if v.burning >= 0.0 or v.on_fire:   # 물을 뿌리면 불붙은 차가 꺼진다 (간신히 버틴다)
 				v.burning = -1.0
-				v.health = 1.0
+				v.on_fire = false
+				v.health = maxf(v.health, 1.0)
 		else:
 			damage_vehicle(v, w.damage, by_player)
 	if not by_player and player.visible and _in_cone(from, dir, reach, w.spread, player.global_position):
@@ -374,24 +379,76 @@ func _draw() -> void:
 		var a: float = (e[1] as Vector2).angle()
 		draw_arc(e[0], 10.0, a - 0.9, a + 0.9, 8, Color(1, 1, 1, 0.7 * k), 2.0)
 	for e: Array in _blasts:
-		var t: float = e[2] / BLAST_TIME
-		var pos: Vector2 = e[0] + IsoView.lift(IsoView.ground(e[0]))   # 다리 위 폭발은 상판 높이에서
-		var r := lerpf(30.0, DamageModel.EXPLOSION_RADIUS * 0.75 * e[1], sqrt(t))
-		if IsoView.enabled:
-			# 2.5D: 바닥에 번진 빛 위로 둥근 불덩이가 솟는다 (화면 기준 원)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-			draw_circle(pos, r * 1.25, Color(1.0, 0.45, 0.1, 0.3 * (1.0 - t)))
-			draw_set_transform_matrix(IsoView.screen_frame(pos, r * 0.45))
-			pos = Vector2.ZERO
-			r *= 0.85
-		draw_circle(pos, r * 1.25, Color(0.3, 0.3, 0.32, 0.35 * (1.0 - t)))
-		draw_circle(pos, r, Color(1.0, 0.45, 0.1, 0.8 * (1.0 - t)))
-		draw_circle(pos, r * 0.6, Color(1.0, 0.8, 0.3, 0.9 * (1.0 - t)))
-		draw_circle(pos, r * 0.3, Color(1.0, 1.0, 0.85, 1.0 - t))
+		_draw_blast(e[0] + IsoView.lift(IsoView.ground(e[0])), e[1], e[2])   # 다리 위 폭발은 상판 높이에서
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 폭발 (참고 그림 순서): 하얀 섬광 → 부풀며 솟는 불덩이 → 사방으로 튀는 파편·불티 → 검은 연기와 바닥에 남은 불.
+## 바닥 불빛·충격파 고리는 바닥에, 나머지는 화면 기준으로 세워 그린다
+func _draw_blast(pos: Vector2, scale: float, age: float) -> void:
+	var t := age / BLAST_TIME
+	var now := Time.get_ticks_msec() / 1000.0
+	var seed := fmod(absf(pos.x * 0.013 + pos.y * 0.007), 10.0)
+	var r := DamageModel.EXPLOSION_RADIUS * 0.4 * sqrt(scale)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	FireFx.glow(self, pos, r * (1.0 + 0.8 * minf(age * 4.0, 1.0)), 4.0 * pow(1.0 - t, 3.0), now, seed)
+	if age < 0.35:
+		var k := age / 0.35
+		draw_arc(pos, r * 1.6 * k, 0.0, TAU, 40, Color(1.0, 0.85, 0.6, 0.45 * (1.0 - k)), 3.0)
+	if IsoView.enabled:
+		draw_set_transform_matrix(IsoView.screen_frame(pos))
+	else:
+		draw_set_transform(pos, 0.0, Vector2.ONE)
+	# 연기: 불덩이 뒤에서 피어올라 오래 남는다
+	if age > 0.12:
+		var k := (age - 0.12) / (BLAST_TIME - 0.12)
+		for i in 7:
+			var a := seed + i * 0.9
+			var p := Vector2(cos(a) * r * (0.25 + 0.35 * k), -r * (0.35 + 0.9 * k) - sin(a * 1.7) * r * 0.2)
+			var pr := r * (0.22 + 0.3 * k) * (0.8 + 0.3 * fmod(i * 0.61, 1.0))
+			var c := Color(FireFx.SMOKE.lerp(Color(0.3, 0.28, 0.27), fmod(i * 0.37, 1.0)), 0.8 * minf(k * 5.0, 1.0) * (1.0 - k))
+			FireFx.circle(self, p, pr, c)
+			FireFx.circle(self, p + Vector2(-pr * 0.5, pr * 0.25), pr * 0.7, c)
+	# 불덩이: 덩어리 여럿이 부풀었다가 붉게 식으며 꺼진다
+	if age < 0.75:
+		var f := age / 0.75
+		var grow := sqrt(minf(age / 0.25, 1.0))
+		var hot := clampf(1.0 - f * 1.4, 0.0, 1.0)
+		var center := Vector2(0, -r * (0.3 + 0.35 * f))
+		var layers := [[FireFx.OUTER, 1.0], [FireFx.MID, 0.78], [FireFx.INNER, 0.55 * (0.4 + 0.6 * hot)], [FireFx.CORE, 0.32 * hot]]
+		for l: Array in layers:
+			for i in 6:
+				var a := seed + i * TAU / 6.0
+				var p := center + Vector2(cos(a), sin(a) * 0.8) * r * 0.32 * grow
+				var lr: float = r * (0.3 + 0.08 * fmod(i * 0.53, 1.0)) * grow * l[1] * (1.0 - f * 0.35)
+				if lr > 0.5:
+					FireFx.circle(self, p, lr, Color(l[0], 1.0 - f * f))
+			var cr: float = r * 0.4 * grow * l[1]
+			if cr > 0.5:
+				FireFx.circle(self, center, cr, Color(l[0], 1.0 - f * f))
+	# 섬광
+	if age < 0.12:
+		var k := age / 0.12
+		FireFx.circle(self, Vector2(0, -r * 0.3), r * (0.35 + 0.45 * k), Color(1.0, 0.95, 0.75, 0.7 * (1.0 - k)))
+	# 파편(검은 조각)과 불티(노란 줄): 위로 튀었다 떨어진다
+	if age < 1.1:
+		for i in 14:
+			var a := seed * 0.7 + i * 2.39996
+			var v := r * (2.0 + 1.6 * fmod(i * 0.618, 1.0))
+			var vel := Vector2(cos(a) * v, -absf(sin(a)) * v * 0.9 - r * 1.2)
+			var p := vel * age + Vector2(0, r * 4.5 * age * age)
+			var fade := 1.0 - age / 1.1
+			if i % 2 == 0:
+				var s := 2.0 + fmod(i * 0.29, 1.0) * 2.5
+				draw_rect(Rect2(p - Vector2(s, s) * 0.5, Vector2(s, s * 0.7)), Color(0.08, 0.07, 0.06, fade))
+			else:
+				var dir := (vel + Vector2(0, r * 9.0 * age)).normalized()
+				draw_line(p, p - dir * 6.0, Color(FireFx.INNER, fade), 1.5)
+	# 바닥에 떨어진 파편이 잠깐 더 탄다
+	if age > 0.3:
+		FireFx.ground_fire(self, Vector2.ZERO, r * 0.45, now, seed, clampf((BLAST_TIME - age) / 0.6, 0.0, 1.0))
 
 
 func _draw_decals() -> void:
 	for pos in _scorch:
-		_decals.draw_circle(pos, 46.0, Color(0.02, 0.02, 0.02, 0.35))
-		_decals.draw_circle(pos, 28.0, Color(0.02, 0.02, 0.02, 0.4))
+		FireFx.char_patch(_decals, pos, 44.0, fmod(absf(pos.x * 0.013 + pos.y * 0.007), 10.0))

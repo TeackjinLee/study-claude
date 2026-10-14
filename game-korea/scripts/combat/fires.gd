@@ -77,6 +77,10 @@ func _physics_process(delta: float) -> void:
 			continue
 		_burn(f, delta)
 	_fire_department(delta)
+
+
+## 그림은 화면 프레임마다 한 번 (물리 틱마다 부르면 느릴수록 한 프레임에 여러 번 그린다)
+func _process(_delta: float) -> void:
 	queue_redraw()
 
 
@@ -159,20 +163,23 @@ func _release_truck() -> void:
 
 
 func _draw() -> void:
+	# 땅 불 (참고 그림 4행): 그을린 자리와 불빛 위로 작은 불꽃 여럿, 불씨와 연기
 	for f in fires:
 		var pos: Vector2 = f.pos + IsoView.lift(IsoView.ground(f.pos))   # 다리 위 불은 상판에서 탄다
 		var r: float = f.radius
 		var fade := clampf(f.left / 1.5, 0.0, 1.0)
-		draw_circle(pos, r, Color(0.15, 0.05, 0.02, 0.35 * fade))
-		draw_circle(pos, r * 1.4, Color(1.0, 0.45, 0.1, 0.08 * fade))
-		var n := int(r / 6.0) + 3
-		var up := IsoView.lift(1.6) if IsoView.enabled else Vector2.UP   # 2.5D: 불길이 화면 위로 솟는다
-		for i in n:
-			var a := float(i) / n * TAU + _time * 0.7
-			var flick := 0.5 + 0.5 * sin(_time * 11.0 + i * 1.9)
-			var p := pos + Vector2.RIGHT.rotated(a) * r * (0.25 + 0.6 * fmod(i * 0.37, 1.0))
-			draw_circle(p + up * flick * 6.0, 5.0 + flick * 5.0, Color(1.0, 0.35 + 0.35 * flick, 0.05, 0.8 * fade))
-			draw_circle(p + up * flick * 8.0, 2.5 + flick * 2.0, Color(1.0, 0.9, 0.4, 0.85 * fade))
+		var grow := clampf(f.age / 0.6, 0.3, 1.0)
+		var seed := fmod(absf(pos.x * 0.013 + pos.y * 0.007), 10.0)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		FireFx.char_patch(self, pos, r * 1.1, seed, 0.6 + 0.4 * fade)
+		FireFx.glow(self, pos, r * 2.0, 1.4 * fade, _time, seed)
+		if IsoView.enabled:
+			draw_set_transform_matrix(IsoView.screen_frame(pos))
+		else:
+			draw_set_transform(pos, 0.0, Vector2.ONE)
+		FireFx.smoke(self, Vector2(0, -r * 0.4 - 6.0), _time, 0.45 + r / 50.0, 0.85, 0.55 * fade, seed, 4)
+		FireFx.ground_fire(self, Vector2.ZERO, r * grow, _time, seed, fade * (0.6 + 0.4 * grow))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if truck and is_instance_valid(truck) and not fires.is_empty() and truck.pursuit:
 		var target: Vector2 = fires[0].pos
 		for f in fires:

@@ -2,6 +2,8 @@ class_name PersonDrawer
 ## 사람(플레이어·보행자)을 위에서 본 모습으로 그린다. 위쪽(-y)이 정면.
 
 const SKIN := Color(0.93, 0.78, 0.64)
+const SHOES := Color(0.1, 0.1, 0.1)       ## 정장 구두
+const CLASP := Color(0.72, 0.74, 0.78)    ## 서류가방 잠금쇠
 
 
 ## 다리 위에 선 사람은 그 높이만큼 올려 그린다 (2.5D)
@@ -90,6 +92,10 @@ static func draw_standing(ci: CanvasItem, facing: float, phase: float, shirt: Co
 		&"camo":
 			ci.draw_circle(Vector2(2 + stride * 0.35, -5), 1.0, pants.darkened(0.4))
 			ci.draw_circle(Vector2(-2 - stride * 0.5, -3), 0.9, pants.lightened(0.2))
+		&"suit":
+			# 검은 구두 (앞코가 앞쪽으로)
+			ci.draw_rect(Rect2(leg_b.x - 1.6, -1.3, 3.7, 1.5), SHOES.darkened(0.3))
+			ci.draw_rect(Rect2(leg_f.x - 1.6, -1.3, 3.7, 1.5), SHOES)
 	# 뒤 팔
 	ci.draw_line(Vector2(-4.5, -19), Vector2(-5 + stride * 0.6, -11), sleeve.darkened(0.3), 2.6)
 	# 몸통
@@ -175,9 +181,19 @@ static func _torso(ci: CanvasItem, outfit: StringName, shirt: Color, pants: Colo
 			if not back:
 				ci.draw_rect(Rect2(1, -20.5, 2.6, 10.5), trim)
 		&"suit":
-			if not back:
-				ci.draw_rect(Rect2(0.8, -21, 3, 5), Color(0.95, 0.95, 0.94))
-				ci.draw_line(Vector2(2.3, -20.2), Vector2(2.3, -13), trim, 1.4)
+			# 정장 윗옷은 엉덩이까지 덮는다 (설계도 OFFICE: 열린 깃 사이 흰 셔츠와 넥타이)
+			ci.draw_rect(Rect2(-4.5, -9, 9, 1.6), shirt.darkened(0.06))
+			if back:
+				ci.draw_line(Vector2(0, -12), Vector2(0, -7.4), shirt.darkened(0.3), 0.6)
+			else:
+				_tri(ci, Vector2(0.4, -21), Vector2(4.2, -21), Vector2(2.4, -14.8), Color(0.95, 0.95, 0.94))
+				_quad(ci, Vector2(1.9, -20.6), Vector2(2.9, -20.6), Vector2(2.8, -19.5), Vector2(2.0, -19.5), trim.darkened(0.15))
+				_quad(ci, Vector2(2.0, -19.5), Vector2(2.8, -19.5), Vector2(3.1, -14.4), Vector2(1.7, -14.4), trim)
+				_tri(ci, Vector2(1.7, -14.4), Vector2(3.1, -14.4), Vector2(2.4, -13.4), trim)
+				# 깃 (셔츠 양옆으로 접힌 선)
+				ci.draw_line(Vector2(0.4, -21), Vector2(2.2, -14.6), shirt.darkened(0.3), 0.7)
+				ci.draw_line(Vector2(4.2, -21), Vector2(2.6, -14.6), shirt.darkened(0.3), 0.7)
+				ci.draw_circle(Vector2(2.4, -11.6), 0.45, shirt.darkened(0.45))
 		&"tracksuit":
 			ci.draw_line(Vector2(-4.1, -21), Vector2(-4.1, -9), trim, 0.8)
 			if not back:
@@ -204,6 +220,14 @@ static func _torso(ci: CanvasItem, outfit: StringName, shirt: Color, pants: Colo
 			else:
 				ci.draw_rect(Rect2(-2.2, -17.5, 6.8, 11.5), trim)
 				ci.draw_line(Vector2(-1.5, -17.5), Vector2(-0.5, -21), trim, 0.8)
+
+
+static func _tri(ci: CanvasItem, a: Vector2, b: Vector2, c: Vector2, color: Color) -> void:
+	ci.draw_primitive(PackedVector2Array([a, b, c]), PackedColorArray([color]), PackedVector2Array())
+
+
+static func _quad(ci: CanvasItem, a: Vector2, b: Vector2, c: Vector2, d: Vector2, color: Color) -> void:
+	ci.draw_primitive(PackedVector2Array([a, b, c, d]), PackedColorArray([color]), PackedVector2Array())
 
 
 ## 등에 메는 것 (앞모습이면 몸 뒤, 뒷모습이면 몸 위)
@@ -234,6 +258,7 @@ static func _carry_hand(ci: CanvasItem, prop: StringName, c: Color, hand: Vector
 		&"briefcase":
 			ci.draw_rect(Rect2(hand.x - 2.4, hand.y + 0.6, 5.2, 4), c)
 			ci.draw_rect(Rect2(hand.x - 0.8, hand.y - 0.2, 1.8, 0.9), c.darkened(0.4))
+			ci.draw_rect(Rect2(hand.x - 0.2, hand.y + 1.8, 1.0, 0.8), CLASP)
 		&"cane":
 			ci.draw_line(hand, Vector2(hand.x + 2.2, 0), c, 1.2)
 		&"flyers":

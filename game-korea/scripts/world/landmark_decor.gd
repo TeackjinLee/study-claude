@@ -5,6 +5,9 @@ class_name LandmarkDecor
 const RED := Color("c8372c")
 const WHITE := Color("f1eee6")
 const HAZARD := Color("e3b023")
+## 밤에 불빛 조각(BuildingView.lights)에서 빛나는 것
+const GLOWS: Array[StringName] = [&"lamp_pole", &"lanterns", &"canopy"]
+const BULB_OFF := Color(0.78, 0.78, 0.72)
 
 
 static func draw(v: BuildingView, p: BuildingModel.Piece) -> void:
@@ -21,6 +24,7 @@ static func draw(v: BuildingView, p: BuildingModel.Piece) -> void:
 		&"lamp_pole": lamp_pole(v, p)
 		&"hoist": hoist(v, p)
 		&"pavilion": pavilion(v, p)
+		_: StreetDecor.roof(v, p)   # 거리 건물 소품 (sd_*)
 
 
 static func _at(w: Vector2, h: float) -> Vector2:
@@ -186,7 +190,7 @@ static func canopy(v: BuildingView, p: BuildingModel.Piece) -> void:
 	# 밑에 매단 조명 (앞 가장자리 아래)
 	for k in 3:
 		var at := Vector2(lerpf(r.position.x + 10.0, r.end.x - 10.0, k / 2.0), r.end.y - 4.0)
-		v.draw_circle(_at(at, p.h0 - 1.0), 2.0, Color(1.0, 0.92, 0.7))
+		v.draw_circle(_at(at, p.h0 - 1.0), 2.0, BULB_OFF)
 
 
 ## 좌판 천막: 네 귀 장대와 줄무늬 천, 앞으로 살짝 숙인다
@@ -249,8 +253,7 @@ static func lanterns(v: BuildingView, p: BuildingModel.Piece) -> void:
 	v.draw_polyline(line, Color("2b2b2b"), 1.0)
 	for k in range(1, n):
 		var col: Color = [Color(1.0, 0.85, 0.45), Color(1.0, 0.45, 0.35), Color(1.0, 0.95, 0.75)][k % 3]
-		v.draw_circle(line[k] + Vector2(0, 2.5), 4.0, Color(col, 0.22))
-		v.draw_circle(line[k] + Vector2(0, 2.5), 1.6, col)
+		v.draw_circle(line[k] + Vector2(0, 2.5), 1.6, col.darkened(0.35))
 
 
 ## 가로등·투광등: 기둥과 팔, 등 머리와 번짐
@@ -260,8 +263,55 @@ static func lamp_pole(v: BuildingView, p: BuildingModel.Piece) -> void:
 	var head := _at(c, p.h1) + Vector2(7, 1)
 	v.draw_line(_at(c, p.h1), head, p.wall, 1.8)
 	v.draw_rect(Rect2(head - Vector2(3, 1.5), Vector2(7, 3)), p.wall.lightened(0.15))
-	v.draw_circle(head + Vector2(0.5, 2.5), 7.0, Color(1.0, 0.92, 0.65, 0.2))
-	v.draw_circle(head + Vector2(0.5, 2.0), 2.0, Color(1.0, 0.95, 0.8))
+	v.draw_circle(head + Vector2(0.5, 2.0), 2.0, BULB_OFF)
+
+
+## 밤 불빛 (불빛 조각에서만 부른다): 등·전구와 번짐, 바닥에 떨어지는 빛 웅덩이.
+## 창처럼 UV로 켜지는 차례를 넘겨 DayNight.lights_on에 따라 저녁에 켜지고 아침에 꺼진다 — 가로등이 창보다 먼저 켜진다
+static func glow(v: BuildingView, p: BuildingModel.Piece) -> void:
+	var r := p.rect
+	match p.roof:
+		&"lamp_pole":
+			var c := r.get_center()
+			var flood := p.h1 > 60.0
+			var under := c + Vector2(7, 1)
+			_halo(v, under, 70.0 if flood else 36.0, Color(1.0, 0.82, 0.5, 0.11), 0.02, true)
+			_halo(v, under, 40.0 if flood else 20.0, Color(1.0, 0.85, 0.55, 0.12), 0.02, true)
+			var head := _at(c, p.h1) + Vector2(7.5, 3.0)
+			_halo(v, head, 16.0 if flood else 10.0, Color(1.0, 0.85, 0.5, 0.35), 0.02)
+			_halo(v, head, 3.0, Color(1.0, 0.97, 0.85), 0.02)
+		&"canopy":
+			for k in 3:
+				var at := Vector2(lerpf(r.position.x + 10.0, r.end.x - 10.0, k / 2.0), r.end.y - 4.0)
+				_halo(v, at + Vector2(0, 6), 26.0, Color(1.0, 0.92, 0.75, 0.12), 0.04, true)
+				_halo(v, _at(at, p.h0 - 1.0), 6.0, Color(1.0, 0.95, 0.8, 0.3), 0.04)
+				_halo(v, _at(at, p.h0 - 1.0), 2.0, Color(1.0, 0.97, 0.88), 0.04)
+		&"lanterns":
+			var along_x := r.size.x >= r.size.y
+			var a := Vector2(r.position.x, r.get_center().y) if along_x else Vector2(r.get_center().x, r.position.y)
+			var b := Vector2(r.end.x, r.get_center().y) if along_x else Vector2(r.get_center().x, r.end.y)
+			var n := 12
+			for k in range(1, n):
+				var f := float(k) / n
+				var col: Color = [Color(1.0, 0.85, 0.45), Color(1.0, 0.45, 0.35), Color(1.0, 0.95, 0.75)][k % 3]
+				var at := _at(a.lerp(b, f), p.h1 - sin(f * PI) * 8.0) + Vector2(0, 2.5)
+				if k % 3 == 0:
+					_halo(v, a.lerp(b, f), 26.0, Color(col, 0.1), 0.08, true)
+				_halo(v, at, 5.0, Color(col, 0.35), 0.08)
+				_halo(v, at, 1.7, col, 0.08)
+
+
+## 불빛 원 (ground면 바닥에 눕힌 원: 월드 좌표 그대로라 화면에서 타원). UV로 켜지는 차례 turn
+static func _halo(v: BuildingView, at: Vector2, radius: float, color: Color, turn: float, ground := false) -> void:
+	var n := 14
+	var pts := PackedVector2Array()
+	for k in n:
+		var t := TAU * k / n
+		pts.append(at + Vector2(cos(t), sin(t)) * radius * (1.0 if ground else 0.75))
+	var uvs := PackedVector2Array()
+	uvs.resize(n)
+	uvs.fill(Vector2(2.0, 2.0 + turn))
+	v.draw_polygon(pts, PackedColorArray([color]), uvs)
 
 
 ## 크레인 줄과 스프레더 (매달린 컨테이너는 on_top으로 뒤에 그린다)

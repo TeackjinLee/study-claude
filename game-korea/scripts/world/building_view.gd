@@ -41,6 +41,13 @@ const SIGN_STYLES := [
 	["반찬", Color(0.95, 0.75, 0.1), Color(0.35, 0.18, 0.05)],
 	["잡화", Color(0.25, 0.25, 0.27), Color(0.98, 0.9, 0.4)],
 	["방앗간", Color(0.96, 0.93, 0.86), Color(0.75, 0.2, 0.1)],
+	# 인쇄·공구 골목 (거리 건물)
+	["인쇄", Color(0.96, 0.95, 0.9), Color(0.1, 0.25, 0.7)],
+	["제본", Color(0.12, 0.3, 0.7), Color(0.97, 0.97, 1.0)],
+	["출력", Color(0.2, 0.55, 0.3), Color(0.97, 1.0, 0.95)],
+	["공구", Color(0.98, 0.82, 0.1), Color(0.1, 0.08, 0.06)],
+	["철물", Color(0.75, 0.12, 0.1), Color(1.0, 0.97, 0.9)],
+	["전기", Color(0.1, 0.42, 0.78), Color(1.0, 0.92, 0.3)],
 ]
 ## 맞는 낱말이 없는 이름의 색 (번갈아)
 const SIGN_PLAIN := [[Color(0.1, 0.22, 0.78), Color(0.97, 0.97, 1.0)], [Color(0.25, 0.25, 0.27), Color(0.97, 0.97, 0.95)]]
@@ -117,7 +124,7 @@ void fragment() {
 ## 불빛 조각에서 그리는 벽 장식 (간판·가게 앞. 낮에는 본 조각에 그린 것과 똑같이 보인다)
 const LIGHT_DECOS: Array[StringName] = [&"shops", &"awning", &"name", &"plate", &"top_sign", &"big_sign",
 	&"rental_image", &"vsign", &"band_signs", &"emblem_sign", &"hospital_vsign", &"er_band", &"office_plate",
-	&"repair_sign", &"sauna_sign", &"store_front", &"store_band", &"wall_lamps", &"landmark_sign"]
+	&"repair_sign", &"sauna_sign", &"store_front", &"store_band", &"wall_lamps", &"landmark_sign", &"street_sign", &"street_nightlife", &"street_vertical_neon"]
 static var _light_material: ShaderMaterial
 
 
@@ -203,7 +210,7 @@ func _ready() -> void:
 	if lights:
 		return
 	z_as_relative = false
-	z_index = IsoView.z_of(part.get_center())
+	z_index = IsoView.z_of(part.end - Vector2(0.5, 0.5) if piece.z_at_end else part.get_center())
 
 
 func _draw() -> void:
@@ -215,7 +222,7 @@ func _draw() -> void:
 # ── 벽 ────────────────────────────────────────────────────
 
 func _walls(p: BuildingModel.Piece, seg: Rect2) -> void:
-	if p.roof in [&"tree", &"chimney", &"tank", &"tent"] or p.roof in SpecialDecor.BARE:
+	if p.roof in [&"tree", &"chimney", &"tank", &"tent"] or p.roof in SpecialDecor.BARE or p.roof in StreetDecor.BARE:
 		return   # 벽 없이 지붕 그림에서 통째로 그린다
 	var r := p.rect
 	if seg.end.x >= r.end.x - 0.5:
@@ -246,7 +253,7 @@ func _face(p: BuildingModel.Piece, a: Vector2, b: Vector2, n: Vector2) -> void:
 		_windows(p, south, wall)
 		_mute = false
 		for d in p.deco:
-			if d in LIGHT_DECOS:
+			if d in LIGHT_DECOS or d in StreetDecor.LIGHT:
 				_deco(d, south)
 		return
 	draw_colored_polygon(IsoView.wall(a, b, p.h0, p.h1), wall)
@@ -262,7 +269,7 @@ func _face(p: BuildingModel.Piece, a: Vector2, b: Vector2, n: Vector2) -> void:
 				_hline(f*_fh-1,Color(0.02,0.025,0.04,0.3),2)
 				_hline(f*_fh,wall.lightened(0.2),1.5, -INF, INF, 1.5)
 	for d in p.deco:
-		if not d in LIGHT_DECOS:
+		if not (d in LIGHT_DECOS or d in StreetDecor.LIGHT):
 			_deco(d, south)
 	_service_details(p)
 	if p.surface_detail:
@@ -590,26 +597,72 @@ const WOOD_DARK := Color(0.24, 0.14, 0.08)
 # ── 벽 장식 ───────────────────────────────────────────────
 
 func _deco(d: StringName, south: bool) -> void:
+	if String(d).begins_with("sd_"):
+		StreetDecor.deco(self, d, south)   # 거리 건물 10종 (docs/16)
+		return
 	var font := ThemeDB.fallback_font
 	var h := _p.h1 - _p.h0
 	match d:
+		&"street_services":
+			# Service-side equipment; front signage retains the main facade.
+			if not south:
+				for k in range(1, maxi(2, int(_len / 65))):
+					var x := k * _len / maxi(2, int(_len / 65))
+					_quad(x, x + 2, 1, h - 4, Color("525b59"), 1)
+					for level in range(1, maxi(2, int(h / 36))):
+						var z := level * 32.0
+						_quad(x + 5, x + 17, z, z + 9, Color("a6aaa0"), 3)
+						for slat in 3:
+							_quad(x + 7, x + 15, z + 2 + slat * 2, z + 3 + slat * 2, Color("454e4e"), 3.2)
+		&"street_mullions":
+			for k in range(1, maxi(2, int(_len / 22))):
+				var x := k * _len / maxi(2, int(_len / 22))
+				_quad(x, x + 2, 0, h, Color("9fb4bd"), .7)
+		&"street_clock":
+			if south and _in(_len * .5):
+				var c := _pt(_len * .5, h - 18, 1)
+				draw_circle(c, 11, Color("ded6b7"))
+				draw_arc(c, 11, 0, TAU, 24, Color("605b4e"), 2)
+				draw_line(c, c + Vector2(0,-7), Color("403f3a"), 2)
+				draw_line(c, c + Vector2(5,2), Color("403f3a"), 2)
+		&"street_fuel_board":
+			if south and _in(_len * .5):
+				_plate(font, "한빛", _len*.5, h-2, 12, Color("1b676a"), Color("bdcdc3"), Color.WHITE)
+				_plate(font, "휘발유", _len*.5, h-23, 9, Color("1a3237"), Color("72948b"), Color("edd690"))
+		&"street_church":
+			# Tall warm lancet-shaped bays distinguish the nave from residential windows.
+			for k in range(1,maxi(2,int(_len/48))):
+				var x := k*_len/maxi(2,int(_len/48))
+				_quad(x-7,x+7,18,h-23,Color("e8b45c"),1)
+				_quad(x-1,x+1,18,h-17,Color("595145"),1.3)
+				_quad(x-7,x+7,38,40,Color("595145"),1.3)
 		&"street_sign":
-			if south and _in(_len * 0.5):
-				_plate(font, _p.text, _len * 0.5, h - 2, 16, _p.accent, Color("d9cba7"), Color.WHITE)
+			if south:
+				var board_h := minf(32,maxf(10,h*.65))
+				StreetDecor.neon(self,_p.text,_len*.5,h-1,minf(_len*.82,210),board_h,_p.accent)
+		&"street_vertical_neon":
+			if south:
+				StreetDecor.neon(self,_p.text,_len*.5,h-2,_len*.9,h-4,_p.accent,true)
 		&"street_curtain":
+			if not south:
+				return
 			_quad(8, _len - 8, 0, h - 9, Color("211e29"))
 			for j in 16:
 				var x := 8 + (_len - 16) * j / 16.0
 				_quad(x, x + (_len - 16) / 18.0, 3, h - 10, Color("743440") if j % 2 == 0 else Color("b18e82"))
 		&"street_pump":
+			var hose_x := _len - 3.0
+			if _in(hose_x):
+				var hose := PackedVector2Array([_pt(hose_x,h*.8,3),_pt(hose_x+5,h*.65,4),_pt(hose_x+6,h*.25,4),_pt(hose_x+2,h*.18,4),_pt(hose_x,h*.45,3)])
+				draw_polyline(hose,Color("222629"),2.5)
 			_quad(2, _len - 2, h * .55, h * .85, Color("172e34"))
 			_quad(3, _len - 3, h * .2, h * .4, Color("20a88f"))
 		&"street_nightlife":
-			if south and _in(_len * .5):
+			if south:
 				var names := ["별밤 노래방", "CLUB 달", "서울 호프"]
-				var colors := [Color("9a236c"), Color("3f2a97"), Color("a16127")]
+				var colors := [Color("e63fa1"), Color("805aff"), Color("ffad3e")]
 				for j in 3:
-					_plate(font, names[j], _len * .5, h - 8 - j * 47, 18, colors[j], colors[j].lightened(.5), Color.WHITE)
+					StreetDecor.neon(self,names[j],_len*.5,h-14-j*52,minf(_len*.65,200),34,colors[j])
 		&"landmark_sign":
 			if south and _in(_len*0.5):
 				_plate(font, _p.text, _len*0.5, h-4, 16, Color("153b7a"), Color("b7c9df"), Color.WHITE)
@@ -835,7 +888,11 @@ const AWNINGS := [Color(0.75, 0.2, 0.2), Color(0.15, 0.45, 0.55), Color(0.85, 0.
 
 func _top(p: BuildingModel.Piece) -> void:
 	if lights:
-		# 불빛 조각은 지붕을 그리지 않고, 얹힌 덩어리(윗층)의 벽 불빛만
+		# 불빛 조각은 지붕을 그리지 않고, 얹힌 덩어리(윗층)의 벽 불빛만 (랜드마크 가로등·전구는 등 불빛)
+		if p.roof in LandmarkDecor.GLOWS:
+			LandmarkDecor.glow(self, p)
+		elif p.roof in StreetDecor.GLOWS:
+			StreetDecor.glow(self, p)
 		for s: BuildingModel.Piece in p.on_top:
 			_walls(s, s.rect)
 			_top(s)
@@ -843,6 +900,7 @@ func _top(p: BuildingModel.Piece) -> void:
 	match p.roof:
 		&"flat": _flat(p)
 		&"art": _art(p)
+		&"street_canopy": StreetDecor.canopy(self, p)
 		&"gable": _gable(p)
 		&"hip": _hip(p, false)
 		&"hanok": _hip(p, true)

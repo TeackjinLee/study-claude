@@ -1,7 +1,8 @@
 extends Node
 ## M4 차량 내구도·폭발 검증.
 ##  1. 피해 계산: 약한 충돌은 흠집 없음, 전속력 벽 충돌 한 번에는 안 터진다, 폭발 피해는 거리에 따라 준다.
-##  2. 실제로 건물에 들이받으면 체력이 깎이지만 터지지 않는다.
+##  2. 실제로 건물에 들이받으면 체력이 깎이지만 터지지 않는다. 들이받은 앞쪽이 찌그러진다(그림).
+##  2-1. 체력이 20% 아래면 불이 난다 — 아직 탈 수 있지만 체력이 타들어가 결국 터진다.
 ##  3. 총에 맞아 체력이 0이 되면 불이 붙고(탈 수 없다), 잠시 뒤 터져 잔해가 된다.
 ##  4. 운전자가 탄 차에 불이 붙으면 운전자가 뛰어내려 도망치고, 교통은 새 차로 채워진다.
 ##  5. 연쇄 폭발: 줄지어 선 차 하나가 터지면 옆 차들이 차례로 터진다. 멀리 있는 차와 사람은 무사, 가까운 사람은 죽는다.
@@ -20,6 +21,7 @@ var _failures: Array[String] = []
 func _ready() -> void:
 	_test_model()
 	await _test_wall_crash()
+	await _test_fire_at_low_health()
 	await _test_shoot_car()
 	await _test_npc_bails_out()
 	await _test_chain()
@@ -76,6 +78,23 @@ func _test_wall_crash() -> void:
 	print("  벽 충돌 뒤 체력 %.0f / %.0f" % [v.health, v.stats.durability])
 	_expect(v.health < v.stats.durability - 20.0, "건물에 들이받으면 체력이 깎인다 (%.0f)" % v.health)
 	_expect(v.burning < 0.0 and not v.wrecked, "한 번 들이받아서는 불이 붙지 않는다")
+	_expect(not v.dents.is_empty() and (v.dents[0][0] as Vector2).y < 0.0,
+		"정면으로 들이받으면 앞이 찌그러진다 (%d곳)" % v.dents.size())
+	await _free(main)
+
+
+func _test_fire_at_low_health() -> void:
+	var main := _make_main()
+	await _frames(2)
+	var car: Vehicle = main.start_vehicle
+	car.take_damage(car.max_health() * 0.75, false)
+	_expect(not car.on_fire, "체력 25%에서는 불이 안 난다")
+	car.take_damage(car.max_health() * 0.1, false)
+	_expect(car.on_fire and car.burning < 0.0 and car.usable(), "체력 20% 아래면 불이 나지만 아직 탈 수 있다")
+	await _frames(int((DamageModel.FIRE_TIME + 0.5) * 60))
+	_expect(car.burning >= 0.0 or car.wrecked, "불난 차는 체력이 타들어가 불붙는다 (체력 %.1f)" % car.health)
+	await _frames(int((DamageModel.BURN_TIME + 0.5) * 60))
+	_expect(car.wrecked, "불난 차는 끝내 터진다")
 	await _free(main)
 
 

@@ -1,0 +1,218 @@
+[
+  {
+    "category": "일반 시민",
+    "npc": "res://data/npc/civ_m.tres",
+    "name": "시민 · 남성",
+    "health": 4,
+    "speed": 5,
+    "power": 3
+  },
+  {
+    "category": "일반 시민",
+    "npc": "res://data/npc/civ_f.tres",
+    "name": "시민 · 여성",
+    "health": 4,
+    "speed": 5,
+    "power": 3
+  },
+  {
+    "category": "일반 시민",
+    "npc": "res://data/npc/office.tres",
+    "name": "직장인",
+    "health": 4,
+    "speed": 5,
+    "power": 3
+  },
+  {
+    "category": "일반 시민",
+    "npc": "res://data/npc/homeless.tres",
+    "name": "노숙인",
+    "health": 4,
+    "speed": 4,
+    "power": 3
+  },
+  {
+    "category": "일반 시민",
+    "npc": "res://data/npc/foreigner.tres",
+    "name": "외국인 시민",
+    "health": 4,
+    "speed": 5,
+    "power": 3
+  },
+  {
+    "category": "조직과 범죄자",
+    "npc": "res://data/npc/gang_gangnam.tres",
+    "name": "강남 조직원",
+    "health": 6,
+    "speed": 6,
+    "power": 6
+  },
+  {
+    "category": "조직과 범죄자",
+    "npc": "res://data/npc/gang_oldtown.tres",
+    "name": "구도심 조직원",
+    "health": 7,
+    "speed": 5,
+    "power": 7
+  },
+  {
+    "category": "조직과 범죄자",
+    "npc": "res://data/npc/gang_smuggler.tres",
+    "name": "밀수단 조직원",
+    "health": 6,
+    "speed": 7,
+    "power": 5
+  },
+  {
+    "category": "조직과 범죄자",
+    "npc": "res://data/npc/boss.tres",
+    "name": "조직 보스",
+    "health": 9,
+    "speed": 4,
+    "power": 8
+  },
+  {
+    "category": "조직과 범죄자",
+    "npc": "res://data/npc/thug.tres",
+    "name": "폭력배",
+    "health": 8,
+    "speed": 4,
+    "power": 9
+  },
+  {
+    "category": "조직과 범죄자",
+    "npc": "res://data/npc/gang_f.tres",
+    "name": "여성 조직원",
+    "health": 6,
+    "speed": 6,
+    "power": 6
+  },
+  {
+    "category": "조직과 범죄자",
+    "npc": "res://data/npc/assassin.tres",
+    "name": "암살자",
+    "health": 5,
+    "speed": 9,
+    "power": 7
+  },
+  {
+    "category": "조직과 범죄자",
+    "npc": "res://data/npc/thief.tres",
+    "name": "도둑",
+    "health": 3,
+    "speed": 10,
+    "power": 3
+  },
+  {
+    "category": "조직과 범죄자",
+    "npc": "res://data/npc/robber.tres",
+    "name": "강도",
+    "health": 7,
+    "speed": 6,
+    "power": 7
+  },
+  {
+    "category": "경찰과 공공기관",
+    "npc": "res://data/npc/police.tres",
+    "name": "경찰",
+    "health": 6,
+    "speed": 6,
+    "power": 6
+  },
+  {
+    "category": "경찰과 공공기관",
+    "npc": "res://data/npc/swat.tres",
+    "name": "특공대",
+    "health": 8,
+    "speed": 6,
+    "power": 8
+  },
+  {
+    "category": "경찰과 공공기관",
+    "npc": "res://data/npc/firefighter.tres",
+    "name": "소방관",
+    "health": 8,
+    "speed": 5,
+    "power": 8
+  },
+  {
+    "category": "경찰과 공공기관",
+    "npc": "res://data/npc/paramedic.tres",
+    "name": "구급대원",
+    "health": 5,
+    "speed": 7,
+    "power": 4
+  },
+  {
+    "category": "경찰과 공공기관",
+    "npc": "res://data/npc/soldier.tres",
+    "name": "군인",
+    "health": 8,
+    "speed": 7,
+    "power": 8
+  },
+  {
+    "category": "경찰과 공공기관",
+    "npc": "res://data/npc/traffic_cop.tres",
+    "name": "교통경찰",
+    "health": 6,
+    "speed": 6,
+    "power": 5
+  },
+  {
+    "category": "거리의 직업인",
+    "npc": "res://data/npc/taxi_driver.tres",
+    "name": "택시 기사",
+    "health": 5,
+    "speed": 5,
+    "power": 4
+  },
+  {
+    "category": "거리의 직업인",
+    "npc": "res://data/npc/bus_driver.tres",
+    "name": "버스 기사",
+    "health": 5,
+    "speed": 4,
+    "power": 4
+  },
+  {
+    "category": "거리의 직업인",
+    "npc": "res://data/npc/delivery.tres",
+    "name": "배달원",
+    "health": 5,
+    "speed": 8,
+    "power": 4
+  },
+  {
+    "category": "거리의 직업인",
+    "npc": "res://data/npc/merchant.tres",
+    "name": "상인",
+    "health": 5,
+    "speed": 4,
+    "power": 4
+  },
+  {
+    "category": "거리의 직업인",
+    "npc": "res://data/npc/dj.tres",
+    "name": "DJ",
+    "health": 4,
+    "speed": 5,
+    "power": 3
+  },
+  {
+    "category": "거리의 직업인",
+    "npc": "res://data/npc/busker.tres",
+    "name": "거리 음악가",
+    "health": 4,
+    "speed": 5,
+    "power": 3
+  },
+  {
+    "category": "거리의 직업인",
+    "npc": "res://data/npc/flyer.tres",
+    "name": "전단지 배포원",
+    "health": 4,
+    "speed": 6,
+    "power": 3
+  }
+]

@@ -67,6 +67,7 @@ class Part:
 
 
 static var _cache := {}
+static var _dent_height := 1.0   ## 지금 그리는 차의 높이 (찌그러짐: 위쪽 점일수록 덜 밀린다)
 
 
 static func model(stats: VehicleType) -> Array:
@@ -100,17 +101,21 @@ static func draw(ci: CanvasItem, car: Vehicle) -> void:
 			middle.append(p)
 	middle.sort_custom(func(a: Part, b: Part) -> bool:
 		return a.layer * 100000.0 + a.center.dot(view) < b.layer * 100000.0 + b.center.dot(view))
+	var dents: Array = car.dents
+	_dent_height = maxf(car.stats.height, 1.0)
 	for list in [before, middle, after]:
 		for p: Part in list:
-			_draw_part(ci, p, view, up, rot, car)
+			# 바퀴·사람은 찌그러지지 않는다
+			_draw_part(ci, p, view, up, rot, car, [] if p.wheel != 0 or p.rider else dents)
+	_draw_dents(ci, dents, view, up, car)
 
 
-static func _draw_part(ci: CanvasItem, p: Part, view: Vector3, up: Vector2, rot: float, car: Vehicle) -> void:
+static func _draw_part(ci: CanvasItem, p: Part, view: Vector3, up: Vector2, rot: float, car: Vehicle, dents: Array) -> void:
 	for i in p.faces.size():
 		var n := p.normals[i]
 		if n.dot(view) <= 0.03:
 			continue
-		_poly(ci, p.pts, p.faces[i], up, _shade(_color(p.colors[i], car), n, rot))
+		_poly(ci, p.pts, p.faces[i], up, _shade(_color(p.colors[i], car), n, rot), dents)
 	for d: Array in p.decals:
 		var n: Vector3 = d[1]
 		if n.dot(view) <= 0.03:
@@ -119,19 +124,78 @@ static func _draw_part(ci: CanvasItem, p: Part, view: Vector3, up: Vector2, rot:
 		var idx := PackedInt32Array()
 		for k in pts.size():
 			idx.append(k)
-		_poly(ci, pts, idx, up, _shade(_color(d[2], car), n, rot))
+		_poly(ci, pts, idx, up, _shade(_color(d[2], car), n, rot), dents)
 
 
-static func _poly(ci: CanvasItem, pts: PackedVector3Array, idx: PackedInt32Array, up: Vector2, color: Color) -> void:
-	var out := PackedVector2Array()
-	out.resize(idx.size())
-	for k in idx.size():
-		var p := pts[idx[k]]
-		out[k] = Vector2(p.x, p.y) + up * p.z
+static func _poly(ci: CanvasItem, pts: PackedVector3Array, idx: PackedInt32Array, up: Vector2, color: Color, dents: Array = []) -> void:
+	var out := _project(pts, idx, up, dents)
+	# 찌그러뜨려 꼬인 다각형은 펴진 모양으로 그린다 (삼각분할 실패 방지)
+	if out.size() > 4 and not dents.is_empty() and Geometry2D.triangulate_polygon(out).is_empty():
+		out = _project(pts, idx, up, [])
 	if out.size() <= 4:
 		ci.draw_primitive(out, PackedColorArray([color]), PackedVector2Array())
 	else:
 		ci.draw_colored_polygon(out, color)
+
+
+static func _project(pts: PackedVector3Array, idx: PackedInt32Array, up: Vector2, dents: Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	out.resize(idx.size())
+	for k in idx.size():
+		var p := pts[idx[k]]
+		if not dents.is_empty():
+			p = _dented(p, dents)
+		out[k] = Vector2(p.x, p.y) + up * p.z
+	return out
+
+
+## 찌그러진 곳(Vehicle.dents) 가까운 점을 안쪽으로 밀고 위쪽 점은 조금 내린다. 가운데일수록 깊다
+static func _dented(p: Vector3, dents: Array) -> Vector3:
+	for d: Array in dents:
+		var dist := Vector2(p.x, p.y).distance_to(d[0])
+		if dist >= DamageModel.DENT_RADIUS:
+			continue
+		var q := dist / DamageModel.DENT_RADIUS
+		var f := 1.0 - q * q
+		var depth: float = d[2] * lerpf(1.0, 0.35, clampf(p.z / _dent_height, 0.0, 1.0))
+		var push: Vector2 = d[1] * depth * f
+		p += Vector3(push.x, push.y, -depth * 0.35 * f if p.z > 2.0 else 0.0)
+	return p
+
+
+## 찌그러진 곳: 보이는 쪽 면에 움푹 팬 자국(그늘진 패임 + 위 테두리 반사)과 구김 줄.
+## 모형 꼭짓점은 모서리에만 있어서 면 한가운데가 들어간 모양은 이 자국으로 보인다
+static func _draw_dents(ci: CanvasItem, dents: Array, view: Vector3, up: Vector2, car: Vehicle) -> void:
+	var height := car.stats.height
+	var paint := car.paint
+	for d: Array in dents:
+		var depth: float = d[2]
+		var inward: Vector2 = d[1]
+		if depth < 1.0 or Vector3(-inward.x, -inward.y, 0.0).dot(view) <= 0.15:
+			continue
+		# 모서리는 꼭짓점이 밀려 들어간 모양으로 충분하다 (자국을 그리면 차 밖으로 삐져나온다)
+		if absf(inward.x) > 0.35 and absf(inward.y) > 0.35:
+			continue
+		var along := Vector2(-inward.y, inward.x)
+		var base: Vector2 = d[0] + inward * depth * 0.8
+		var half_w := clampf(3.0 + depth * 1.2, 3.0, 11.0)
+		var half_h := maxf(height * 0.17, 2.5)
+		var mid := height * 0.36
+		var outline := PackedVector2Array()
+		for k in 8:
+			var a := TAU * k / 8.0
+			outline.append(base + along * cos(a) * half_w + up * (mid + sin(a) * half_h))
+		ci.draw_colored_polygon(outline, Color(paint.darkened(0.45), clampf(0.35 + depth * 0.07, 0.0, 0.8)))
+		# 위쪽 테두리는 빛을 받아 밝다
+		var rim := PackedVector2Array()
+		for k in 5:
+			var a := PI + PI * k / 4.0
+			rim.append(base + along * cos(a) * half_w + up * (mid - sin(a) * half_h))
+		ci.draw_polyline(rim, Color(paint.lightened(0.35), 0.7), 0.8)
+		var c := Color(0.0, 0.0, 0.0, clampf(0.2 + depth * 0.06, 0.0, 0.5))
+		for j in 2:
+			var o := base + along * (j - 0.5) * half_w * 0.7 + up * mid
+			ci.draw_line(o - along * 1.6 + up * half_h * 0.6, o + along * 1.6 - up * half_h * 0.5, c, 0.7)
 
 
 ## 면 방향에 따른 밝기: 윗면 밝게, 오른쪽 아래를 향한 면 조금, 왼쪽 아래를 향한 면 더 어둡게
@@ -169,8 +233,13 @@ static func _color(spec: Variant, car: Vehicle) -> Color:
 		c = c.darkened(amount)
 	elif amount < 0.0:
 		c = c.lightened(-amount)
-	if car.wrecked and not (spec is Color and (spec == TIRE or spec == SIDEWALL)):
+	if spec is Color and (spec == TIRE or spec == SIDEWALL):
+		return c
+	if car.wrecked:
 		c = c.darkened(0.78)   # 그을린 잔해
+	elif car.on_fire or car.burning >= 0.0:
+		var fire := car.fire_level()
+		c = c.darkened(0.55 if fire > 1.0 else 0.08 + 0.3 * fire)   # 불길에 그을려 간다
 	return c
 
 
@@ -356,7 +425,30 @@ static func face_pts(p: Part, face: int, pts2: Array, color: Variant) -> void:
 		var da := b[ax] - a[ax]
 		var t := clampf((q.x - a[ax]) / da, 0.0, 1.0) if absf(da) > 0.001 else 0.0
 		out.append(a.lerp(b, t) + n * 0.15)
-	p.decals.append([out, n, color])
+	p.decals.append([_unfold(out), n, color])
+
+
+## 가장자리로 당긴 점이 겹치거나 갔다가 되돌아오면(뾰족 접힘) 뺀다 —
+## 그대로 두면 어떤 각도에서 삼각분할이 실패한다 (높은 바퀴 아치: 구급차·특공대)
+static func _unfold(pts: PackedVector3Array) -> PackedVector3Array:
+	var out := pts.duplicate()
+	var changed := true
+	while changed and out.size() > 3:
+		changed = false
+		for i in out.size():
+			var a := out[i - 1]
+			var b := out[i]
+			var c := out[(i + 1) % out.size()]
+			if a.distance_to(b) < 0.01:
+				out.remove_at(i)
+				changed = true
+				break
+			if a.distance_to(c) < 0.01:
+				out.remove_at(i)
+				out.remove_at(i % out.size())
+				changed = true
+				break
+	return out
 
 
 ## 양 옆면에 차 좌표 다각형

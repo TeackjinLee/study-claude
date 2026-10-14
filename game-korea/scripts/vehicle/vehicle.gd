@@ -11,6 +11,9 @@ const RESTITUTION := 0.35
 const COLLISION_FRICTION := 0.8
 const SKID_LATERAL_SPEED := 140.0
 const PARKED_DRAG := 500.0   ## 아무도 조종하지 않는 차가 서는 감속 px/s²
+const SMOLDER_TIME := 25.0   ## 잔해에서 연기·불씨가 이만큼 난다
+const WRECK_FLAME_TIME := 7.0 ## 잔해 위 남은 불꽃이 이만큼 타다 꺼진다
+const ROT_STEP := 0.03        ## 이만큼(약 1.7도) 돌아야 모형을 다시 그린다
 const REDRAW_RANGE := 2400.0 ## 카메라에서 이보다 먼 차는 다시 그리지 않는다 (가장 멀리 줌아웃해도 화면 밖)
 
 @export var stats: VehicleType
@@ -23,6 +26,11 @@ var motor: VehicleMotor
 var health := 0.0             ## 0이 되면 불이 붙는다 (최대 stats.durability)
 var burning := -1.0           ## 불붙은 뒤 터지기까지 남은 시간. 음수면 불이 안 붙었다
 var wrecked := false          ## 터져서 잔해만 남았다 — 탈 수도 움직일 수도 없다
+var on_fire := false          ## 체력이 FIRE_HEALTH 아래라 불이 났다 — 체력이 타들어가 0이 되면 burning (아직 탈 수 있다)
+## 찌그러진 곳: [차 기준 위치 Vector2(차 가장자리), 안쪽 방향 Vector2, 깊이 px]. 그림만 바뀌고 충돌 모양은 그대로다
+var dents: Array = []
+var wreck_age := 0.0          ## 터진 뒤 지난 시간 — 잔해의 남은 불·연기가 이만큼 사그라든다
+var _dent_rev := 0            ## 찌그러짐이 바뀔 때마다 늘린다 (다시 그리기 판단)
 var hit_by_player := false    ## 마지막 피해를 주인공이 줬다 (폭발 피해를 누구 탓으로 할지)
 var paint := Color.WHITE      ## 차체 색 (카센터에서 다시 칠할 수 있다)
 var beam := true              ## 2.5D에서 바닥에 전조등 빛을 그린다 (차량 도감에선 끈다)
@@ -36,6 +44,8 @@ var handbrake_input := false
 
 var _shape: CollisionShape2D
 var _drawn_look: Array = []   ## 마지막으로 그린 모습 (같으면 다시 그리지 않는다)
+var _fx: Node2D               ## 불·연기를 그리는 위층 — 매 프레임 다시 그려도 차 모형은 다시 그리지 않는다
+var _fx_shown := false        ## 위층에 지금 무언가 그려져 있다
 
 
 func _ready() -> void:
@@ -46,6 +56,9 @@ func _ready() -> void:
 	collision_mask = Layers.WORLD | Layers.VEHICLES
 	_shape = CollisionShape2D.new()
 	add_child(_shape)
+	_fx = Node2D.new()
+	_fx.draw.connect(_draw_fx)
+	add_child(_fx)
 	apply_stats(stats)
 
 
@@ -56,6 +69,8 @@ func apply_stats(new_stats: VehicleType) -> void:
 	motor = VehicleMotor.new(stats)
 	motor.heading = heading
 	health = max_health()
+	on_fire = false
+	dents = []
 	paint = stats.body_color
 	var rect := RectangleShape2D.new()
 	rect.size = stats.size
@@ -76,7 +91,16 @@ func _physics_process(delta: float) -> void:
 		burning -= delta
 		if burning <= 0.0:
 			_explode()
+	if on_fire and not wrecked:
+		if health > max_health() * DamageModel.FIRE_HEALTH:
+			on_fire = false   # 카센터에서 고쳤다
+		elif burning < 0.0:
+			take_damage(max_health() * DamageModel.FIRE_HEALTH / DamageModel.FIRE_TIME * delta, hit_by_player)
+	if not dents.is_empty() and health >= max_health():
+		dents.clear()         # 카센터에서 고쳤다
+		_dent_rev += 1
 	if wrecked:
+		wreck_age += delta
 		throttle_input = 0.0
 		steer_input = 0.0
 		handbrake_input = false
@@ -100,27 +124,47 @@ func _physics_process(delta: float) -> void:
 	# 2.5D: 깊이(월드 x+y)로 그리는 순서를 정한다
 	z_index = IsoView.z_of(global_position) if IsoView.enabled else 1
 	ground = IsoView.ground(global_position)
-	# 화면 밖(카메라에서 먼) 차는 다시 그리지 않는다 — 다가오면 그때 그린다.
-	# 가까워도 모습이 그대로면(곧게 달리거나 서 있으면) 다시 그리지 않는다 — 노드가 움직이면 그림도 따라간다
+
+
+## 다시 그릴지는 화면 프레임마다 한 번 정한다 (물리 틱마다 정하면 느려질수록 한 프레임에 여러 번 그려 더 느려진다).
+## 화면 밖(카메라에서 먼) 차는 다시 그리지 않는다 — 다가오면 그때 그린다.
+## 가까워도 모습이 그대로면(곧게 달리거나 서 있으면) 다시 그리지 않는다 — 노드가 움직이면 그림도 따라간다
+func _process(_delta: float) -> void:
 	var cam := ChaseCamera.current_cam()
 	if cam == null or global_position.distance_squared_to(cam.global_position) < REDRAW_RANGE * REDRAW_RANGE:
 		var look := _look()
 		if look != _drawn_look or _animated():
 			_drawn_look = look
 			queue_redraw()
+		var fx := _fx_active()
+		if fx or _fx_shown:
+			_fx_shown = fx
+			_fx.queue_redraw()
 
 
-## 그림을 바꾸는 상태: 방향·탑승·브레이크·후진·잔해·도색·경적·화면 방식
+## 그림을 바꾸는 상태: 방향·탑승·브레이크·후진·잔해·도색·경적·화면 방식·경광등 깜빡임·불에 그을린 정도
 func _look() -> Array:
-	return [snappedf(rotation, 0.002), occupied(), is_braking(), motor.forward_speed() < -5.0, wrecked, paint,
-		ai != null and ai.honking, IsoView.enabled, snappedf(ground, 0.5)]
+	# 방향은 ROT_STEP마다만 다시 그린다 — 그 사이엔 그린 모형을 노드 회전이 그대로 돌린다 (높이 방향이 1도 남짓 어긋날 뿐)
+	return [snappedf(rotation, ROT_STEP), occupied(), is_braking(), motor.forward_speed() < -5.0, wrecked, paint,
+		ai != null and ai.honking, IsoView.enabled, snappedf(ground, 0.5), _dent_rev,
+		siren and _siren_phase(), snappedf(fire_level(), 0.1)]
 
 
-## 매 프레임 움직이는 그림 (경광등·불·연기, 위에서 보기의 레미콘 드럼·잔해 불씨)
+## 매 프레임 다시 그리는 모형 (위에서 보기의 레미콘 드럼). 불·연기는 위층(_fx)이 따로 그린다
 func _animated() -> bool:
-	if siren or burning >= 0.0 or health < max_health() * 0.35:
-		return true
-	return not IsoView.enabled and (wrecked or stats.category == &"mixer")
+	return not IsoView.enabled and stats.category == &"mixer"
+
+
+## 위층에 그릴 불·연기가 있다 (불·연기·잔해 불씨)
+func _fx_active() -> bool:
+	if burning >= 0.0 or on_fire or health < max_health() * 0.35:
+		return not wrecked or wreck_age < SMOLDER_TIME
+	return wrecked and wreck_age < SMOLDER_TIME
+
+
+func _draw_fx() -> void:
+	if _fx_active():
+		_draw_damage(stats.size.x, stats.size.y)
 
 
 func _move(delta: float) -> void:
@@ -132,20 +176,22 @@ func _move(delta: float) -> void:
 		var n := col.get_normal()
 		var other := col.get_collider() as Vehicle
 		if other:
-			_bump(other, n)
+			_bump(other, n, col.get_position())
 		else:
 			var vn := motor.velocity.dot(n)
 			if vn < 0.0:
 				motor.velocity -= n * vn * (1.0 + RESTITUTION)
 				motor.velocity *= COLLISION_FRICTION
 				impacted.emit(-vn)
-				take_damage(DamageModel.crash_damage(-vn), controlled)
+				var damage := DamageModel.crash_damage(-vn)
+				dent_at(col.get_position(), damage)
+				take_damage(damage, controlled)
 		motion = col.get_remainder().slide(n)
 
 
 ## 차끼리 부딪히면 질량비로 양쪽에 충격량을 나눈다. 무거운 차가 덜 밀린다.
 ## bumped는 충격량을 나누기 전에 낸다 — 받는 쪽이 부딪히기 직전 속도로 누가 들이받았는지 판단한다.
-func _bump(other: Vehicle, n: Vector2) -> void:
+func _bump(other: Vehicle, n: Vector2, at: Vector2) -> void:
 	var vn := (motor.velocity - other.motor.velocity).dot(n)
 	if vn >= 0.0:
 		return
@@ -158,8 +204,39 @@ func _bump(other: Vehicle, n: Vector2) -> void:
 	# 같은 무게 차끼리 정면으로 부딪히면 벽에 절반 속도로 박은 것과 같다 — 가벼운 쪽이 더 다친다
 	var by_player := controlled or other.controlled
 	var total := stats.mass + other.stats.mass
-	take_damage(DamageModel.crash_damage(-vn * other.stats.mass / total), by_player)
-	other.take_damage(DamageModel.crash_damage(-vn * stats.mass / total), by_player)
+	var mine := DamageModel.crash_damage(-vn * other.stats.mass / total)
+	var theirs := DamageModel.crash_damage(-vn * stats.mass / total)
+	dent_at(at, mine)
+	other.dent_at(at, theirs)
+	take_damage(mine, by_player)
+	other.take_damage(theirs, by_player)
+
+
+## 부딪힌 곳을 찌그러뜨린다 (그림만). at은 월드 접촉점, damage는 이번 충돌 피해.
+## 접촉점을 차 가장자리로 옮기고, 가까운 곳에 이미 찌그러진 데가 있으면 그곳이 더 들어간다
+func dent_at(at: Vector2, damage: float) -> void:
+	if damage <= 0.0 or wrecked or stats.category in [&"bike", &"bicycle"]:
+		return
+	var half := stats.size * 0.5
+	var p := to_local(at).clamp(-half, half)
+	var k := Vector2(p.x / half.x, p.y / half.y)
+	if absf(k.x) > absf(k.y):
+		p.x = signf(k.x) * half.x
+	else:
+		p.y = signf(k.y) * half.y
+	k = Vector2(p.x / half.x, p.y / half.y)
+	# 모서리 가까이면 두 면 사이로 비스듬히 들어간다
+	var inward := -Vector2(signf(k.x) * pow(absf(k.x), 4.0), signf(k.y) * pow(absf(k.y), 4.0)).normalized()
+	var depth := damage * DamageModel.DENT_PER_DAMAGE
+	_dent_rev += 1
+	for d: Array in dents:
+		if (d[0] as Vector2).distance_to(p) < DamageModel.DENT_RADIUS:
+			d[2] = minf(d[2] + depth, DamageModel.DENT_MAX)
+			return
+	dents.append([p, inward, minf(depth, DamageModel.DENT_MAX)])
+	if dents.size() > DamageModel.MAX_DENTS:
+		dents.sort_custom(func(a: Array, b: Array) -> bool: return a[2] > b[2])
+		dents.pop_back()
 
 
 ## 피해를 입는다. 체력이 0이 되면 불이 붙고 fuse초 뒤 터진다 (이미 불타면 더 빨리 터질 뿐).
@@ -169,6 +246,8 @@ func take_damage(amount: float, by_player: bool, fuse := DamageModel.BURN_TIME) 
 	hit_by_player = by_player
 	health = maxf(health - amount, 0.0)
 	if health > 0.0:
+		if health <= max_health() * DamageModel.FIRE_HEALTH:
+			on_fire = true
 		return
 	if burning < 0.0:
 		burning = fuse
@@ -179,6 +258,7 @@ func take_damage(amount: float, by_player: bool, fuse := DamageModel.BURN_TIME) 
 
 func _explode() -> void:
 	burning = -1.0
+	on_fire = false
 	wrecked = true
 	has_driver = false
 	siren = false
@@ -256,7 +336,6 @@ func _draw() -> void:
 	draw_rect(Rect2(left + 3, top + 4, w, h), Color(0, 0, 0, 0.35))
 	if stats.category == &"bike":
 		_draw_bike(w, h)
-		_draw_damage(w, h)
 		return
 	if stats.category == &"bicycle":
 		_draw_bicycle(w, h)
@@ -367,7 +446,6 @@ func _draw_body(w: float, h: float) -> void:
 		# 경광등 불빛이 바닥에 번진다
 		var red := _siren_phase()
 		draw_circle(Vector2(0, top + h * 0.47), w * 1.3, Color(1.0, 0.1, 0.15, 0.10) if red else Color(0.15, 0.35, 1.0, 0.12))
-	_draw_damage(w, h)
 	if ai and ai.honking and not IsoView.enabled:
 		draw_set_transform(Vector2.ZERO, -rotation, Vector2.ONE)
 		draw_string(ThemeDB.fallback_font, Vector2(-20, -h * 0.5 - 10), "빵!",
@@ -392,8 +470,6 @@ func _draw_iso(w: float, h: float) -> void:
 	draw_rect(Rect2(left - 2, top - 2, w + 4, h + 4), Color(0, 0, 0, 0.35))
 	# 차종별 입체 모형 (VehicleModel). 터진 차는 같은 모형을 그을려 그린다
 	VehicleModel.draw(self, self)
-	_lift(stats.height)
-	_draw_damage(w, h)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if ai and ai.honking:
 		draw_set_transform_matrix(_screen_local(stats.height + 14.0))
@@ -526,24 +602,107 @@ func _draw_wreck(w: float, h: float) -> void:
 	draw_rect(body, Color(0.11, 0.1, 0.1))
 	draw_rect(body.grow(-4), Color(0.2, 0.17, 0.15), false, 2.0)
 	draw_rect(Rect2(-w * 0.5 + 4, -h * 0.28, w - 8, h * 0.5), Color(0.05, 0.05, 0.05))
-	var t := Time.get_ticks_msec() / 1000.0
-	for i in 3:
-		var p := Vector2(sin(i * 2.1) * w * 0.25, (i - 1) * h * 0.25)
-		draw_circle(p, 2.5 + sin(t * 6.0 + i) * 1.0, Color(1.0, 0.45, 0.1, 0.7))
 
 
-## 불타는 차는 불길이, 많이 부서진 차는 연기가 난다
+## 화재 단계 (참고 그림 5단계): 많이 부서지면 회색 연기 → 불나면(체력 20% 아래) 보닛에서 작은 불과 검은 연기,
+## 체력이 타들어갈수록 불이 차 뒤로 번지고 커진다 → 체력 0(burning)이면 차 전체가 타오른다 → 터진 잔해는 불씨·연기가 사그라든다.
+## 불빛은 바닥에, 불꽃·연기·불씨는 화면 기준으로 세워 그린다 (FireFx)
 func _draw_damage(w: float, h: float) -> void:
 	var t := Time.get_ticks_msec() / 1000.0
+	var seed := float(get_instance_id() % 97)
+	var level := fire_level()
+	var z := stats.height if IsoView.enabled else 0.0
+	var sc := clampf(w / 26.0, 0.7, 1.6)
 	var hood := Vector2(0, -h * 0.3)
+	if wrecked:
+		_draw_smolder(w, h, t, seed, z, sc)
+		return
+	if level <= 0.0:
+		if health < max_health() * 0.35:
+			# 부서진 차: 보닛에서 회색 연기 (체력이 낮을수록 짙다)
+			var dark := 1.0 - health / (max_health() * 0.35)
+			_fx.draw_set_transform_matrix(_fx_frame())
+			FireFx.smoke(_fx, _fx_pt(hood, z * 0.8), t, 0.55 * sc, 0.2 + 0.5 * dark, 0.5 + 0.4 * dark, seed, 4)
+			_fx.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
+	var blaze := level > 1.0
+	var k := minf(level, 1.0)
+	# 바닥 불빛
+	_fx.draw_set_transform(IsoView.lift_local(ground, rotation), 0.0, Vector2.ONE)
+	FireFx.glow(_fx, hood.lerp(Vector2.ZERO, k), w * (2.2 if blaze else 1.0 + 1.0 * k), 1.6 if blaze else 0.7 + 0.7 * k, t, seed)
+	_fx.draw_set_transform_matrix(_fx_frame())
+	# 연기는 불꽃 뒤에서 솟는다
+	var top := _fx_pt(hood.lerp(Vector2.ZERO, k * 0.5), z) + Vector2(0, -8.0 * sc)
+	FireFx.smoke(_fx, top, t, (1.5 if blaze else 0.75 + 0.5 * k) * sc, 1.0, 1.0, seed, 6 if blaze else 5)
+	if blaze:
+		FireFx.smoke(_fx, _fx_pt(Vector2(0, h * 0.2), z) + Vector2(0, -10.0 * sc), t + 0.4, 1.1 * sc, 0.9, 0.8, seed + 3.0, 4)
+	# 불꽃: 보닛부터 뒤로 번진다 (화면 위쪽 — 먼 것부터 그린다)
+	var spots: Array = []
+	var n := FIRE_SPOTS.size() if blaze else 1 + int(k * 3.99)
+	for i in n:
+		var s: Vector3 = FIRE_SPOTS[i]
+		var size: float
+		if blaze:
+			size = (17.0 + (6.0 if i % 3 == 0 else 0.0)) * sc
+		else:
+			size = (6.0 + 12.0 * k) * sc * (1.0 - 0.12 * i)
+		spots.append([_fx_pt(Vector2(s.x * w, s.y * h), s.z * z), size, i])
+	spots.sort_custom(func(a: Array, b: Array): return a[0].y < b[0].y)
+	for sp: Array in spots:
+		FireFx.flame(_fx, sp[0], sp[1], t, seed + sp[2] * 1.7)
+	if blaze or k > 0.35:
+		FireFx.embers(_fx, top + Vector2(0, 2.0 * sc), t, 10 if blaze else 4, w * (0.6 if blaze else 0.3), 50.0 * sc, seed)
+	_fx.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 불이 번지는 자리: (로컬 x 비율, 로컬 y 비율, 차 높이 비율). 앞(보닛)부터 뒤로
+const FIRE_SPOTS := [Vector3(0.0, -0.3, 0.75), Vector3(-0.22, -0.16, 0.85), Vector3(0.22, -0.08, 0.92),
+	Vector3(0.0, 0.04, 1.0), Vector3(-0.2, 0.18, 0.95), Vector3(0.2, 0.26, 0.85), Vector3(0.0, 0.36, 0.75)]
+
+
+## 0: 불 없음, 0~1: 불난 차(체력 20% 아래)가 타들어간 정도, 2: 체력 0 — 차 전체가 타오른다
+func fire_level() -> float:
+	if wrecked:
+		return 0.0
 	if burning >= 0.0:
-		draw_circle(hood, w * 1.1, Color(1.0, 0.4, 0.1, 0.15))
-		for i in 6:
-			var phase := t * 9.0 + i * 1.7
-			var p := hood + Vector2(sin(phase) * w * 0.3, cos(phase * 0.7) * h * 0.15)
-			draw_circle(p, 6.0 + sin(phase * 1.3) * 2.0, Color(1.0, 0.35 + 0.3 * (i % 2), 0.05, 0.85))
-		draw_circle(hood, 5.0, Color(1.0, 0.9, 0.4))
-	elif health < max_health() * 0.35:
+		return 2.0
+	if on_fire:
+		return clampf(1.0 - health / (max_health() * DamageModel.FIRE_HEALTH), 0.05, 1.0)
+	return 0.0
+
+
+## 터진 잔해: 처음 몇 초는 작은 불꽃이 남고, 차체 곳곳의 불씨가 깜박이며 가는 연기가 사그라든다
+func _draw_smolder(w: float, h: float, t: float, seed: float, z: float, sc: float) -> void:
+	if wreck_age >= SMOLDER_TIME:
+		return
+	var fade := 1.0 - wreck_age / SMOLDER_TIME
+	var flames := clampf(1.0 - wreck_age / WRECK_FLAME_TIME, 0.0, 1.0)
+	_fx.draw_set_transform(IsoView.lift_local(ground, rotation), 0.0, Vector2.ONE)
+	if flames > 0.0:
+		FireFx.glow(_fx, Vector2.ZERO, w * 1.6, flames, t, seed)
+	_fx.draw_set_transform_matrix(_fx_frame())
+	FireFx.smoke(_fx, _fx_pt(Vector2.ZERO, z), t, (0.6 + 0.6 * flames) * sc, 0.7, 0.35 + 0.5 * fade, seed, 4)
+	# 차체에 남은 불씨 (주황 점이 숨 쉬듯 밝아졌다 어두워진다)
+	for i in FIRE_SPOTS.size():
+		var s: Vector3 = FIRE_SPOTS[i]
+		var p := _fx_pt(Vector2(s.x * w * 1.3, s.y * h * 1.1), s.z * z * 0.9)
+		var pulse := 0.5 + 0.5 * sin(t * (2.0 + i * 0.4) + i * 1.9)
+		_fx.draw_rect(Rect2(p - Vector2(1.5, 1.0), Vector2(3.0, 2.0)), Color(FireFx.MID.lerp(FireFx.OUTER, pulse), (0.5 + 0.5 * pulse) * fade))
+	if flames > 0.0:
 		for i in 3:
-			var k := fmod(t * 0.8 + i / 3.0, 1.0)
-			draw_circle(hood + Vector2(sin(i * 2.0) * 6.0, -k * 30.0), 5.0 + k * 9.0, Color(0.45, 0.45, 0.47, 0.45 * (1.0 - k)))
+			var s: Vector3 = FIRE_SPOTS[i * 3]
+			FireFx.flame(_fx, _fx_pt(Vector2(s.x * w, s.y * h), s.z * z), 11.0 * sc * flames, t, seed + i * 2.1)
+		FireFx.embers(_fx, _fx_pt(Vector2.ZERO, z), t, 5, w * 0.4, 36.0 * sc, seed, flames)
+	_fx.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 불꽃·연기를 세워 그리는 화면 기준 좌표계 (차 가운데 바닥이 원점, y가 화면 위로 음수)
+func _fx_frame() -> Transform2D:
+	return _screen_local(0.0) if IsoView.enabled else Transform2D(-rotation, Vector2.ZERO)
+
+
+## 차 위 한 점(로컬 l, 높이 z)이 _fx_frame() 안에서 놓이는 자리
+func _fx_pt(l: Vector2, z: float) -> Vector2:
+	if IsoView.enabled:
+		return IsoView.BASIS.basis_xform(l.rotated(rotation)) + Vector2(0, -z)
+	return l.rotated(rotation)

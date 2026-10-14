@@ -18,6 +18,10 @@ var reload := 0.0
 func _physics_process(delta: float) -> void:
 	reload -= delta
 	aggro = maxf(aggro - delta, 0.0)
+	# 싸우는 조직원은 겁먹지 않는다 — 화나기 전에 도망치던 참이면 돌아선다.
+	# (아래 싸움 분기는 상태 시간을 줄이지 않아, 그대로 두면 FLEE로 영영 남아 쏘지 못했다)
+	if (fighting or guard) and state in [State.FLEE, State.IDLE]:
+		_set_state(State.WALK, 0.0)
 	var busy := state == State.DODGE or state == State.KNOCKED or state == State.DEAD
 	if busy or not (fighting or guard):
 		super._physics_process(delta)

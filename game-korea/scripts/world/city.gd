@@ -12,7 +12,7 @@ const SIDEWALK := 28.0
 const PITCH := BLOCK + ROAD
 const ALLEY := 18.0
 const WALL := 64.0
-const CHUNK := 3                 ## 청크 하나의 블록 수 (가로·세로)
+const CHUNK := 1                 ## 청크 하나의 블록 수 (가로·세로). 1이면 화면에 걸친 블록만 그린다 — 크면 화면 밖 블록까지 매 프레임 그린다
 ## 교차로 가장자리에서 정지선까지 (횡단보도 바로 뒤)
 const STOP_LINE := 50.0
 ## 건물 없는 주차장 블록 — 드리프트 연습장
@@ -141,9 +141,10 @@ const FADE_ALPHA := 0.28                 ## 주인공을 가린 건물의 불투
 class Chunk extends Node2D:
 	var city: City
 	var area: Rect2i
+	var layer := 0                 ## 0 아스팔트 · 1 인도·강 · 2 차선·난간·공원·마당 (청크 경계를 넘어도 이 순서로 겹친다)
 
 	func _draw() -> void:
-		city.draw_chunk(self, area)
+		city.draw_chunk(self, area, layer)
 
 
 ## 2.5D 다리: 강물 위로 띄운 상판·교각·난간 (위에서 보기에서는 청크가 평면으로 그린다)
@@ -434,7 +435,7 @@ func _assign_landmarks() -> void:
 			landmark_indices[spec[0]] = best
 			var loops := LandmarkBuilding.walk_loops(buildings[best], looks[best])
 			if not loops.is_empty():
-				lot_loops[_owners[best]] = loops
+				lot_loops[_owners[best]] = (lot_loops.get(_owners[best], []) as Array) + Array(loops)   # 한 블록에 둘이면 합친다
 
 
 ## 랜드마크 공터에 세워 둘 차 [위치, 방향] (열린 구역만). 차종은 Main이 정한다
@@ -502,14 +503,16 @@ static func _weight(dist: DistrictType, t: BuildingType) -> float:
 
 func _build_collision() -> void:
 	var body := StaticBody2D.new()
+	body.collision_layer = Layers.WORLD
 	add_child(body)
 	var w := world_rect()
 	var rects: Array[Rect2] = []
 	for idx in buildings.size():
-		if looks.has(idx) and LandmarkBuilding.owns(looks[idx].style):
-			rects.append_array(LandmarkBuilding.collision_rects(buildings[idx],looks[idx],idx))
-		else:
-			rects.append(buildings[idx])
+		# 사람과 차량이 공유하는 물리 장애물. 부지 전체 대신 실제 벽/기둥만 막는다.
+		rects.append_array(BuildingModel.ground_obstacles(_pieces(idx)))
+		var ground_kind := _ground_kind(idx)
+		if ground_kind and ground_kind.style in [&"house", &"hanok"]:
+			rects.append_array(BuildingModel.yard_walls(buildings[idx]))
 	rects.append(Rect2(w.position.x - WALL, w.position.y - WALL, w.size.x + WALL * 2, WALL))
 	rects.append(Rect2(w.position.x - WALL, w.end.y, w.size.x + WALL * 2, WALL))
 	rects.append(Rect2(w.position.x - WALL, w.position.y, WALL, w.size.y))
@@ -632,34 +635,49 @@ func draw_locks(ci: CanvasItem) -> void:
 # ── 그리기 ────────────────────────────────────────────────
 
 func _make_chunks() -> void:
-	var j := CityMap.MIN.y
-	while j <= CityMap.MAX.y + 1:
-		var i := CityMap.MIN.x
-		while i <= CityMap.MAX.x + 1:
-			var chunk := Chunk.new()
-			chunk.city = self
-			chunk.area = Rect2i(i, j, CHUNK, CHUNK)
-			add_child(chunk)
-			_chunks.append(chunk)
-			i += CHUNK
-		j += CHUNK
+	for layer in 3:
+		var j := CityMap.MIN.y
+		while j <= CityMap.MAX.y + 1:
+			var i := CityMap.MIN.x
+			while i <= CityMap.MAX.x + 1:
+				var chunk := Chunk.new()
+				chunk.city = self
+				chunk.area = Rect2i(i, j, CHUNK, CHUNK)
+				chunk.layer = layer
+				add_child(chunk)
+				_chunks.append(chunk)
+				i += CHUNK
+			j += CHUNK
 
 
 func _draw() -> void:
 	draw_rect(world_rect(), WATER)
 
 
-## 청크 하나: 그 안의 블록·교차로와, 그 안 교차로에서 동·남으로 뻗은 도로 구간
-func draw_chunk(ci: CanvasItem, area: Rect2i) -> void:
+## 청크 하나: 그 안의 블록·교차로와, 그 안 교차로에서 동·남으로 뻗은 도로 구간.
+## layer마다 따로 그린다 — 모든 청크의 아스팔트 위에 인도, 그 위에 차선을 얹어야 블록 경계에서 연석이 덮이지 않는다
+func draw_chunk(ci: CanvasItem, area: Rect2i, layer := -1) -> void:
 	var font := ThemeDB.fallback_font
+	if layer <= 0:
+		_draw_chunk_asphalt(ci, area)
+	if layer < 0 or layer == 1:
+		_draw_chunk_blocks(ci, area)
+	if layer < 0 or layer == 2:
+		_draw_chunk_roads(ci, area, font)
+
+
+func _draw_chunk_asphalt(ci: CanvasItem, area: Rect2i) -> void:
 	for j in range(area.position.y, area.end.y):
 		for i in range(area.position.x, area.end.x):
 			var c := Vector2i(i, j)
 			if CityMap.node_exists(c) and not _on_deck(c):
-				ci.draw_rect(node_rect(c), ASPHALT)
+				RoadDetail.asphalt(ci, node_rect(c))
 			for d in [1, 2]:
 				if CityMap.road(c, d) and not (IsoView.enabled and CityMap.is_bridge(c, d)):
-					ci.draw_rect(segment_rect(c, d), ASPHALT)
+					RoadDetail.asphalt(ci, segment_rect(c, d))
+
+
+func _draw_chunk_blocks(ci: CanvasItem, area: Rect2i) -> void:
 	for j in range(area.position.y, area.end.y):
 		for i in range(area.position.x, area.end.x):
 			var b := Vector2i(i, j)
@@ -671,9 +689,13 @@ func draw_chunk(ci: CanvasItem, area: Rect2i) -> void:
 				continue
 			var r := block_rect(i, j)
 			ci.draw_rect(r, dist.sidewalk)
+			RoadDetail.pavement(ci, r)
 			ci.draw_rect(r, CURB, false, 3.0)
 			if dist.plazas.has(b):
 				_draw_plaza(ci, r.grow(-SIDEWALK), b == PLAZA)
+
+
+func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 	for j in range(area.position.y, area.end.y):
 		for i in range(area.position.x, area.end.x):
 			var c := Vector2i(i, j)
@@ -970,6 +992,12 @@ func _draw_road_segment(ci: CanvasItem, k: int, seg: int, vertical: bool, water_
 	var p := func(along: float, across: float) -> Vector2:
 		return Vector2(c + across, along) if vertical else Vector2(along, c + across)
 
+	# 양쪽 배수구는 차선 밖, 맨홀은 차로 안의 평면 장식.
+	for edge in [-1.0, 1.0]:
+		for along in [a+90, b-90]:
+			RoadDetail.drain(ci, p.call(along, edge*(ROAD*.5-7)), vertical)
+	RoadDetail.manhole(ci, p.call(a+BLOCK*.43, ROAD*.28))
+
 	for side in water_sides:
 		ci.draw_line(p.call(a - 4, side * (ROAD * 0.5 + 4)), p.call(b + 4, side * (ROAD * 0.5 + 4)), Color(0, 0, 0, 0.35), 6.0)
 		ci.draw_line(p.call(a - 4, side * (ROAD * 0.5 - 3)), p.call(b + 4, side * (ROAD * 0.5 - 3)), RAIL, 6.0)
@@ -1001,7 +1029,7 @@ func _draw_road_segment(ci: CanvasItem, k: int, seg: int, vertical: bool, water_
 		while x < ROAD * 0.5 - 12.0:
 			var r0: Vector2 = p.call(start, x)
 			var r1: Vector2 = p.call(start + 36.0, x + 10.0)
-			ci.draw_rect(Rect2(r0, r1 - r0).abs(), Color(0.9, 0.9, 0.9, 0.55))
+			RoadDetail.worn_paint(ci, Rect2(r0, r1 - r0).abs())
 			x += 20.0
 
 
@@ -1148,3 +1176,4 @@ func _draw_spray_shop(ci: CanvasItem, r: Rect2, font: Font) -> void:
 	for yy in range(int(door_y) - 36, int(door_y) + 40, 8):
 		ci.draw_line(Vector2(r.position.x + 1, yy), Vector2(r.position.x + 11, yy), Color(0.5, 0.38, 0.1), 1.0)
 	_draw_front_sign(ci, r, font, "카센터 · 도색", Color(0.12, 0.12, 0.15), Color(0.3, 0.8, 1.0), Color(0.8, 0.95, 1.0), 170.0)
+

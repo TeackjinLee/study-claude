@@ -32,6 +32,7 @@ var hair: Color
 var look_seed := 0                ## 모자·소지품 유무를 정하는 값 (rng를 쓰지 않고 처음 자리로 정한다)
 var speech := ""                  ## 말풍선 (speech_time 동안)
 var speech_time := 0.0
+var _drawn_key: Array = []        ## 마지막으로 그린 모습 — 같으면 다시 그리지 않는다
 
 
 func setup(p_npc: NpcType, p_rng: RandomNumberGenerator, p_loop: PackedVector2Array,
@@ -96,7 +97,6 @@ func _physics_process(delta: float) -> void:
 		facing = Vector2.UP.angle_to(vel)
 		walk_phase += delta * vel.length() / 9.0
 	move_and_slide()
-	queue_redraw()
 
 
 ## 다가오는 차 옆으로 비켜선다
@@ -191,9 +191,15 @@ func resume_walking() -> void:
 
 
 ## 2.5D: 깊이(월드 x+y)로 그리는 순서를 정한다
+## 모습(걸음 12단계·방향·상태·말풍선)이 바뀔 때만 다시 그린다 — 물리 틱마다 그리면 사람 수만큼 비싸다
 func _process(_delta: float) -> void:
 	z_as_relative = not IsoView.enabled
 	z_index = IsoView.z_of(global_position) if IsoView.enabled else 0
+	var key := [int(walk_phase * 12.0 / TAU), snappedf(facing, 0.05), state, speech_time > 0.0, speech,
+		IsoView.enabled, npc, shirt]
+	if key != _drawn_key:
+		_drawn_key = key
+		queue_redraw()
 
 
 func set_active(on: bool) -> void:

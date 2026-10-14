@@ -2,6 +2,7 @@ extends Node2D
 ## 사람 도감: data/npc 전 종을 게임과 같은 2.5D 화면으로 크게 보여 준다 (앞모습·뒷모습 한 쌍).
 ## 실행: godot --path . res://tools/person_gallery.tscn
 ## 저장: ... -- --shot  →  .screenshots/person_gallery.png
+## 몇 종만 크게: ... -- --shot --ids=office,boss  →  .screenshots/person_gallery_office.png (설계도와 비교할 때)
 
 const TOP := 64.0
 const COLS := 8
@@ -25,10 +26,15 @@ func _ready() -> void:
 		if f.ends_with(".tres"):
 			files.append(f.get_basename())
 	files.sort()
+	var ids := _ids()
+	if not ids.is_empty():
+		files = files.filter(func(f: String) -> bool: return f in ids)
+	var cols := COLS if ids.is_empty() else files.size()
+	var zoom := ZOOM if ids.is_empty() else minf(12.0, 30.0 / cols)
 	var view := get_viewport().get_visible_rect().size
-	var rows := ceili(files.size() / float(COLS))
-	var cell := Vector2(view.x / COLS, (view.y - TOP) / rows)
-	get_viewport().canvas_transform = IsoView.canvas(view, Vector2.ZERO, ZOOM)
+	var rows := ceili(files.size() / float(cols))
+	var cell := Vector2(view.x / cols, (view.y - TOP) / rows)
+	get_viewport().canvas_transform = IsoView.canvas(view, Vector2.ZERO, zoom)
 	var inv := get_viewport().canvas_transform.affine_inverse()
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -42,7 +48,7 @@ func _ready() -> void:
 	var back := Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(Vector2(1, -0.45)))
 	for i in files.size():
 		var npc: NpcType = load("res://data/npc/%s.tres" % files[i])
-		var corner := Vector2((i % COLS) * cell.x, TOP + (i / COLS) * cell.y)
+		var corner := Vector2((i % cols) * cell.x, TOP + (i / cols) * cell.y)
 		for k in 2:
 			var d := Doll.new()
 			d.npc = npc
@@ -61,10 +67,19 @@ func _ready() -> void:
 		for i in 3:
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
-		var path := ProjectSettings.globalize_path("res://.screenshots/person_gallery.png")
+		var name := "person_gallery" if ids.is_empty() else "person_gallery_" + ids[0]
+		var path := ProjectSettings.globalize_path("res://.screenshots/%s.png" % name)
 		get_viewport().get_texture().get_image().save_png(path)
 		print("사람 도감 저장: ", path)
 		get_tree().quit()
+
+
+## `--ids=a,b` 인자 (없으면 빈 배열 = 전 종)
+static func _ids() -> PackedStringArray:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--ids="):
+			return a.get_slice("=", 1).split(",", false)
+	return PackedStringArray()
 
 
 func _draw() -> void:

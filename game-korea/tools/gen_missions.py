@@ -63,7 +63,7 @@ M=[
   steps=[dict(kind=GOTO,text='가게에서 돈 받기 (1/3)',points=[sw(4,3,2,0.5)],radius=40),
          dict(kind=GOTO,text='가게에서 돈 받기 (2/3)',points=[sw(2,4,0,0.5)],radius=40),
          dict(kind=GOTO,text='가게에서 돈 받기 (3/3)',points=[sw(3,1,3,0.5)],radius=40)]),
- dict(id='gangnam_04',tier=0,order=3,title='시운전',reward=50000,respect=8,time=32,
+ dict(id='gangnam_04',tier=0,order=3,title='시운전',reward=50000,respect=8,time=34,
   briefing='새로 들인 아벨라 R 길들이기다.\n체크포인트 여섯 곳을 시간 안에 돌아.',
   steps=[dict(kind=ENTER,text='아벨라 R에 타라',points=[cv(3,3,0.2)],headings=[0],vehicle='sport')]+
         [dict(kind=GOTO,text='체크포인트 (%d/6)'%(n+1),points=[p],radius=90,need_vehicle=True)

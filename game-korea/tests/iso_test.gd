@@ -241,8 +241,10 @@ func _test_landmarks() -> void:
 	await _frames(3)
 	var city: City = main.city
 	var space := city.get_world_2d().direct_space_state
-	_expect(city.landmark_indices.size() == 5, "랜드마크 다섯 곳 (%d)" % city.landmark_indices.size())
-	for key in city.landmark_indices:
+	# 큰 랜드마크 다섯 곳 (거리 건물 StreetBuilding도 landmark_indices에 같이 든다 — 공터 길은 큰 것만)
+	var big := city.landmark_indices.keys().filter(func(k): return (city.looks[city.landmark_indices[k]] as BuildingType).style in LandmarkBuilding.STYLES)
+	_expect(big.size() == 5, "랜드마크 다섯 곳 (%d)" % big.size())
+	for key in big:
 		var idx: int = city.landmark_indices[key]
 		var r := city.buildings[idx]
 		var t: BuildingType = city.looks[idx]
@@ -261,6 +263,30 @@ func _test_landmarks() -> void:
 		_expect(not solid.is_empty() and _hits(space, solid[0].get_center(), 2.0), "%s: 건물은 막는다" % key)
 		_expect(area < r.get_area() * 0.75, "%s: 부지의 1/4 넘게 공터 (막힌 곳 %.0f%%)" % [key, area / r.get_area() * 100.0])
 		_expect(city.lot_loops.has(city._owners[idx]), "%s: 보행자가 공터 길을 쓴다" % key)
+	# 거리 건물(docs/16): 공터 길이 있는 것(학교 운동장·지하철 광장·인쇄 골목·교회 마당)은 막히지 않아야 한다
+	var street := 0
+	for key in city.landmark_indices:
+		var idx: int = city.landmark_indices[key]
+		var t: BuildingType = city.looks[idx]
+		if not StreetBuilding.owns(t.style):
+			continue
+		street += 1
+		var loops := LandmarkBuilding.walk_loops(city.buildings[idx], t)
+		var blocked := 0
+		for loop in loops:
+			for k in loop.size():
+				for f in [0.0, 0.25, 0.5, 0.75]:
+					if _hits(space, loop[k].lerp(loop[(k + 1) % loop.size()], f), Pedestrian.RADIUS):
+						blocked += 1
+		_expect(blocked == 0, "%s: 공터 길이 막히지 않는다 (길 %d, 막힘 %d)" % [key, loops.size(), blocked])
+		var solid := LandmarkBuilding.collision_rects(city.buildings[idx], t, idx)
+		_expect(not solid.is_empty() and _hits(space, solid[0].get_center(), 2.0), "%s: 건물은 막는다" % key)
+	_expect(street == 10, "거리 건물 열 곳 (%d)" % street)
+	var trucks := 0
+	for v: Vehicle in main.vehicles:
+		if v.stats.resource_path == StreetBuilding.FIRE_TRUCK:
+			trucks += 1
+	_expect(trucks == 2, "소방서 앞 소방차 2대 (%d)" % trucks)
 	var terminal := city.buildings[city.landmark_indices["terminal"]]
 	var buses := 0
 	for v: Vehicle in main.vehicles:

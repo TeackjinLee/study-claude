@@ -47,6 +47,7 @@ const DESPAWN_RADIUS := 3300.0
 const SPAWN_CLEARANCE := 110.0
 const STUCK_RESPAWN_TIME := 25.0
 const LIGHT_REDRAW_INTERVAL := 0.2
+const LIGHT_DRAW_REACH := 1300.0            ## 카메라에서 이만큼(줌 1 기준) 안의 신호등·정류장만 그린다
 
 var traffic_count := 20
 var seed := SEED
@@ -60,6 +61,7 @@ var controller: TrafficController
 var rng := RandomNumberGenerator.new()
 var ais: Array[TrafficAI] = []
 var teleports := 0
+var _drawn_spot := Vector2i.ZERO          ## 신호등을 그린 때 카메라가 있던 블록 (블록을 넘으면 다시 그린다)
 var _bus_stops := {}                       ## LanePiece → true
 var _next_id := 1
 var _respawn_timer := 0.0
@@ -80,8 +82,11 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	controller.advance(delta)
 	_light_timer -= delta
-	if _light_timer <= 0.0:
+	var cam := ChaseCamera.current_cam()
+	var spot := CityMap.block_at(cam.global_position) if cam else Vector2i.ZERO
+	if _light_timer <= 0.0 or spot != _drawn_spot:
 		_light_timer = LIGHT_REDRAW_INTERVAL
+		_drawn_spot = spot
 		queue_redraw()
 	_respawn_timer -= delta
 	if _respawn_timer <= 0.0:
@@ -303,15 +308,32 @@ func scan_ahead(ai: TrafficAI) -> Dictionary:
 	if candidates.is_empty():
 		return {}
 
+	# 검사점(경로 위 점)을 먼저 모두 뽑고, 검사점들을 감싼 상자에서 먼 후보는 뺀다.
+	# 상자 밖 점은 어느 검사점과도 문턱 안에 들 수 없으므로 결과는 그대로이고, 거리 계산이 크게 준다
+	var samples := PackedVector2Array()
 	var d := 0.0
 	while d <= scan:
-		var sample := ai.route_point(ai.half_length() + d)
-		for c: Array in candidates:
+		samples.append(ai.route_point(ai.half_length() + d))
+		d += TrafficAI.SAMPLE_STEP
+	var box := Rect2(samples[0], Vector2.ZERO)
+	for q in samples:
+		box = box.expand(q)
+	var near: Array = []
+	for c: Array in candidates:
+		var area := box.grow(half_w + c[1] + 5.0)
+		for q: Vector2 in c[0]:
+			if area.has_point(q):
+				near.append(c)
+				break
+	if near.is_empty():
+		return {}
+	for k in samples.size():
+		var sample := samples[k]
+		for c: Array in near:
 			var threshold: float = half_w + c[1] + 4.0
 			for q: Vector2 in c[0]:
 				if q.distance_to(sample) < threshold:
-					return _obstacle(d, c, forward)
-		d += TrafficAI.SAMPLE_STEP
+					return _obstacle(k * TrafficAI.SAMPLE_STEP, c, forward)
 	return {}
 
 
@@ -388,9 +410,17 @@ func _build_bus_stops() -> void:
 # ── 그리기 ────────────────────────────────────────────────
 
 func _draw() -> void:
+	# 카메라 둘레만 그린다 — 도시 전체 신호등·정류장을 그리면 한 번에 20ms가 넘는다
+	var cam := ChaseCamera.current_cam()
+	var near := Rect2(-1e9, -1e9, 2e9, 2e9)
+	if cam:
+		var reach := LIGHT_DRAW_REACH / maxf(cam.zoom.x, 0.2)
+		near = Rect2(cam.global_position - Vector2(reach, reach), Vector2(reach, reach) * 2.0)
 	var font := ThemeDB.fallback_font
 	for piece: LanePiece in _bus_stops:
 		var mid := piece.point_at(piece.length * 0.5)
+		if not near.has_point(mid):
+			continue
 		var right := LaneGraph.right_of(LaneGraph.DIRS[piece.dir_in])
 		var pole := mid + right * (City.ROAD * 0.5 - LaneGraph.LANE_OFFSET + 12.0)
 		draw_rect(Rect2(pole - Vector2(15, 9), Vector2(30, 18)), Color(0.1, 0.35, 0.8))
@@ -398,6 +428,8 @@ func _draw() -> void:
 		draw_string(font, pole + Vector2(-15, 5), "정류장", HORIZONTAL_ALIGNMENT_CENTER, 30, 9, Color.WHITE)
 	for cell: Vector2i in controller.signal_offsets:
 		var c := LaneGraph.center(cell)
+		if not near.has_point(c):
+			continue
 		for d in 4:
 			if not CityMap.road(cell, (d + 2) % 4):
 				continue

@@ -11,3 +11,4 @@ footprints = Array[int]([0])
 weight = 0.0
 floors = 4
 surface_detail = true
+visual_floor_scale = 1.5

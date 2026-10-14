@@ -430,18 +430,7 @@ static func barrier(out: Array[BuildingModel.Piece], c: Vector2) -> void:
 static func collision_rects(r: Rect2, t: BuildingType, seed: int) -> Array[Rect2]:
 	var pieces: Array[BuildingModel.Piece] = []
 	build(pieces, r, t, seed)
-	var out: Array[Rect2] = []
-	for p in pieces:
-		if p.h0 > 0.01 or p.h1 <= 0.0 or p.roof in OPEN_ROOFS:
-			continue
-		if p.roof == &"pavilion":
-			for q in _pavilion_posts(p.rect):
-				out.append(q)
-		elif p.roof == &"tree":
-			out.append(Rect2(p.rect.get_center() - Vector2(3, 3), Vector2(6, 6)))
-		else:
-			out.append(p.rect)
-	return out
+	return BuildingModel.ground_obstacles(pieces)
 
 
 static func _pavilion_posts(r: Rect2) -> Array[Rect2]:
@@ -454,6 +443,8 @@ static func _pavilion_posts(r: Rect2) -> Array[Rect2]:
 
 ## 보행자가 부지 안 공터를 오가는 길 (닫힌 꼭짓점 목록). 막는 덩어리와 겹치지 않게 골랐다
 static func walk_loops(r: Rect2, t: BuildingType) -> Array[PackedVector2Array]:
+	if StreetBuilding.owns(t.style):
+		return StreetBuilding.walk_loops(r, t)
 	var out: Array[PackedVector2Array] = []
 	match t.style:
 		&"landmark_tower":
@@ -489,6 +480,8 @@ static func _ring(r: Rect2) -> PackedVector2Array:
 
 ## 세워 둔 차 [위치, 방향(rotation)] — 터미널 승강장의 고속버스. 앞이 본관(북쪽)을 본다
 static func parking(r: Rect2, t: BuildingType) -> Array:
+	if StreetBuilding.owns(t.style):
+		return StreetBuilding.parking(r, t)
 	var out := []
 	if t.style == &"terminal":
 		for bay: Rect2 in _terminal_frame(r).bays:
@@ -513,7 +506,7 @@ static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int) ->
 
 static func _speckle(ci: CanvasItem, r: Rect2, seed: int, n: int, a: Color, b: Color, size := 4.0) -> void:
 	for k in n:
-		var at := r.position + r.size * Vector2(BuildingModel.hash01(seed, k * 2 + 500), BuildingModel.hash01(seed, k * 2 + 501))
+		var at := r.position + r.size * Vector2(StreetBuilding._h(seed, k + 500), StreetBuilding._h(seed + 7919, k * 31 + 501))   # hash01은 x·y가 한 줄로 늘어선다
 		ci.draw_rect(Rect2(at, Vector2(size, size * 0.6)), a if k % 2 == 0 else b)
 
 

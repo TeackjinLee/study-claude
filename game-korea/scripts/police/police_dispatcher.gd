@@ -716,6 +716,7 @@ func _build_roadblock(spot: Vector2, dir: Vector2, checkpoint: bool) -> bool:
 		var visual := CheckpointVisual.new()
 		visual.spot=spot
 		visual.across=across
+		visual.dir=dir
 		add_child(visual)
 		rb["visual"]=visual
 	roadblocks.append(rb)

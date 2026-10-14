@@ -51,10 +51,10 @@ func _physics_process(delta: float) -> void:
 		walk_phase += delta * velocity.length() / 9.0
 	move_and_slide()
 	_sort()
-	queue_redraw()
 
 
 func _process(_delta: float) -> void:
+	queue_redraw()   # 그림은 화면 프레임마다 한 번
 	_sort()
 
 
