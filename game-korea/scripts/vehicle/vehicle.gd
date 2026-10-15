@@ -582,8 +582,9 @@ func _draw_bike(w: float, h: float) -> void:
 	draw_rect(Rect2(-2, -top - 2, 4, 2), Color(1.0, 0.15, 0.2) if is_braking() else Color(0.6, 0.05, 0.08))
 
 
+## 빨강·파랑 교차 0.25초 (docs/06)
 func _siren_phase() -> bool:
-	return (Time.get_ticks_msec() / 180) % 2 == 0
+	return (Time.get_ticks_msec() / 250) % 2 == 0
 
 
 ## 지붕 경광등: 왼쪽 빨강 · 오른쪽 파랑. 사이렌이 켜지면 번갈아 깜빡인다.

@@ -8,7 +8,7 @@ Codex에게 맡길 때의 규칙(작업 범위·worktree 분리·끝내기 전 �
 
 사용자 요청으로 별도 2.5D 사선 투영 샘플을 추가했다. 본편 물리는 기존 2D 그대로이며 진입점은 `tools/isometric_sample.tscn`이다. 변경 구조·진행 상태·표시 미연결 항목·확인 범위는 `docs/11_Claude_인계_2.5D.md`를 참고한다. M6 완료나 최종 아트 완료로 취급하지 않는다.
 
-- 에셋 파일 없이 코드로 그린다 (M7 아트 단계 전까지).
+- 에셋 파일 없이 코드로 그린다 (M7 아트 단계 전까지). 예외: 타이틀 화면은 사용자가 준 시안 그림(`assets/title/`)을 쓴다.
 - 차종·NPC·무기 등 콘텐츠 수치는 `data/` 리소스(.tres)에 둔다. 코드에 하드코딩하지 않는다.
 - 물리·AI 계산은 노드 없는 클래스(예: `VehicleMotor`)로 분리해 헤드리스 테스트가 가능하게 한다.
 - 실존 상표(현대·기아·GS25 등)는 쓰지 않는다 → `docs/09_법적_리스크.md`의 가칭 사용.
@@ -31,6 +31,7 @@ godot --headless --fixed-fps 60 --path . res://tests/mission_test.tscn   # 약 3
 godot --headless --fixed-fps 60 --path . res://tests/mvp_test.tscn
 godot --headless --fixed-fps 60 --path . res://tests/m6_test.tscn
 godot --headless --fixed-fps 60 --path . res://tests/iso_test.tscn
+godot --headless --fixed-fps 60 --path . res://tests/title_test.tscn
 ```
 
 본편 화면은 2.5D 사선 투영이다 (물리는 2D 그대로). 수식은 `scripts/world/iso_view.gd` 한 곳에 있다.
@@ -69,6 +70,7 @@ godot --headless --fixed-fps 60 --path . res://tests/iso_test.tscn
 사람 모습(`person_drawer.gd`·`data/npc`의 outfit·hat·face·prop)을 고쳤으면 `godot --path . res://tools/person_gallery.tscn -- --shot`으로 전 종 앞·뒤를 크게 본다. 설계도 그림과 맞춰 볼 때는 `--ids=office,boss`로 몇 종만 더 크게 본다. 모습 값은 데이터에 두고, 보행자 rng를 더 뽑지 않는다(`look_seed`).
 차는 부딪힌 곳이 찌그러진다(`Vehicle.dents`, 그림만 — 충돌 모양은 그대로). 모형 꼭짓점은 모서리에만 있어 면 가운데는 팬 자국으로 그린다. 체력이 20% 아래면 불이 나고(`on_fire`, 아직 탈 수 있다) 체력이 타들어가 0이 되면 `burning` → 폭발이다(수치는 `DamageModel`).
 불꽃·연기·불씨·불빛·그을음은 `FireFx`(scripts/fx/fire_fx.gd) 한 곳에서 그린다 — 차 화재 단계(`Vehicle._draw_damage`, 잔해 `wreck_age`), 폭발(`Combat._draw_blast`), 땅 불(`Fires`)이 같이 쓴다. 고쳤으면 `godot --path . res://tools/fire_gallery.tscn -- --shot`으로 단계별로 본다.
+타이틀 화면(`title_screen.gd`·`title_backdrop.gd`, 시안은 `output/imagegen/title_screen`)이 `run/main_scene`이다 — 켜면 타이틀이 먼저 나오고, 헤드리스·`--chapter=N` 실행은 타이틀 없이 바로 본편이다(`TitleScreen.auto_skip`). 고르면 `Main.entry`("new"·"load")·`entry_slot`에 적고 본편 장면으로 넘어가며, Main이 `_ready` 끝에서 읽어 불러온다(읽으면 비운다 — 타이틀을 거치지 않은 직접 실행·테스트는 예전 `load_on_start` 그대로). 배경·차·인물·로고·메뉴 스킨은 `assets/title/`의 그림이다 — 원본(`output/.../parts`)을 고치면 `python3 tools/prepare_title_assets.py`로 다시 뽑는다(검은 배경 투명화·오려내기·줄이기). 글자·간판 깜박임·경광등·빗줄기는 코드(`TitleBackdrop`). `tools/title_preview.tscn`로 본다(`-- --fake-saves`, `--modal=slots`·`codex`). 경광등 교차 주기는 0.25초(`Vehicle._siren_phase`, `TitleBackdrop.SIREN_MS`).
 성능: 그리는 것·매 프레임 도는 것을 늘렸으면 `godot --path . res://tools/perf_probe.tscn`(봇이 차를 몰고 근처 차를 태워 터뜨린다)으로 주행·폭발 프레임 시간과 끊김 수를 본다. `-- --uncapped`는 프레임 제한 없이 일의 양, `--ablate`·`--burn-ablate`는 종류별로 꺼 보며 몫, `--profile`은 스크립트별 시간, `--census`는 그리기 호출·도형 수.
 - 본편은 화면을 물리(60틱)에 맞춰 60프레임으로 묶고, 늦은 프레임에 물리를 3틱까지만 몰아 돈다(`Main.limit_frame_rate`, 헤드리스 테스트는 그대로).
 - queue_redraw는 `_process`에서 부른다. `_physics_process`에서 부르면 틱마다 그려, 느려질수록 한 프레임에 여러 번 그리는 악순환이 된다.

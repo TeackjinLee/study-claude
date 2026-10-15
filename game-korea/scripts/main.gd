@@ -326,8 +326,14 @@ func _ready() -> void:
 	add_child(save_menu)
 	save_menu.chosen.connect(_on_slot_chosen)
 
+	var from_title := entry
+	entry = ""
 	if start > 0:
 		hud.banner("%d장 · %s" % [chapter, chapter_type().title], "시험 시작 (--chapter=%d) — 저장 불러오기 없음" % chapter, 3.5, Hud.GOLD)
+	elif from_title != "":
+		# 타이틀에서 골랐다: 불러오기 메뉴를 다시 띄우지 않는다
+		if from_title == "load" and not load_game(entry_slot):
+			hud.notify("저장을 불러오지 못했다 — 새 게임으로 시작")
 	elif load_on_start and get_parent() == get_tree().root and (auto_line() != "" or not slot_lines().all(func(l): return l == "")):
 		save_menu.open_load(slot_lines(), auto_line())
 
@@ -338,6 +344,12 @@ func _ready() -> void:
 static func limit_frame_rate() -> void:
 	Engine.max_fps = Engine.physics_ticks_per_second
 	Engine.max_physics_steps_per_frame = MAX_CATCH_UP
+
+
+## 타이틀 화면(TitleScreen)에서 정한 시작 방식. "" 이면 타이틀을 거치지 않았다 (직접 실행·테스트).
+## "new" 새 게임, "load" 슬롯 entry_slot에서 이어 하기. 읽으면 비운다
+static var entry := ""
+static var entry_slot := 0
 
 
 ## 실행 인자 `--chapter=N` (없으면 0)
