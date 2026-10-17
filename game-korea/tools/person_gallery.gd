@@ -3,7 +3,7 @@ extends Node2D
 ## 실행: godot --path . res://tools/person_gallery.tscn
 ## 저장: ... -- --shot  →  .screenshots/person_gallery.png
 ## 몇 종만 크게: ... -- --shot --ids=office,boss  →  .screenshots/person_gallery_office.png (설계도와 비교할 때)
-## 관절 있는 사람(PersonRig) 비교: ... -- --rig [--ids=civ_m,police,office] (주인공은 player). --walk면 8방향 걷기만 크게  — 한 줄에 기존 그림 · 새 뼈대 8방향 걷기 · 달리기 · 서 있기.
+## 관절 있는 사람(PersonRig) 비교: ... -- --rig [--ids=civ_m,police,office] (주인공은 player). --walk면 8방향 걷기만, --run이면 8방향 달리기만 크게  — 한 줄에 기존 그림 · 새 뼈대 8방향 걷기 · 달리기 · 서 있기.
 ##   움직이는 걸 창으로 보거나, --shot이면 .screenshots/person_rig.png
 ## 설계도(성인 12종 앞·뒤)와 맞춰 보기: ... -- --sheet [--shot]  →  .screenshots/person_sheet.png (--all이면 그림이 있는 종 전부)
 
@@ -120,7 +120,8 @@ func _rig_compare() -> void:
 				ids.append(f.get_basename())
 	if ids.is_empty():
 		ids = PackedStringArray(["civ_f", "office", "police", "boss"])
-	var walk_only := "--walk" in OS.get_cmdline_user_args()
+	var run_only := "--run" in OS.get_cmdline_user_args()
+	var walk_only := "--walk" in OS.get_cmdline_user_args() or run_only
 	var cols := 8 if walk_only else 11
 	var view := get_viewport().get_visible_rect().size
 	var cell := Vector2(view.x / cols, (view.y - TOP) / ids.size())
@@ -130,7 +131,7 @@ func _rig_compare() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var title := Label.new()
-	title.text = "인물 (PersonRig) — 기존 · 8방향 걷기 · 달리기 · 쓰러짐"
+	title.text = "인물 (PersonRig) — 8방향 달리기" if run_only else "인물 (PersonRig) — 기존 · 8방향 걷기 · 달리기 · 쓰러짐"
 	title.position = Vector2(20, 14)
 	title.add_theme_font_size_override("font_size", 22)
 	layer.add_child(title)
@@ -156,6 +157,7 @@ func _rig_compare() -> void:
 				wd.npc = npc
 				wd.facing = Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(c * PI / 4.0)))
 				wd.phase = c * 0.8
+				wd.gait = 2.0 if run_only else 1.0
 				add_child(wd)
 				wd.global_position = at
 				continue

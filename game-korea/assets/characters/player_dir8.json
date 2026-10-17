@@ -1,1 +1,1 @@
-{"dirs": ["s", "sw", "w", "nw", "n"], "frames": 24, "run_dirs": ["s", "se", "e", "ne", "n"], "run_frames": 12, "turns": [{"from": "s", "to": "se", "col": 37, "n": 5}]}
+{"dirs": ["s", "sw", "w", "nw", "n"], "frames": 24, "run_dirs": ["s", "se", "e", "ne", "n", "nw", "w", "sw"], "run_frames": 8, "turns": []}

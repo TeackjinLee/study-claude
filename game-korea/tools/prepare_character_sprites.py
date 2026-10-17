@@ -649,6 +649,8 @@ def process_dir8(cid: str, sources: dict, debug: bool) -> None:
 
 
 DIR8_SHEET_ROWS = ["s", "sw", "w", "nw", "n"]   ## 한 장짜리 8방향 시트의 줄 (나머지 ↘ → ↗는 게임이 좌우를 뒤집어 쓴다)
+RUN_H_RANGE = (0.85, 0.92)   ## 달리기 키 / 걷기 키 — 머리 폭으로 맞춘 크기가 이 밖이면 끝으로 당긴다
+NEON = {"firefighter"}   ## 형광 반사띠가 초록 기운이라 _despill로 걷지 않는다
 KEEP_TINT = {"civ_f", "merchant", "firefighter"}   ## 옷이 배경과 같은 계열인 인물 (초록 배경에 국방색 재킷·카키 바지·형광 반사띠) — 옷 안쪽의 배경 기운은 지우지 않는다
 
 
@@ -678,6 +680,28 @@ def _sheet_rows(src: Path, frames: int) -> list:
     return out
 
 
+def _sheet_nrows(src: Path) -> int:
+    """한 장짜리 시트의 줄 수 — .rows.txt가 있으면 그 줄 수(8방향을 다 그린 8행 시트 등), 없으면 5"""
+    rows_file = src.with_name(src.stem + ".rows.txt")
+    if not rows_file.exists():
+        return len(DIR8_SHEET_ROWS)
+    return sum(1 for ln in rows_file.read_text().splitlines() if ln.split("#")[0].split())
+
+
+def _despill(cell, over: int = 30):
+    """짙은 초록 기운을 걷는다 — G가 R·B 중 큰 쪽보다 over 넘게 크면 그 값까지 내린다.
+    KEEP_TINT 인물은 옷 안쪽을 풀지 않아 다리 틈 같은 좁은 곳에 어두운 초록 줄이 남는다
+    (civ_f 국방색 재킷은 이 차이가 99%가 9 아래라 안 걸린다)"""
+    if cell is None:
+        return None
+    img = cell[0].copy()
+    rgb = img[:, :, :3].astype(np.int32)
+    top = np.maximum(rgb[:, :, 0], rgb[:, :, 2])
+    hit = (img[:, :, 3] > 0) & (rgb[:, :, 1] - top > over)
+    img[:, :, 1][hit] = top[hit]
+    return (img,) + tuple(cell[1:])
+
+
 def _head_w(cell) -> float:
     """머리 폭 (꼭대기에서 키의 6~10% 아래 가로 폭) — 따로 그린 시트끼리 크기를 맞출 때 쓴다 (달리기는 몸을 숙여 키로는 못 맞춘다)"""
     a = cell[0][:, :, 3] > 40
@@ -689,14 +713,14 @@ def _head_w(cell) -> float:
 
 def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | None", run_frames: int, debug: bool) -> None:
     """한 장짜리 8방향 걷기 시트 NN_<id>_walk<N>_dir8.png (N열 × 5행: ↓ · ↙ · ← · ↖ · ↑, 줄마다 한 바퀴 N장 — 예: walk24, walk12)
-    [+ 달리기 시트 NN_<id>_run<M>_dir8.png (M열, 줄 배치가 다르면 .rows.txt)]
+    [+ 달리기 시트 NN_<id>_run<M>_dir8.png (M열, 줄 배치·줄 수가 다르면 .rows.txt — 8행이면 8방향 모두 그림대로)]
     → assets/characters/<id>_dir8.png (8행 = DIR8 순서, 0열 서 있기 + 1~N열 걷기 [+ N+1~N+M열 달리기], 칸 128×112)
       + .json (dirs·frames [+ run_dirs·run_frames]). 방향별 시트(walk8·key8)가 있어도 이것으로 모두 바꾼다.
     배경(초록·마젠타)은 그림 전체에서 섞인 만큼 푼다(unmix_key) — 팔·다리 틈이 어두운 배경색으로 칠해진 압축 그림이다.
     달리기 크기는 머리 폭 비율로 걷기에 맞춘다(몸을 숙여 키가 줄어든다)."""
     opts = dict(drop_edge=True, pad=0.06, unmix=True, keep_tint=cid in KEEP_TINT, hpad=0.15)
     walk_rows = _sheet_rows(walk_src, frames)
-    cells = load_cells(walk_src, frames, 5, **opts)
+    cells = load_cells(walk_src, frames, _sheet_nrows(walk_src), **opts)
     run_rows = _sheet_rows(run_src, run_frames) if run_src else []
     turns = [(d, t) for _, d, _, t in run_rows if t]
     cols = 1 + frames + (run_frames if run_src else 0) + sum(len(t[1]) for _, t in turns)
@@ -715,11 +739,16 @@ def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | N
         present.append(d)
     meta = {"dirs": present, "frames": frames}
     if run_src:
-        rcells = load_cells(run_src, run_frames, 5, **opts)
+        rcells = load_cells(run_src, run_frames, _sheet_nrows(run_src), **opts)
+        if cid in KEEP_TINT and cid not in NEON:
+            rcells = {k: _despill(c) for k, c in rcells.items()}
         runs = {d: [c for c in (rcells[(i, k)] for k in keep) if c] for i, d, keep, _ in run_rows}
         # 걷기 그림의 머리 폭(게임 크기)과 같아지게
         run_head = float(np.median([_head_w(c) for cs in runs.values() for c in cs]))
         scale = float(np.median(heads)) / max(run_head, 1.0)
+        # 머리를 크게 그린 그림이면 몸이 작아진다 — 달리기 키가 걷기 키의 85~92% 안에 들게 (숙인 만큼만 작게)
+        run_h = float(np.median([c[3] for cs in runs.values() for c in cs]))
+        scale = min(max(scale, BODY_H * 0.97 * RUN_H_RANGE[0] / run_h), BODY_H * 0.97 * RUN_H_RANGE[1] / run_h)
         for d, run in runs.items():
             r = DIR8.index(d)
             for k in range(run_frames):
