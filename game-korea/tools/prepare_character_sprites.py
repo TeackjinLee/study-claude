@@ -652,34 +652,101 @@ DIR8_SHEET_ROWS = ["s", "sw", "w", "nw", "n"]   ## 한 장짜리 8방향 시트�
 KEEP_TINT = {"civ_f", "merchant", "firefighter"}   ## 옷이 배경과 같은 계열인 인물 (초록 배경에 국방색 재킷·카키 바지·형광 반사띠) — 옷 안쪽의 배경 기운은 지우지 않는다
 
 
-def process_dir8_sheet(src: Path, cid: str, frames: int, debug: bool) -> None:
+def _sheet_rows(src: Path, frames: int) -> list:
+    """한 장짜리 시트의 줄 → [(줄 번호, 방향, 쓸 칸 번호들, 도는 장면)]. 기본은 DIR8_SHEET_ROWS 순서로 모든 칸.
+    같은 이름의 .rows.txt가 있으면 한 줄에 하나씩 "방향 [칸]"(칸은 1부터, 예: "s 1-7", "n 1-12,14"), 안 쓰는 줄은 "-".
+    뒤에 ">방향 칸"을 붙이면 그 칸들은 이 방향에서 그 방향으로 도는 장면이다 (예: "s 1-7 >se 8-12") — 도는 장면은 (방향, 칸들)"""
+    rows_file = src.with_name(src.stem + ".rows.txt")
+    if not rows_file.exists():
+        return [(i, d, list(range(frames)), None) for i, d in enumerate(DIR8_SHEET_ROWS)]
+    out = []
+    lines = [ln.split("#")[0].split() for ln in rows_file.read_text().splitlines()]
+    for i, words in enumerate(w for w in lines if w):
+        if words[0] == "-" or words[0] not in DIR8:
+            continue
+        def cols(spec: str) -> list:
+            got = []
+            for part in spec.split(","):
+                a, _, b = part.partition("-")
+                got += range(int(a) - 1, int(b or a))
+            return [k for k in got if 0 <= k < frames]
+        turn = None
+        if len(words) >= 4 and words[2].startswith(">") and words[2][1:] in DIR8:
+            turn = (words[2][1:], cols(words[3]))
+        keep = cols(words[1]) if len(words) > 1 and not words[1].startswith(">") else list(range(frames))
+        out.append((i, words[0], keep, turn))
+    return out
+
+
+def _head_w(cell) -> float:
+    """머리 폭 (꼭대기에서 키의 6~10% 아래 가로 폭) — 따로 그린 시트끼리 크기를 맞출 때 쓴다 (달리기는 몸을 숙여 키로는 못 맞춘다)"""
+    a = cell[0][:, :, 3] > 40
+    top = int(np.nonzero(a)[0].min())
+    band = a[top + int(cell[3] * 0.06):top + int(cell[3] * 0.10) + 1]
+    ws = [np.ptp(np.nonzero(r)[0]) for r in band if r.any()]
+    return float(np.median(ws)) if ws else 1.0
+
+
+def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | None", run_frames: int, debug: bool) -> None:
     """한 장짜리 8방향 걷기 시트 NN_<id>_walk<N>_dir8.png (N열 × 5행: ↓ · ↙ · ← · ↖ · ↑, 줄마다 한 바퀴 N장 — 예: walk24, walk12)
-    → assets/characters/<id>_dir8.png (8행 = DIR8 순서, 0열 서 있기 + 1~N열 걷기, 칸 128×112) + .json (frames N).
-    방향별 시트(walk8·key8)가 있어도 이것으로 모두 바꾼다.
-    배경(초록·마젠타)은 그림 전체에서 섞인 만큼 푼다(unmix_key) — 팔·다리 틈이 어두운 배경색으로 칠해진 압축 그림이다."""
-    cells = load_cells(src, frames, len(DIR8_SHEET_ROWS), drop_edge=True, pad=0.06, unmix=True, keep_tint=cid in KEEP_TINT,
-                       hpad=0.15)
-    out = Image.new("RGBA", (DIR4_CELL_W * (1 + frames), CELL_H * len(DIR8)), (0, 0, 0, 0))
-    present = []
-    for i, d in enumerate(DIR8_SHEET_ROWS):
+    [+ 달리기 시트 NN_<id>_run<M>_dir8.png (M열, 줄 배치가 다르면 .rows.txt)]
+    → assets/characters/<id>_dir8.png (8행 = DIR8 순서, 0열 서 있기 + 1~N열 걷기 [+ N+1~N+M열 달리기], 칸 128×112)
+      + .json (dirs·frames [+ run_dirs·run_frames]). 방향별 시트(walk8·key8)가 있어도 이것으로 모두 바꾼다.
+    배경(초록·마젠타)은 그림 전체에서 섞인 만큼 푼다(unmix_key) — 팔·다리 틈이 어두운 배경색으로 칠해진 압축 그림이다.
+    달리기 크기는 머리 폭 비율로 걷기에 맞춘다(몸을 숙여 키가 줄어든다)."""
+    opts = dict(drop_edge=True, pad=0.06, unmix=True, keep_tint=cid in KEEP_TINT, hpad=0.15)
+    walk_rows = _sheet_rows(walk_src, frames)
+    cells = load_cells(walk_src, frames, 5, **opts)
+    run_rows = _sheet_rows(run_src, run_frames) if run_src else []
+    turns = [(d, t) for _, d, _, t in run_rows if t]
+    cols = 1 + frames + (run_frames if run_src else 0) + sum(len(t[1]) for _, t in turns)
+    out = Image.new("RGBA", (DIR4_CELL_W * cols, CELL_H * len(DIR8)), (0, 0, 0, 0))
+    present, scales, heads = [], {}, []
+    for i, d, keep, _ in walk_rows:
         r = DIR8.index(d)
-        walk = [c for c in (cells[(i, k)] for k in range(frames)) if c]
+        walk = [c for c in (cells[(i, k)] for k in keep) if c]
         heights = [c[3] for c in walk]
         scale = BODY_H * 0.97 / max(float(np.median(heights)), 1.0)
+        scales[d] = scale
+        heads += [_head_w(c) * scale for c in walk]
         place(out, min(walk, key=_spread), r, 0, scale, DIR4_CELL_W)
         for k in range(frames):
             place(out, walk[k * len(walk) // frames], r, 1 + k, scale, DIR4_CELL_W)
         present.append(d)
+    meta = {"dirs": present, "frames": frames}
+    if run_src:
+        rcells = load_cells(run_src, run_frames, 5, **opts)
+        runs = {d: [c for c in (rcells[(i, k)] for k in keep) if c] for i, d, keep, _ in run_rows}
+        # 걷기 그림의 머리 폭(게임 크기)과 같아지게
+        run_head = float(np.median([_head_w(c) for cs in runs.values() for c in cs]))
+        scale = float(np.median(heads)) / max(run_head, 1.0)
+        for d, run in runs.items():
+            r = DIR8.index(d)
+            for k in range(run_frames):
+                place(out, run[k * len(run) // run_frames], r, 1 + frames + k, scale, DIR4_CELL_W)
+        meta.update(run_dirs=list(runs), run_frames=run_frames)
+        # 도는 장면: 달리기 다음 칸에 (도는 장면이 시작하는 방향) 행으로 붙인다. 게임은 그 두 방향 사이를 오갈 때 넘긴다
+        col = 1 + frames + run_frames
+        meta["turns"] = []
+        for i, d, _, turn in run_rows:
+            if not turn:
+                continue
+            clip = [c for c in (rcells[(i, k)] for k in turn[1]) if c]
+            for k, cell in enumerate(clip):
+                place(out, cell, DIR8.index(d), col + k, scale, DIR4_CELL_W)
+            meta["turns"].append({"from": d, "to": turn[0], "col": col, "n": len(clip)})
+            print(f"  도는 장면 {d}→{turn[0]} {len(clip)}장")
+            col += len(clip)
+        print(f"  {run_src.name}: 달리기 {run_frames}장 ({', '.join(f'{d} {len(c)}장' for d, c in runs.items())}), 배율 {scale:.3f}")
     DST.mkdir(parents=True, exist_ok=True)
     out.save(DST / f"{cid}_dir8.png")
     import json
-    (DST / f"{cid}_dir8.json").write_text(json.dumps({"dirs": present, "frames": frames}))
+    (DST / f"{cid}_dir8.json").write_text(json.dumps(meta))
     if debug:
         dbg = Image.new("RGBA", out.size, (110, 150, 110, 255))
         dbg.alpha_composite(out)
         dbg.save(DST.parent.parent / ".screenshots" / f"sprite_{cid}_dir8.png")
-    print(f"{cid}: 8방향 걷기 한 장 시트 {frames}장 ({', '.join(present)})")
-
+    print(f"{cid}: 8방향 걷기 한 장 시트 {frames}장 ({', '.join(present)})" + (f" · 달리기 {run_frames}장" if run_src else ""))
 
 def main() -> None:
     debug = "--debug" in sys.argv
@@ -703,7 +770,10 @@ def main() -> None:
     for src in sorted(SRC.glob("[0-9][0-9]_*_walk*_dir8.png")):      # 한 장짜리 시트가 있으면 방향별 시트를 덮어쓴다
         m = re.fullmatch(r"\d\d_(.+)_walk(\d+)_dir8", src.stem)
         if m and (not only or m[1] in only):
-            process_dir8_sheet(src, m[1], int(m[2]), debug)
+            runs = [(r, int(rm[1])) for r in sorted(SRC.glob(f"{src.stem[:2]}_{m[1]}_run*_dir8.png"))
+                    if (rm := re.fullmatch(rf"\d\d_{re.escape(m[1])}_run(\d+)_dir8", r.stem))]
+            run_src, run_n = runs[0] if runs else (None, 0)
+            process_dir8_sheet(m[1], src, int(m[2]), run_src, run_n, debug)
     for src in sorted(SRC.glob("[0-9][0-9]_*_walk_dir4.png")):
         cid = src.stem[3:-len("_walk_dir4")]
         if not only or cid in only:

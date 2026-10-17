@@ -1075,6 +1075,54 @@ static func dir4_row(dir: Vector2, prev: int) -> int:
 	return best
 
 
+## 주인공이 보이는 방향을 목표 방향 k까지 한 칸(45°)씩 돌린다. 걷기·달리기가 같은 "보이는 방향"을 쓴다.
+## 달리는 중에 도는 장면(turns: from→to)이 있는 두 방향 사이를 오가면 그 장면을 넘긴다 (거꾸로 갈 때는 거꾸로, 좌우 짝은 뒤집어).
+## → [보일 방향, 도는 장면 칸(열, 행) 또는 (-1, -1), 뒤집기]
+static func _dir8_turn(ci: CanvasItem, k: int, ok: Array, run: bool, info: Dictionary) -> Array:
+	var now := Time.get_ticks_msec() / 1000.0
+	var shown: int = ci.get_meta(&"dir8_show", -1)
+	var since: float = ci.get_meta(&"dir8_since", -100.0)
+	if shown < 0 or ok[shown] == null:
+		shown = k
+	elif shown != k and now - since >= DIR8_TURN_STEP:
+		var step := 1 if posmod(k - shown, 8) <= 4 else -1
+		var nxt := posmod(shown + step, 8)
+		while ok[nxt] == null and nxt != k:
+			nxt = posmod(nxt + step, 8)
+		since = now
+		if run:
+			var clip := _turn_clip(info["turns"], shown, nxt)
+			if not clip.is_empty():
+				ci.set_meta(&"dir8_clip", [clip, now])
+				since = now + clip["n"] * DIR8_TURN_FRAME - DIR8_TURN_STEP   # 장면이 끝날 때까지 더 돌지 않는다
+		shown = nxt
+		ci.set_meta(&"dir8_since", since)
+	ci.set_meta(&"dir8_show", shown)
+	var playing: Array = ci.get_meta(&"dir8_clip", [])
+	if not playing.is_empty():
+		var clip: Dictionary = playing[0]
+		var i := int((now - float(playing[1])) / DIR8_TURN_FRAME)
+		if run and i < int(clip["n"]):
+			if clip["reverse"]:
+				i = int(clip["n"]) - 1 - i
+			return [shown, Vector2i(int(clip["col"]) + i, int(clip["row"])), clip["flip"]]
+		ci.remove_meta(&"dir8_clip")
+	return [shown, Vector2i(-1, -1), false]
+
+
+## a → b 방향 전환에 쓸 도는 장면 {col, row, n, reverse, flip} (없으면 빈 사전)
+static func _turn_clip(turns: Array, a: int, b: int) -> Dictionary:
+	for t in turns:
+		var f := DIR8.find(t["from"])
+		var to := DIR8.find(t["to"])
+		for mirror in [false, true]:
+			var fa: int = DIR8_MIRROR[f] if mirror else f
+			var tb: int = DIR8_MIRROR[to] if mirror else to
+			if (a == fa and b == tb) or (a == tb and b == fa):
+				return {"col": int(t["col"]), "row": f, "n": int(t["n"]), "reverse": a == tb, "flip": mirror}
+	return {}
+
+
 ## 정방향 4방향 그림에 달리기 칸(걷기 다음 DIR4_FRAMES장)까지 있는가
 static func _dir4_has_run(look: NpcType) -> bool:
 	var tex := dir4_for(look)
@@ -1111,17 +1159,20 @@ static func _draw_dir4(ci: CanvasItem, facing: float, phase: float, gait: float,
 # ── 8방향 걷기 그림 (assets/characters/<id>_dir8.png + .json — 다듬기 도구가 NN_<id>_walk8_<방향>.png에서 만든다) ──
 ## 8행(DIR8 순서: 오른쪽부터 시계 방향 45°씩) × (0 서 있기 + 1~N 걷기). .json의 dirs가 실제로 받은 방향, frames가 N(없으면 16)이다.
 ## 없는 방향은 좌우 짝(예: ↙ ← ↘ 뒤집기)을, 그것도 없으면(↓·↑) 가장 가까운 방향을 쓴다.
-## 경계 근처에서는 직전 방향을 DIR8_HOLD만큼 더 지켜 깜박이지 않게 한다. 달리기 그림은 아직 없어 걷기를 빠르게 넘긴다
-## (정방향 4방향 그림에 달리기가 있으면 — 주인공 — 달리기는 그것으로 그린다).
+## 경계 근처에서는 직전 방향을 DIR8_HOLD만큼 더 지켜 깜박이지 않게 한다.
+## .json에 run_dirs·run_frames가 있으면 걷기 다음 칸(1+N열부터)이 달리기다 — 없는 방향은 걷기처럼 좌우 짝·가까운 방향을 쓴다.
+## 달리기 그림이 없으면 정방향 4방향 그림의 달리기를, 그것도 없으면 걷기를 빠르게 넘긴다.
 
 const DIR8 := ["e", "se", "s", "sw", "w", "nw", "n", "ne"]
 const DIR8_MIRROR := [4, 3, 2, 1, 0, 7, 6, 5]
 const DIR8_FRAMES := 16                ## .json에 frames가 없을 때 걷기 장 수
 const DIR8_HOLD := deg_to_rad(12.0)
+const DIR8_TURN_STEP := 0.07           ## 주인공: 방향을 크게 바꾸면 45°씩 이만큼(초)마다 돌아 보인다 (한 칸 차이는 바로)
+const DIR8_TURN_FRAME := 0.045         ## 주인공: 도는 장면(.json turns) 한 장 시간
 static var _dir8 := {}
 
 
-## {tex, frames, ok: 방향마다 [그릴 행, 뒤집기] 또는 null}
+## {tex, frames, ok: 방향마다 [그릴 행, 뒤집기] 또는 null, run_frames, run_ok}
 static func dir8_for(look: NpcType) -> Dictionary:
 	var id := "player" if look == null else String(look.id).to_lower()
 	if not _dir8.has(id):
@@ -1131,18 +1182,24 @@ static func dir8_for(look: NpcType) -> Dictionary:
 		if ResourceLoader.exists(png) and FileAccess.file_exists(meta):
 			var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(meta))
 			if data is Dictionary:
-				var have: Array = data.get("dirs", [])
-				var ok := []
-				for k in 8:
-					if DIR8[k] in have:
-						ok.append([k, false])
-					elif DIR8[DIR8_MIRROR[k]] in have and DIR8_MIRROR[k] != k:
-						ok.append([DIR8_MIRROR[k], true])
-					else:
-						ok.append(null)
-				info = {"tex": load(png), "frames": int(data.get("frames", DIR8_FRAMES)), "ok": ok}
+				info = {"tex": load(png), "frames": int(data.get("frames", DIR8_FRAMES)), "ok": _dir8_ok(data.get("dirs", [])),
+						"run_frames": int(data.get("run_frames", 0)), "run_ok": _dir8_ok(data.get("run_dirs", [])),
+						"turns": data.get("turns", [])}
 		_dir8[id] = info
 	return _dir8[id]
+
+
+## 받은 방향 목록 → 방향마다 [그릴 행, 뒤집기] 또는 null (없으면 좌우 짝을 뒤집는다)
+static func _dir8_ok(have: Array) -> Array:
+	var ok := []
+	for k in 8:
+		if DIR8[k] in have:
+			ok.append([k, false])
+		elif DIR8[DIR8_MIRROR[k]] in have and DIR8_MIRROR[k] != k:
+			ok.append([DIR8_MIRROR[k], true])
+		else:
+			ok.append(null)
+	return ok
 
 
 ## 화면 진행 방향 → 8방향 번호 (그릴 수 있는 것 중 가장 가까운 것, 직전 방향은 넓게)
@@ -1166,21 +1223,39 @@ static func _draw_dir8(ci: CanvasItem, facing: float, phase: float, gait: float,
 	var info := dir8_for(look)
 	if info.is_empty():
 		return false
-	if gait > 1.5 and _dir4_has_run(look):
+	var run := gait > 1.5 and int(info["run_frames"]) > 0
+	if gait > 1.5 and not run and _dir4_has_run(look):
 		return false
-	var ok: Array = info["ok"]
+	var ok: Array = info["run_ok"] if run else info["ok"]
+	var key := &"dir8_run" if run else &"dir8"
 	var dir := IsoView.to_screen_dir(Vector2.UP.rotated(facing))
-	var k := dir8_pick(dir, ci.get_meta(&"dir8", -1), ok)
+	var k := dir8_pick(dir, ci.get_meta(key, -1), ok)
 	if k < 0:
 		return false
-	ci.set_meta(&"dir8", k)
+	ci.set_meta(key, k)
+	var turn_cell := Vector2i(-1, -1)
+	var turn_flip := false
+	if look == null:
+		# 주인공: 보이는 방향을 목표까지 45°씩 돌린다 (화면 프레임마다 다시 그리는 주인공만 — 보행자는 그림이 멈춰 있을 때가 있다)
+		var turn := _dir8_turn(ci, k, ok, run, info)
+		k = turn[0]
+		turn_cell = turn[1]
+		turn_flip = turn[2]
 	var row: int = ok[k][0]
 	var flip := -1.0 if ok[k][1] else 1.0
 	var col := 0
-	if gait > 0.3:
+	if turn_cell.x >= 0:
+		col = turn_cell.x
+		row = turn_cell.y
+		flip = -1.0 if turn_flip else 1.0
+	elif gait > 0.3:
 		var t := phase * (RUN_CADENCE if gait > 1.5 else CADENCE)
-		var n: int = info["frames"]
-		col = 1 + posmod(int(floor(t * n / TAU)), n)
+		if run:
+			var m: int = info["run_frames"]
+			col = 1 + int(info["frames"]) + posmod(int(floor(t * m / TAU)), m)
+		else:
+			var n: int = info["frames"]
+			col = 1 + posmod(int(floor(t * n / TAU)), n)
 	var g := PersonDrawer._ground(ci)
 	var s := SPRITE_HEIGHT * size / SPRITE_BODY
 	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g))
