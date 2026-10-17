@@ -13,7 +13,7 @@ const WARM := Color(1.0, 0.86, 0.55)
 const IRON := Color(0.17, 0.16, 0.16)
 ## 벽 없이 지붕 그림만 있는 덩어리
 const BARE: Array[StringName] = [&"mast", &"flag", &"pergola", &"stilt_tank", &"observation_ring", &"crane_brace", &"satellite_dish",
-	&"antenna", &"lattice", &"tarp", &"lanterns", &"lamp_pole", &"hoist", &"pavilion"]
+	&"antenna", &"lattice", &"tarp", &"lanterns", &"lamp_pole", &"hoist", &"pavilion", &"helipad", &"parasol", &"sauna_chimney"]
 
 
 # ── 벽 장식 ───────────────────────────────────────────────
@@ -558,8 +558,78 @@ static func roof(v: BuildingView, p: BuildingModel.Piece) -> void:
 		&"solar":
 			v._flat(p)
 			_solar(v, p)
+		&"helipad": _helipad(v, p)
+		&"parasol": _parasol(v, p)
+		&"sauna_chimney":
+			v._cylinder(p, true)
+			_onsen_mark(v, p)
 		_:
 			LandmarkDecor.draw(v, p)   # 랜드마크 (타워·철탑·천막·크레인…)
+
+
+## 병원 옥상 헬리패드: 짙은 바닥, 노란 테두리, 흰 원과 'H'.
+## 글자는 바닥에 칠한 것이라 사선 화면에서 똑바로 읽히게 화면 오른쪽·위 방향(월드 (1,-1)·(-1,-1))을 글자의 가로·세로로 쓴다
+static func _helipad(v: BuildingView, p: BuildingModel.Piece) -> void:
+	var r := p.rect
+	var l := IsoView.lift(p.h1 + 0.4)
+	v.draw_colored_polygon(v._corners(r, p.h1), p.roof_color)
+	var edge := v._corners(r.grow(-3.0), p.h1 + 0.4)
+	edge.append(edge[0])
+	v.draw_polyline(edge, Color(0.95, 0.78, 0.2), 1.3)
+	var c := r.get_center()
+	var s := minf(r.size.x, r.size.y) * 0.5
+	var ring := PackedVector2Array()
+	for k in 29:
+		ring.append(c + Vector2(cos(k * TAU / 28.0), sin(k * TAU / 28.0)) * s * 0.64 + l)
+	v.draw_polyline(ring, Color(0.94, 0.94, 0.9, 0.9), 1.5)
+	var right := Vector2(1, -1).normalized()
+	var up := Vector2(-1, -1).normalized()
+	var hx := s * 0.2
+	var hy := s * 0.38
+	for bar in [[Vector2(-hx, -hy), Vector2(-hx, hy)], [Vector2(hx, -hy), Vector2(hx, hy)], [Vector2(-hx, 0), Vector2(hx, 0)]]:
+		var a: Vector2 = bar[0]
+		var b: Vector2 = bar[1]
+		v.draw_line(c + right * a.x + up * a.y + l, c + right * b.x + up * b.y + l, WHITE, 2.2)
+	# 모서리 표시등
+	for q in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+		var at: Vector2 = q + (c - q).normalized() * 6.0 + l
+		v.draw_circle(at, 1.3, Color(1.0, 0.82, 0.4))
+
+
+## 야외 파라솔: 기둥 하나와 줄무늬 우산 (뒤쪽 조각부터 그린다). wall = 첫 줄무늬, roof_color = 둘째 줄무늬
+static func _parasol(v: BuildingView, p: BuildingModel.Piece) -> void:
+	var c := p.rect.get_center()
+	var rad := p.rect.size.x * 0.5
+	var apex := c + IsoView.lift(p.h1)
+	v.draw_line(c + IsoView.lift(0.0), apex, Color(0.32, 0.33, 0.35), 1.6)
+	var n := 8
+	var rim := PackedVector2Array()
+	for k in n + 1:
+		rim.append(c + Vector2(cos(k * TAU / n), sin(k * TAU / n)) * rad + IsoView.lift(p.h0))
+	var order: Array = range(n)
+	order.sort_custom(func(a: int, b: int): return rim[a].y + rim[a + 1].y < rim[b].y + rim[b + 1].y)
+	for k: int in order:
+		var col := p.wall if k % 2 == 0 else p.roof_color
+		v.draw_primitive(PackedVector2Array([apex, rim[k], rim[k + 1]]), PackedColorArray([col]), PackedVector2Array())
+	v.draw_circle(apex, 1.2, Color(0.25, 0.25, 0.27))
+
+
+## 사우나 굴뚝의 온천 마크 ♨: 굴뚝 앞면의 붉은 동그라미 안에 김 세 줄과 그릇. BuildingView._cylinder 뒤에 부른다
+static func _onsen_mark(v: BuildingView, p: BuildingModel.Piece) -> void:
+	var rx := p.rect.size.x * 0.55
+	var y := -p.h1 + 60.0           # 꼭대기 띠 둘 아래
+	var cx := -rx * 0.12            # 밝은 쪽에 치우쳐 붙인다 (오른쪽 ¼은 그늘)
+	var rad := rx * 0.72
+	v.draw_set_transform_matrix(IsoView.screen_frame(p.rect.get_center()))
+	v.draw_circle(Vector2(cx, y), rad + 1.2, Color(0.96, 0.95, 0.92))
+	v.draw_circle(Vector2(cx, y), rad, RED)
+	# 김 세 줄 (물결) 위, 그릇(아래쪽 반원) 아래 — 서로 떨어뜨려 ♨로 읽히게
+	for i in [-1, 0, 1]:
+		var x: float = cx + i * rad * 0.42
+		v.draw_polyline(PackedVector2Array([Vector2(x, y - rad * 0.05), Vector2(x + 1.8, y - rad * 0.3), Vector2(x, y - rad * 0.55),
+			Vector2(x + 1.8, y - rad * 0.8)]), WHITE, 1.1)
+	v.draw_arc(Vector2(cx, y + rad * 0.3), rad * 0.5, 0.0, PI, 10, WHITE, 1.5)
+	v.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 ## 철골 통신탑: 네 다리가 위로 좁아지고, 앞 두 면에 X 버팀, 꼭대기 빨간 항공등, 중간 접시 안테나

@@ -269,11 +269,13 @@ func _face(p: BuildingModel.Piece, a: Vector2, b: Vector2, n: Vector2) -> void:
 				_hline(f*_fh-1,Color(0.02,0.025,0.04,0.3),2)
 				_hline(f*_fh,wall.lightened(0.2),1.5, -INF, INF, 1.5)
 	for d in p.deco:
-		if not (d in LIGHT_DECOS or d in StreetDecor.LIGHT):
+		if not (d in LIGHT_DECOS or d in StreetDecor.LIGHT) and d != &"number":
 			_deco(d, south)
 	_service_details(p)
 	if p.surface_detail:
 		_architecture(p, wall)
+	if &"number" in p.deco:
+		_deco(&"number", south)   # 동 번호판은 벽 기둥·층 띠 위에 얹는다 (먼저 그리면 기둥이 글자를 가른다)
 
 
 ## 종류별 돌출 구조. 창 위에 겹치는 기둥은 창 사이 경계에만 배치한다.
@@ -730,9 +732,12 @@ func _deco(d: StringName, south: bool) -> void:
 				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		&"number":
 			if not south and _in(_len * 0.5):
-				var w := minf(_len * 0.8, 70.0)
-				draw_set_transform_matrix(_frame(_len * 0.5 - w * 0.5, w, h - 6.0))
-				draw_string(font, Vector2(0, 24), _p.text, HORIZONTAL_ALIGNMENT_CENTER, w, 26, _p.accent.darkened(_shade * 0.3))
+				# 측벽 윗부분의 큰 동 번호: 흰 페인트 판에 "101동"
+				var w := minf(_len * 0.8, 84.0)
+				draw_set_transform_matrix(_frame(_len * 0.5 - w * 0.5, w, h - 5.0))
+				draw_rect(Rect2(0, 2, w, 28), Color(0.94, 0.93, 0.89).darkened(_shade * 0.7))
+				draw_rect(Rect2(0, 2, w, 28), _p.accent.darkened(_shade * 0.4), false, 1.5)
+				draw_string(font, Vector2(0, 24), _p.text + "동", HORIZONTAL_ALIGNMENT_CENTER, w, 22, _p.accent.darkened(0.2 + _shade * 0.3))
 				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		&"plate":
 			if south and _in(_len * 0.5):

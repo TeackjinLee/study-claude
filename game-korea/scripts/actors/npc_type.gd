@@ -4,15 +4,23 @@ extends Resource
 
 @export var id: StringName
 @export var display_name: String
-@export var walk_speed_min := 50.0
-@export var walk_speed_max := 72.0
-@export var run_speed := 170.0
+## 0은 기존 종의 수치를 유지한다. 성인 설계도 12종은 1~10을 데이터로 지정한다.
+@export_range(0, 10) var stat_health := 0
+@export_range(0, 10) var stat_speed := 0
+@export_range(0, 10) var stat_power := 0
+@export var walk_speed_min := 50.0:
+	get: return 35.0 + stat_speed * 3.0 if stat_speed > 0 else walk_speed_min
+@export var walk_speed_max := 72.0:
+	get: return 57.0 + stat_speed * 3.0 if stat_speed > 0 else walk_speed_max
+@export var run_speed := 170.0:
+	get: return 110.0 + stat_speed * 12.0 if stat_speed > 0 else run_speed
 ## 인도 모퉁이에서 잠깐 멈춰 설 확률
 @export var idle_chance := 0.25
 ## 차 회피 반응 거리 배율 (어르신 < 1 < 학생)
 @export var reaction := 1.0
 @export var spawn_weight := 1.0
-@export var health := 20.0
+@export var health := 20.0:
+	get: return 10.0 + stat_health * 2.5 if stat_health > 0 else health
 ## 들고 다니는 무기 (경찰 등). 없으면 null
 @export var weapon: WeaponType
 ## 소속 갱 (GangType.id). 시민·경찰은 비어 있다
@@ -36,23 +44,28 @@ extends Resource
 @export_group("모습")
 ## 옷 모양 (PersonDrawer가 그린다). plain 셔츠 · jacket 앞이 열린 겉옷 · coat 긴 코트 · suit 정장·넥타이 ·
 ## tank 민소매·문신 · tracksuit 줄무늬 운동복 · dress 원피스 · vest 조끼(형광·방탄) · stripes 반사띠 제복 ·
-## camo 얼룩무늬 · apron 앞치마 · hanbok 한복 홍보복 · rags 해진 겉옷
+## camo 얼룩무늬 · apron 앞치마 · hanbok 한복 홍보복 · rags 해진 겉옷 · pinstripe 줄무늬 정장 · armor 전술복
 @export var outfit: StringName = &"plain"
 ## 안에 받친 옷·넥타이·줄무늬·조끼·반사띠 색
 @export var trim_color := Color(0.92, 0.92, 0.9)
 ## 모자: cap 야구모자 · flatcap 헌팅캡 · beanie 비니 · police 경찰 모자 · helmet 안전모·방탄모 ·
-## fire_helmet 소방 헬멧 · hood 두건 · visor 챙 모자. 비우면 맨머리
+## fire_helmet 소방 헬멧 · hood 두건 · visor 챙 모자 · headband 머리띠 · ponytail 묶은 머리. 비우면 맨머리
 @export var hat: StringName = &""
 @export var hat_color := Color(0.2, 0.2, 0.22)
 ## 모자를 쓴 사람 비율 (0~1). 사람마다 정해진다
 @export var hat_chance := 1.0
-## 얼굴: sunglasses 선글라스 · balaclava 복면 · beard 수염 · goggles 보안경
+## 얼굴: sunglasses 선글라스 · glasses 안경 · balaclava 복면 · mask 마스크 · beard 수염 · goggles 보안경
 @export var face: StringName = &""
 ## 긴 머리 (어깨까지)
 @export var long_hair := false
 ## 든 것: briefcase 서류가방 · handbag 핸드백 · backpack 배낭 · sack 자루 · cane 지팡이 · box 배달 상자 ·
-## guitar 기타 · headphones 헤드폰 · flyers 전단지 · baton 경광봉 · phone 휴대폰
+## guitar 기타 · headphones 헤드폰 · flyers 전단지 · baton 경광봉 · phone 휴대폰 · delivery 배낭+상자 ·
+## satchel 크로스백 · air_tank 공기통 · rifle 도감용 소총 · blades 단검
 @export var prop: StringName = &""
 @export var prop_color := Color(0.25, 0.18, 0.12)
 ## 든 것을 가진 사람 비율 (0~1)
 @export var prop_chance := 1.0
+
+## 총기에는 적용하지 않는다. 공유 무기 리소스의 피해량을 바꾸지 않는다.
+func melee_multiplier() -> float:
+	return 0.55 + stat_power * 0.15 if stat_power > 0 else 1.0

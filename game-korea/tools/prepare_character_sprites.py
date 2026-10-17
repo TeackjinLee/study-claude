@@ -1,0 +1,725 @@
+#!/usr/bin/env python3
+"""인물 4×2 스프라이트 시트(제미나이 원본)를 게임용으로 다듬는다.
+
+원본: output/imagegen/characters/NN_<id>.png (1376×768, 단색 배경, 4열×2행 — 요청 규칙은 같은 폴더 GEMINI_PROMPT_v2.md)
+  열: 0 서 있기 · 1 걷기(왼발) · 2 걷기(오른발) · 3 달리기 / 행: 0 앞모습(화면 오른쪽 아래를 봄) · 1 뒷모습(오른쪽 위)
+달리기 두 장(반대 다리)은 NN_<id>_run.png (2열×2행)로 따로 받으면 5·6열에 붙는다.
+걷기 두 장은 NN_<id>_walk.png (2열×2행)로 따로 받으면 2·3열을 바꾼다.
+결과: assets/characters/<id>.png — 칸 CELL_W×CELL_H, 8열×2행:
+  0 서 있기 · 1 걷기 A · 2 걷기 B · 3 달리기 · 4 걷기 모음 · 5 달리기 A · 6 달리기 B · 7 달리기 모음
+  (모음 칸은 걷기 A·달리기 A의 팔·다리를 가운데로 모아 만든다. 달리기 두 장이 없으면 5·6열은 3열과 같다)
+  한 바퀴 시트(NN_<id>_walk_front/back, _run_front/back — 4열×2행 8장 또는 4열×4행 16장)가 있으면 8~23열 걷기, 24~39열 달리기 (16장씩). 칸마다 발끝이 FOOT_Y, 몸통 가운데가 칸 가운데.
+  - 배경: 테두리에서 시작한 플러드필로만 지운다 (옷 안쪽 어두운 색이 뚫리지 않게). 발밑 그림자도 같이 지운다.
+  - 크기: 한 시트 안에서 같은 배율 (서 있기 앞모습 키가 BODY_H). 프레임마다 키가 달라도 키우지 않는다.
+  - 작은 부스러기(다른 칸에서 넘어온 조각·점)는 버린다.
+실행: python3 tools/prepare_character_sprites.py [--debug] [--check-legs] [id ...]
+  --check-legs: 한 바퀴 시트의 오른쪽 다리 발목 초록(#00FF00) 띠가 1번 칸에서 앞, 5번 칸에서 뒤인지 검사 (아니면 끝 코드 1).
+  초록 띠는 다듬을 때 신발 색으로 칠해 지운다.
+"""
+import re
+import sys
+from collections import deque
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parent.parent
+SRC = ROOT / "output/imagegen/characters"
+DST = ROOT / "assets/characters"
+COLS, ROWS = 4, 2
+CELL_W, CELL_H = 96, 112
+FOOT_Y = 108
+BODY_H = 96
+HIP_Y = FOOT_Y - 46          ## 엉덩이 높이 (칸 안 y)
+SHOULDER_Y = FOOT_Y - 78     ## 어깨 높이 — 팔 모으기는 이 아래부터
+TORSO_HALF = 11              ## 몸통 반폭 (px) — 이 안은 팔을 모아도 그대로
+PASS_SQUEEZE = 0.42          ## 발끝에서 다리 벌어짐을 이만큼으로
+ARM_SQUEEZE = 0.4            ## 손 높이에서 몸통 밖으로 흔든 팔을 이만큼으로
+OUT_COLS = 8                 ## 서 있기·걷기 A·걷기 B·달리기·걷기 모음·달리기 A·달리기 B·달리기 모음
+MARKER_FILL = (34, 33, 36)   ## 다리 표시(초록)를 지울 때 칠하는 색 (검은 신발·바지 끝)
+FAR_LEG = 0.62               ## 먼 다리 밝기 (초록 띠가 있는 한 바퀴 시트만)
+LEG_TOL = 0.04               ## 표시가 몸통 가운데에서 키의 이만큼 넘게 벗어나야 앞·뒤로 친다
+LEG_MARKS: dict = {}
+CYCLE = 16                   ## 게임 시트의 한 바퀴 장 수 (있으면 9열부터 걷기 16장, 그다음 달리기 16장). 8장 원본은 두 번씩
+CELL_ASPECT = 0.75           ## 한 바퀴 원본 칸의 가로:세로
+EXTRA = ("_run", "_walk", "_walk_front", "_walk_back", "_run_front", "_run_back", "_walk_dir4", "_run_dir4", "_walk12_dir4")
+DIR4_FRAMES = 8              ## 정방향 4방향 시트의 한 줄 장 수
+DIR4_OUT = 24                ## 정방향 4방향 게임 시트의 동작 한 바퀴 장 수 (12장 원본은 두 번씩, 8장 원본은 세 번씩 — 고르게 늘어난다)
+DIR4_CELL_W = 128            ## 정방향 4방향 게임 시트 칸 가로 (옆으로 달리는 큰 보폭이 잘리지 않게, 발끝 x = 64)
+
+
+def border_color(rgb: np.ndarray) -> np.ndarray:
+    border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
+    return np.median(border, axis=0)
+
+
+def is_key_color(bg: np.ndarray) -> bool:
+    """채도가 높은 단색 배경(마젠타·초록)인가"""
+    return bg.max() - bg.min() > 120
+
+
+def edge_unmix(rgb: np.ndarray, bgm: np.ndarray, bg: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """배경과 맞닿은 3px 테두리: 배경색이 섞인 만큼 반투명으로 하고 색에서 배경을 뺀다 (분홍 테두리 제거)"""
+    near = bgm.copy()
+    for _ in range(3):
+        grown = near.copy()
+        grown[1:] |= near[:-1]
+        grown[:-1] |= near[1:]
+        grown[:, 1:] |= near[:, :-1]
+        grown[:, :-1] |= near[:, 1:]
+        near = grown
+    ring = near & ~bgm
+    alpha = np.where(bgm, 0.0, 1.0)
+    out = rgb.astype(np.float64)
+    dist = np.sqrt(((rgb - bg) ** 2).sum(axis=2))
+    a = np.clip(dist / 260.0, 0.0, 1.0)
+    alpha[ring] = a[ring]
+    safe = np.maximum(a, 0.05)[..., None]
+    unmixed = np.clip((out - (1.0 - safe) * bg) / safe, 0, 255)
+    out[ring] = unmixed[ring]
+    return out.astype(np.uint8), (alpha * 255).astype(np.uint8)
+
+
+def despill(rgb: np.ndarray) -> np.ndarray:
+    """배경 마젠타가 번진 보라 기운(빨강·파랑이 같이 높고 초록만 낮다)을 초록 쪽으로 눌러 무채색에 가깝게"""
+    c = rgb.astype(np.int32)
+    r, g, b = c[:, :, 0], c[:, :, 1], c[:, :, 2]
+    lo = np.minimum(r, b)
+    spill = (lo - g > 40) & (np.abs(r - b) < 70)
+    keep = g + (lo - g) * 0.25
+    for ch in (0, 2):
+        c[:, :, ch] = np.where(spill, np.minimum(c[:, :, ch], keep + (c[:, :, ch] - lo)), c[:, :, ch])
+    return np.clip(c, 0, 255).astype(np.uint8)
+
+
+def background_mask(rgb: np.ndarray) -> np.ndarray:
+    """테두리와 이어진 배경·그림자 칸을 True로"""
+    h, w, _ = rgb.shape
+    bg = border_color(rgb)
+    dist = np.sqrt(((rgb - bg) ** 2).sum(axis=2))
+    lum = rgb.mean(axis=2)
+    bg_lum = bg.mean()
+    # 배경: 배경색에 아주 가깝다. 그림자: 배경보다 조금 어둡고 색조(푸른 기)가 같다
+    if is_key_color(bg):
+        # 마젠타 같은 원색 배경: 캐릭터 색과 멀어서 넉넉히 지운다 (가장자리 섞인 색은 edge_unmix가 푼다)
+        passable = dist < 90
+    else:
+        # v1의 어두운 배경: 배경색에 아주 가까운 것 + 발밑 그림자(배경보다 조금 어둡고 색조가 같다)
+        hue_ok = (rgb[:, :, 2] - rgb[:, :, 0]) >= (bg[2] - bg[0]) * 0.5
+        passable = (dist < 13) | ((dist < 24) & (lum < bg_lum) & (lum > bg_lum - 12) & hue_ok)
+    seen = np.zeros((h, w), bool)
+    q = deque()
+    for x in range(w):
+        for y in (0, h - 1):
+            if passable[y, x] and not seen[y, x]:
+                seen[y, x] = True
+                q.append((y, x))
+    for y in range(h):
+        for x in (0, w - 1):
+            if passable[y, x] and not seen[y, x]:
+                seen[y, x] = True
+                q.append((y, x))
+    while q:
+        y, x = q.popleft()
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < h and 0 <= nx < w and passable[ny, nx] and not seen[ny, nx]:
+                seen[ny, nx] = True
+                q.append((ny, nx))
+    return seen
+
+
+def components(mask: np.ndarray):
+    """True 칸의 연결 덩어리들 (크기, 좌표 목록)"""
+    h, w = mask.shape
+    label = np.zeros((h, w), np.int32)
+    out = []
+    n = 0
+    for sy, sx in zip(*np.nonzero(mask)):
+        if label[sy, sx]:
+            continue
+        n += 1
+        label[sy, sx] = n
+        q = deque([(sy, sx)])
+        pts = []
+        while q:
+            y, x = q.popleft()
+            pts.append((y, x))
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not label[ny, nx]:
+                        label[ny, nx] = n
+                        q.append((ny, nx))
+        out.append(pts)
+    out.sort(key=len, reverse=True)
+    return out
+
+
+def cut_cell(rgba: np.ndarray, drop_edge: bool = False):
+    """칸 하나: 큰 덩어리만 남기고 (그림, 발끝 y, 몸통 가운데 x, 키).
+    drop_edge면 칸 테두리에 닿은 떨어진 조각(옆 칸 인물이 넘어온 것)을 버린다 — 정방향 4방향 시트(주인공)만 쓴다"""
+    alpha = rgba[:, :, 3] > 0
+    comps = components(alpha)
+    keep = np.zeros_like(alpha)
+    if not comps:
+        return None
+    biggest = len(comps[0])
+    h, w = alpha.shape
+    for k, pts in enumerate(comps):
+        if len(pts) < biggest * 0.02:
+            break
+        ys, xs = zip(*pts)
+        # 떨어진 조각이 칸 테두리에 닿아 있으면 옆 칸 인물이 넘어온 것이다 (발끝 기준이 틀어진다) — 버린다
+        if drop_edge and k > 0 and (min(ys) == 0 or max(ys) == h - 1 or min(xs) == 0 or max(xs) == w - 1):
+            continue
+        keep[list(ys), list(xs)] = True
+    rgba = rgba.copy()
+    rgba[~keep, 3] = 0
+    ys, xs = np.nonzero(keep)
+    top, bottom = ys.min(), ys.max()
+    # 몸통 가운데: 위쪽 55%(머리·어깨·몸통)의 무게중심 — 다리를 벌려도 흔들리지 않게
+    upper = ys < top + (bottom - top) * 0.55
+    cx = xs[upper].mean()
+    return rgba, bottom, cx, bottom - top + 1
+
+
+def marker_mask(rgb: np.ndarray) -> np.ndarray:
+    """다리 구분 표시(밝은 초록 #00FF00 띠)와 그 번진 가장자리"""
+    r, g, b = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    core = (g > 150) & (r < 120) & (b < 120)
+    halo = (g - np.maximum(r, b) > 50)
+    return core | halo
+
+
+def shade_far_leg(cell: np.ndarray, mark: np.ndarray) -> None:
+    """먼 쪽 다리를 어둡게 칠한다 (칸 하나, 제자리에서). 두 다리가 같은 색·같은 모양이라 어느 다리가 나갔는지 안 보이기 때문이다.
+    초록 띠(인물 오른쪽 발목)는 앞·뒷모습 모두 화면 쪽(가까운) 다리다. 엉덩이 가운데에서 두 발목으로 선을 긋고,
+    다리 줄의 점마다 더 가까운 선의 다리로 나눠 먼 다리 쪽만 FAR_LEG배로 어둡게."""
+    alpha = cell[:, :, 3] > 40
+    ys, xs = np.nonzero(alpha)
+    my, mx = np.nonzero(mark)
+    if ys.size == 0 or mx.size < 20:
+        return
+    top, bottom = ys.min(), ys.max()
+    height = bottom - top + 1
+    hip_y = int(bottom - height * 0.47)
+    near = (mx.mean(), my.mean())
+    # 먼 발목: 발 높이(아래 14%) 점 가운데 초록 띠에서 떨어진 것들
+    foot = (ys > bottom - height * 0.14) & (np.abs(xs - near[0]) > height * 0.07)
+    if foot.sum() < 20:
+        return                      # 두 발이 겹친 칸 — 먼 다리는 가려져 있다
+    far = (xs[foot].mean(), ys[foot].mean())
+    row = np.nonzero(alpha[hip_y])[0]
+    if row.size == 0:
+        return
+    hx = float(np.median(row))
+    for y in range(hip_y, bottom + 1):
+        xs_row = np.nonzero(alpha[y])[0]
+        if xs_row.size == 0:
+            continue
+        tn = min(1.0, (y - hip_y) / max(near[1] - hip_y, 1.0))
+        tf = min(1.0, (y - hip_y) / max(far[1] - hip_y, 1.0))
+        xn = hx + (near[0] - hx) * tn
+        xf = hx + (far[0] - hx) * tf
+        # 엉덩이 바로 아래는 두 다리가 붙어 있어 나누지 않는다
+        if abs(xn - xf) < height * 0.025:
+            continue
+        sel = xs_row[(np.abs(xs_row - xf) < np.abs(xs_row - xn)) & (np.abs(xs_row - xf) < height * 0.11)]
+        # 엉덩이 쪽은 서서히 어두워지게 (경계선이 보이지 않게)
+        k = 1.0 - (1.0 - FAR_LEG) * min(1.0, (y - hip_y) / (height * 0.12))
+        cell[y, sel, :3] = (cell[y, sel, :3].astype(np.float64) * k).astype(np.uint8)
+
+
+def unmix_key(rgb: np.ndarray, alpha: np.ndarray, bg: np.ndarray, bgm: "np.ndarray | None" = None) -> tuple[np.ndarray, np.ndarray]:
+    """그림 전체에서 배경색이 섞인 만큼(배경의 밝은 채널이 나머지 채널보다 높은 만큼) 반투명으로 풀고 색에서 배경을 뺀다.
+    마젠타 배경이면 빨강·파랑이 초록보다 높은 만큼, 초록 배경이면 초록이 빨강·파랑 평균보다 높은 만큼이다.
+    팔·다리 사이 틈을 어두운 배경색으로 칠한 압축 그림용 — 검은 옷에 번진 배경 기운도 무채색으로 돌아온다.
+    bgm(배경 자리)을 주면 옷이 배경과 같은 계열(초록 배경에 국방색 재킷)인 인물로 보고, 배경에서 3px 안과
+    거의 배경색 그대로인 곳(배경 채널 말고는 거의 0인 짙은 틈)만 푼다 — 옷의 옅은 초록 기운은 그대로 둔다"""
+    c = rgb.astype(np.float64)
+    hi = [k for k in range(3) if bg[k] > 128]
+    lo = [k for k in range(3) if bg[k] <= 128]
+    top = c[:, :, hi].min(axis=2)
+    # 나머지 채널은 평균으로 — 초록 배경에서 최댓값(대개 빨강)을 쓰면 살색 가장자리에 초록이 덜 빠져 노랗게 남는다
+    bot = c[:, :, lo].mean(axis=2)
+    span = max(float(min(bg[k] for k in hi) - np.mean([bg[k] for k in lo])), 1.0)
+    e = np.clip((top - bot) / span, 0.0, 1.0)
+    if len(hi) == 2:
+        # 두 채널이 밝은 배경(마젠타)은 두 채널이 비슷할 때만 — 빨강 옷·파랑 옷은 섞인 것으로 보지 않는다
+        e = np.where(np.abs(c[:, :, hi[0]] - c[:, :, hi[1]]) < 70, e, 0.0)
+    if bgm is not None:
+        near = bgm.copy()
+        for _ in range(3):
+            grown = near.copy()
+            grown[1:] |= near[:-1]
+            grown[:-1] |= near[1:]
+            grown[:, 1:] |= near[:, :-1]
+            grown[:, :-1] |= near[:, 1:]
+            near = grown
+        pure = (top - bot) > 0.6 * np.maximum(top, 1.0)
+        e = np.where(near | pure, e, 0.0)
+    keep = np.maximum(1.0 - e, 0.05)[..., None]
+    c = np.clip((c - e[..., None] * bg) / keep, 0, 255)
+    a = alpha * (1.0 - e)
+    a = np.where(a < 30, 0, a)
+    return c.astype(np.uint8), a.astype(np.uint8)
+
+
+def _key_background(rgb: np.ndarray, unmix: bool = False, keep_tint: bool = False) -> np.ndarray:
+    """단색 배경을 지운 RGBA. unmix면 테두리만이 아니라 그림 전체에서 배경색 섞임을 푼다(unmix_key)"""
+    bgm = background_mask(rgb)
+    bg = border_color(rgb)
+    if is_key_color(bg):
+        # 원색 배경은 캐릭터에 없는 색이라, 팔과 몸 사이처럼 테두리와 안 이어진 구멍도 지운다
+        bgm |= np.sqrt(((rgb - bg) ** 2).sum(axis=2)) < 90
+        if unmix:
+            color, alpha = unmix_key(rgb, np.where(bgm, 0.0, 255.0), bg, bgm if keep_tint else None)
+        else:
+            color, alpha = edge_unmix(rgb, bgm, bg)
+            color = despill(color)
+        return np.dstack([color, alpha]).astype(np.uint8)
+    return np.dstack([rgb, np.where(bgm, 0, 255)]).astype(np.uint8)
+
+
+def load_cells(src: Path, cols: int, rows: int, markers: "dict | None" = None, drop_edge: bool = False,
+               pad: float = 0.0, shade: bool = True, unmix: bool = False, keep_tint: bool = False,
+               hpad: float = 0.0) -> dict:
+    """시트 한 장: 배경을 지우고 칸마다 (그림, 발끝 y, 몸통 가운데 x, 키).
+    markers에 사전을 넘기면 초록 다리 표시를 찾아 칸마다 (표시 가운데 x − 몸통 가운데 x) / 키를 적고, 표시는 신발 색으로 칠해 지운다"""
+    img = Image.open(src)
+    rgb = np.array(img.convert("RGB")).astype(np.int32)
+    h, w, _ = rgb.shape
+    # 처음부터 투명한 그림(배경 없는 PNG)이면 그 투명도를 그대로 쓴다 — 검은 옷이 검은 배경에 먹히지 않게
+    own_alpha = None
+    if img.mode in ("RGBA", "LA") or "transparency" in img.info:
+        a = np.array(img.convert("RGBA"))[:, :, 3]
+        if (a < 10).mean() > 0.05:
+            own_alpha = a
+    mark = None
+    if markers is not None:
+        mark = marker_mask(rgb)
+        rgb = rgb.copy()
+        rgb[mark] = MARKER_FILL
+    if own_alpha is not None:
+        rgba = np.dstack([rgb, own_alpha]).astype(np.uint8)
+        rgba[own_alpha < 10] = 0
+    else:
+        rgba = _key_background(rgb, unmix, keep_tint)
+    ch = h // rows
+    cells = {}
+    for r in range(rows):
+        for c in range(cols):
+            # 칸 경계는 비율로 (가로가 열 수로 나눠떨어지지 않는 그림에서 오른쪽 칸이 밀리지 않게)
+            y0, y1 = r * h // rows, (r + 1) * h // rows
+            x0, x1 = c * w // cols, (c + 1) * w // cols
+            if mark is not None and shade:
+                shade_far_leg(rgba[y0:y1, x0:x1], mark[y0:y1, x0:x1])
+            # pad: 위·아래로 칸 높이의 이만큼 더 읽는다 (머리가 윗칸으로 넘어간 그림). 넘어온 이웃 조각은 drop_edge가 버린다
+            # hpad: 좌우로도 칸 너비의 이만큼 더 읽는다 (보폭이 넓어 발끝이 옆 칸 경계를 넘은 그림)
+            p = int(ch * pad)
+            q = int((x1 - x0) * hpad)
+            cell = cut_cell(rgba[max(0, y0 - p):min(h, y1 + p), max(0, x0 - q):min(w, x1 + q)], drop_edge)
+            cells[(r, c)] = cell
+            if mark is not None:
+                m = mark[max(0, y0 - p):min(h, y1 + p), max(0, x0 - q):min(w, x1 + q)]
+                ys, xs = np.nonzero(m)
+                found = cell is not None and xs.size >= 20
+                markers[(r, c)] = (xs.mean() - cell[2]) / cell[3] if found else None
+                # (가로, 발끝에서 올라온 높이) — 키에 대한 비율. 8방향 열쇠 장면 검사용
+                markers[("xy", r, c)] = ((xs.mean() - cell[2]) / cell[3], (cell[1] - ys.mean()) / cell[3]) if found else None
+                # 띠 덩어리 수 (두 발목에 다 두르면 2 — 다리 구분이 안 된다)
+                blobs = [b for b in components(m) if len(b) >= 15] if found else []
+                markers[("n", r, c)] = len(blobs)
+    return cells
+
+
+def place(out: Image.Image, cell, r: int, c: int, scale: float, cw: int = CELL_W) -> None:
+    """칸 (r, c)에 발끝·몸통 가운데를 맞춰 붙인다 (칸 가로 cw)"""
+    if cell is None:
+        return
+    img, foot, cx, _ = cell
+    im = Image.fromarray(img).convert("RGBa")
+    im = im.resize((max(1, round(im.width * scale)), max(1, round(im.height * scale))), Image.LANCZOS).convert("RGBA")
+    ox = round(c * cw + cw / 2 - cx * scale)
+    oy = round(r * CELL_H + FOOT_Y - foot * scale)
+    tile = Image.new("RGBA", out.size, (0, 0, 0, 0))
+    tile.paste(im, (ox, oy))
+    # 옆 칸으로 넘친 부분은 자른다
+    box = (c * cw, r * CELL_H, (c + 1) * cw, (r + 1) * CELL_H)
+    out.paste(tile.crop(box), box[:2])
+
+
+def _smooth(a: float, b: float, x: float) -> float:
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def gather_limbs(cell: Image.Image) -> Image.Image:
+    """두 발 모음 칸: 팔·다리를 몸 가운데로 모은다 (걷기 A 그림 한 장에서 만든다).
+    줄마다 가운데에서 TORSO_HALF 안(몸통·다리 안쪽)은 k_in배, 그 바깥(흔든 팔·벌린 다리)은 k_out배로 좁힌다.
+      어깨 위: 그대로 · 어깨~엉덩이: 몸통은 그대로, 팔만 손 쪽으로 갈수록 ARM_SQUEEZE까지
+      엉덩이 아래: 다리를 발끝으로 갈수록 PASS_SQUEEZE까지 (손 높이까지는 팔도 계속 모은다)"""
+    a = np.array(cell.convert("RGBa")).astype(np.float64)
+    h, w, _ = a.shape
+    ys, xs = np.nonzero(a[SHOULDER_Y:HIP_Y, :, 3] > 32)
+    if xs.size == 0:
+        return cell
+    cx = np.median(xs)
+    out = a.copy()
+    grid = np.arange(w, dtype=np.float64)
+    T = TORSO_HALF
+    for y in range(SHOULDER_Y, h):
+        if y < HIP_Y:
+            k_in = 1.0
+            k_out = 1.0 - (1.0 - ARM_SQUEEZE) * _smooth(SHOULDER_Y, HIP_Y, y)
+        else:
+            k_in = 1.0 - (1.0 - PASS_SQUEEZE) * min(1.0, (y - HIP_Y) / max(FOOT_Y - HIP_Y, 1))
+            # 손 높이까지는 팔을 모으고, 그 아래는 다리와 같이
+            k_out = ARM_SQUEEZE + (k_in - ARM_SQUEEZE) * _smooth(HIP_Y + 8, HIP_Y + 22, y)
+        d = np.abs(grid - cx)
+        sgn = np.sign(grid - cx)
+        inner = T * k_in
+        # 받는 자리 d → 가져올 자리 (안쪽은 /k_in, 바깥은 T + (d - inner)/k_out)
+        src_d = np.where(d <= inner, d / k_in, T + (d - inner) / k_out)
+        src_x = cx + sgn * src_d
+        for ch in range(4):
+            out[y, :, ch] = np.interp(src_x, grid, a[y, :, ch], left=0.0, right=0.0)
+    arr = np.clip(out, 0, 255).astype(np.uint8)
+    return Image.frombytes("RGBa", (arr.shape[1], arr.shape[0]), arr.tobytes()).convert("RGBA")
+
+
+def cycle_grid(src: Path) -> tuple[int, int]:
+    """한 바퀴 시트의 칸 수: 4열 고정, 칸 가로:세로가 약 3:4라 행 수는 캔버스 비율로 정한다
+    (1536×1024 → 4×2 = 8장, 896×1200 → 4×4 = 16장)"""
+    w, h = Image.open(src).size
+    rows = max(1, round(h / ((w / 4) / CELL_ASPECT)))
+    return 4, rows
+
+
+def load_cycle(src: Path) -> list:
+    """한 바퀴 시트 → CYCLE장 (왼쪽 위부터 읽는 순서). 8장 시트는 한 장씩 두 번 써서 CYCLE장으로 맞춘다.
+    <시트 이름>.skip.txt가 있으면 거기 적힌 칸(1부터)을 빼고 남은 장으로 채운다.
+    초록 다리 표시가 있으면 지우고 check_legs용으로 위치를 남긴다"""
+    cols, rows = cycle_grid(src)
+    n = cols * rows
+    marks: dict = {}
+    cells = load_cells(src, cols, rows, marks)
+    LEG_MARKS[src.name] = [marks.get((i // cols, i % cols)) for i in range(n)]
+    frames = [cells[(i // cols, i % cols)] for i in range(n)]
+    # 튀는 장 빼기: 같은 이름의 .skip.txt에 1부터 센 칸 번호 (예: "2 3 9"). 남은 장을 고르게 늘려 CYCLE장으로
+    skip_file = src.with_name(src.stem + ".skip.txt")
+    if skip_file.exists():
+        skip = {int(t) - 1 for t in skip_file.read_text().replace(",", " ").split() if t.isdigit()}
+        kept = [f for i, f in enumerate(frames) if i not in skip]
+        if kept:
+            print(f"  {src.name}: {sorted(i + 1 for i in skip)}번 칸 뺌 → {len(kept)}장")
+            frames = kept
+    m = len(frames)
+    return [frames[i * m // CYCLE] for i in range(CYCLE)]
+
+
+def check_legs() -> bool:
+    """초록 표시 다리가 1번에서 앞, 5번에서 뒤인가 (모든 한 바퀴 시트). 화면 오른쪽(+x)이 앞이다"""
+    ok = True
+    for name, marks in LEG_MARKS.items():
+        def word(v):
+            if v is None:
+                return "없음"
+            return "앞" if v > LEG_TOL else ("뒤" if v < -LEG_TOL else "가운데")
+        line = " ".join(f"{i + 1}:{word(v)}" for i, v in enumerate(marks))
+        half = len(marks) // 2
+        good = word(marks[0]) == "앞" and word(marks[half]) == "뒤" and all(v is not None for v in marks)
+        ok &= good
+        print(f"  {name} 초록 다리 — {line} → {'반대 다리 OK' if good else f'실패 (1번 앞·{half + 1}번 뒤여야 한다, 모든 칸에 표시가 있어야 한다)'}")
+    return ok
+
+
+def process(src: Path, cid: str, debug: bool) -> None:
+    cells = load_cells(src, COLS, ROWS)
+    scale = BODY_H / cells[(0, 0)][3]
+    # 달리기 두 장(반대 다리) 시트가 따로 있으면 5·6열로 붙인다: NN_<id>_run.png (2열 달리기 A·B × 2행 앞·뒤)
+    run_src = src.with_name(src.stem + "_run.png")
+    run_cells = load_cells(run_src, 2, ROWS) if run_src.exists() else None
+    # 걷기·달리기 8장 한 바퀴 시트: NN_<id>_walk_front.png · _walk_back.png · _run_front.png · _run_back.png
+    # (4열×2행 8장 또는 4열×4행 16장, 왼쪽 위부터). 앞·뒤 둘 다 있으면 9열부터 걷기 16장, 그다음 달리기 16장
+    cycles = []
+    for motion in ("walk", "run"):
+        front = src.with_name(f"{src.stem}_{motion}_front.png")
+        back = src.with_name(f"{src.stem}_{motion}_back.png")
+        if front.exists() and back.exists():
+            cycles.append((motion, [load_cycle(front), load_cycle(back)]))
+        elif motion == "walk":
+            break           # 달리기만 있으면 열 번호가 어긋난다 — 걷기가 있어야 달리기도 붙인다
+    out = Image.new("RGBA", (CELL_W * (OUT_COLS + CYCLE * len(cycles)), CELL_H * ROWS), (0, 0, 0, 0))
+    # 걷기 두 장 시트가 따로 있으면 2·3열을 그것으로 바꾼다: NN_<id>_walk.png (2열 걷기 A·B × 2행 앞·뒤)
+    walk_src = src.with_name(src.stem + "_walk.png")
+    walk_scale = scale
+    if walk_src.exists():
+        walk_cells = load_cells(walk_src, 2, ROWS)
+        ref = cells[(0, 1)] or cells[(0, 0)]
+        if walk_cells[(0, 0)]:
+            walk_scale = ref[3] * scale / max(walk_cells[(0, 0)][3], 1)
+        for (r, c), cell in walk_cells.items():
+            cells[(r, 1 + c)] = cell
+    for (r, c), cell in cells.items():
+        place(out, cell, r, c, walk_scale if walk_src.exists() and c in (1, 2) else scale)
+    if run_cells:
+        # 달리기 시트는 그린 크기가 다를 수 있다 — 본 시트 달리기 칸(3열)과 키를 맞춘다
+        ref = cells[(0, 3)] or cells[(0, 0)]
+        run_scale = ref[3] * scale / max(run_cells[(0, 0)][3], 1) if run_cells[(0, 0)] else scale
+        for (r, c), cell in run_cells.items():
+            place(out, cell, r, 5 + c, run_scale)
+    else:
+        # 달리기 두 장이 없으면 4열 달리기를 5·6열에 그대로
+        for r in range(ROWS):
+            box = (3 * CELL_W, r * CELL_H, 4 * CELL_W, (r + 1) * CELL_H)
+            for c in (5, 6):
+                out.paste(out.crop(box), (c * CELL_W, r * CELL_H))
+    # 모음 칸: 걷기 A(2열)·달리기 A(6열)의 팔·다리를 몸 가운데로 모아 만든다 → 5열·8열.
+    # 서 있기 칸을 쓰면 옷·방향이 걷기 그림과 달라(다른 그림에서 온 칸) 걸음마다 몸이 휙 돈다
+    for r in range(ROWS):
+        for src_c, dst_c in ((1, 4), (5, 7)):
+            cell = out.crop((src_c * CELL_W, r * CELL_H, (src_c + 1) * CELL_W, (r + 1) * CELL_H))
+            out.paste(gather_limbs(cell), (dst_c * CELL_W, r * CELL_H))
+    for k, (motion, rows) in enumerate(cycles):
+        # 키 맞추기: 한 바퀴 그림들의 키 가운데값을 본 시트 걷기 A(·달리기) 칸 키(앞모습)와 같게
+        ref = cells[(0, 1 if motion == "walk" else 3)] or cells[(0, 0)]
+        for r in range(ROWS):
+            # 앞·뒤 그림은 따로 그려 크기가 다를 수 있다 — 장마다(행마다) 따로 맞춘다
+            heights = [c[3] for c in rows[r] if c]
+            cyc_scale = ref[3] * (walk_scale if motion == "walk" else scale) / max(float(np.median(heights)), 1.0)
+            for i, cell in enumerate(rows[r]):
+                place(out, cell, r, OUT_COLS + k * CYCLE + i, cyc_scale)
+    DST.mkdir(parents=True, exist_ok=True)
+    out.save(DST / f"{cid}.png")
+    if debug:
+        dbg = Image.new("RGBA", out.size, (110, 150, 110, 255))
+        dbg.alpha_composite(out)
+        dbg.resize((out.width * 2, out.height * 2), Image.NEAREST).save(DST.parent.parent / ".screenshots" / f"sprite_{cid}.png")
+    print(f"{cid}: 배율 {scale:.3f}" + (" · 걷기 2장" if walk_src.exists() else "") + (" · 달리기 2장" if run_cells else "")
+          + "".join(f" · {m} {CYCLE}장" for m, _ in cycles))
+
+
+def process_dir4(src: Path, cid: str, debug: bool) -> None:
+    """정방향 4방향 걷기 시트 NN_<id>_walk_dir4.png (8열 × 4행: 0 앞·화면 쪽으로 · 1 뒤·화면 안쪽으로 · 2 오른쪽 · 3 왼쪽)
+    → assets/characters/<id>_dir4.png (3행: 앞·뒤·옆(오른쪽), 0열 서 있기 + 1~24열 걷기 한 바퀴 [+ 25~48열 달리기], 칸 128×112).
+    줄마다 NN_<id>_walk_dir4_<s|n|e>.png(4×4 16장)가 있으면 그 줄 걷기를 그것으로 바꾼다.
+    NN_<id>_walk12_dir4.png(12열 × 4행: 앞 · 왼쪽 · 오른쪽 · 뒤, 한 바퀴 12장)가 있으면 앞·뒤·옆 걷기를 모두 그것으로 바꾼다 (줄마다 바꾼 것보다 먼저).
+    왼쪽 줄은 쓰지 않는다 — 생성 그림이 얼굴만 왼쪽이고 몸·발은 오른쪽으로 걷는 경우가 있어, 게임이 오른쪽 줄을 뒤집어 쓴다.
+    서 있기 칸은 줄마다 다리가 가장 덜 벌어진 걷기 칸을 쓴다. 키는 줄마다 걷기 칸 키 가운데값을 BODY_H×0.97에 맞춘다."""
+    motions = [load_cells(src, DIR4_FRAMES, 4, drop_edge=True)]
+    run_src = src.with_name(src.stem.replace("_walk_dir4", "_run_dir4") + ".png")
+    if run_src.exists():
+        motions.append(load_cells(run_src, DIR4_FRAMES, 4, drop_edge=True))
+    # 줄마다 16장 한 바퀴로 바꿔 끼우기: NN_<id>_walk_dir4_<s|n|e>.png (4열×4행 16장, 투명 PNG도 된다)
+    override = {}
+    for r, d in enumerate(("s", "n", "e")):
+        o = src.with_name(f"{src.stem}_{d}.png")
+        if o.exists():
+            cells = load_cells(o, 4, 4, drop_edge=True, pad=0.06)
+            override[r] = [cells[(i // 4, i % 4)] for i in range(16)]
+            print(f"  {o.name}: 16장 → {('앞', '뒤', '옆')[r]} 줄 걷기")
+    w12 = src.with_name(src.stem.replace("_walk_dir4", "_walk12_dir4") + ".png")
+    if w12.exists():
+        # 팔·다리 사이 틈이 어두운 마젠타로 칠해져 있다 — 그림 전체에서 배경색 섞임을 푼다
+        cells = load_cells(w12, 12, 4, drop_edge=True, pad=0.06, unmix=True)
+        for r, row in ((0, 0), (1, 3), (2, 2)):      # 앞 ← 1행, 뒤 ← 4행, 옆(오른쪽) ← 3행 (2행 왼쪽은 쓰지 않는다)
+            override[r] = [cells[(row, c)] for c in range(12)]
+        print(f"  {w12.name}: 12장 → 앞·뒤·옆 줄 걷기")
+    n = DIR4_OUT
+    cols = 1 + n * len(motions)
+    out = Image.new("RGBA", (DIR4_CELL_W * cols, CELL_H * 3), (0, 0, 0, 0))
+    for r in range(3):
+        walk = override.get(r) or [motions[0][(r, c)] for c in range(DIR4_FRAMES)]
+        walk = [c for c in walk if c]
+        heights = [c[3] for c in walk]
+        scale = BODY_H * 0.97 / max(float(np.median(heights)), 1.0)
+        # 바꿔 끼운 걷기는 그린 크기가 달라 달리기는 달리기 그림 키로 따로 맞춘다
+        run_scale = scale
+        if r in override and len(motions) > 1:
+            run_h = [c[3] for c in (motions[1][(r, k)] for k in range(DIR4_FRAMES)) if c]
+            run_scale = BODY_H * 0.97 / max(float(np.median(run_h)), 1.0)
+        place(out, min(walk, key=_spread), r, 0, scale, DIR4_CELL_W)
+        for k in range(n):
+            place(out, walk[k * len(walk) // n], r, 1 + k, scale, DIR4_CELL_W)
+        if len(motions) > 1:
+            run = [motions[1][(r, c)] for c in range(DIR4_FRAMES)]
+            for k in range(n):
+                place(out, run[k * len(run) // n], r, 1 + n + k, run_scale, DIR4_CELL_W)
+    DST.mkdir(parents=True, exist_ok=True)
+    out.save(DST / f"{cid}_dir4.png")
+    if debug:
+        dbg = Image.new("RGBA", out.size, (110, 150, 110, 255))
+        dbg.alpha_composite(out)
+        dbg.resize((out.width * 2, out.height * 2), Image.NEAREST).save(DST.parent.parent / ".screenshots" / f"sprite_{cid}_dir4.png")
+    print(f"{cid}: 정방향 4방향 걷기 {DIR4_OUT}장" + (" · 달리기" if len(motions) > 1 else ""))
+
+
+DIR8 = ["e", "se", "s", "sw", "w", "nw", "n", "ne"]   ## 화면 각도 순서 (0°=오른쪽, 90°=아래)
+DIR8_GRID = (4, 4)           ## 8방향 시트 칸 (4열×4행 = 16장). 생성 그림은 머리카락이 윗줄에 닿아 틈으로 세면 틀린다
+
+
+DIR8_CHECKS: list = []
+KEY8_TOL = 0.06              ## 1번 칸 띠 다리는 몸통 가운데보다 키의 6% 넘게 앞, 5번 칸은 6% 넘게 뒤
+DIR8_SIGN = {"e": 1, "se": 1, "ne": 1, "w": -1, "sw": -1, "nw": -1}
+
+
+def _spread(cell) -> float:
+    """발 쪽(발끝에서 키의 25% 위까지) 가로 폭 = 보폭"""
+    a = cell[0][:, :, 3] > 40
+    foot, height = cell[1], cell[3]
+    xs = np.nonzero(a[int(foot - height * 0.25):foot + 1])[1]
+    return float(xs.max() - xs.min()) if xs.size else 0.0
+
+
+def check_key8(name: str, d: str, walk: list, xy: list, blobs: list) -> bool:
+    """8방향 열쇠 장면 시트 검사: 초록 띠(인물 오른쪽 발목) 다리가 1번 칸에서 앞, 5번 칸에서 뒤인가.
+    앞의 기준: 옆·사선은 진행 방향 쪽 가로(→·↘·↗는 화면 오른쪽, ←·↙·↖는 왼쪽), ↓는 화면 아래(발이 낮다), ↑는 화면 위.
+    옆·사선은 3·7번(지나감)의 보폭이 1·5번(딛기)보다 확실히 좁은지도 본다."""
+    def metric(v):
+        if v is None:
+            return None
+        dx, dy = v
+        if d in DIR8_SIGN:
+            return dx * DIR8_SIGN[d]
+        return -dy if d == "s" else dy
+    ms = [metric(v) for v in xy]
+    if d in DIR8_SIGN:
+        one_band = all(n == 1 for n in blobs)
+        legs = all(m is not None for m in ms) and ms[0] > KEY8_TOL and ms[4] < -KEY8_TOL
+    else:
+        # 정면·뒷모습: 띠 높이는 앞발일 때도 발목이라 0이 기준이 아니다 — 1번과 5번의 차이로 본다. 띠가 다리에 가린 칸 하나는 봐 준다
+        one_band = all(n <= 1 for n in blobs) and sum(n == 0 for n in blobs) <= 1
+        legs = ms[0] is not None and ms[4] is not None and ms[0] - ms[4] > KEY8_TOL * 1.5
+    ok = one_band and legs
+    line = " ".join("없음" if m is None else f"{m:+.2f}" for m in ms)
+    stride = ""
+    if d in DIR8_SIGN and all(walk):
+        sp = [_spread(c) for c in walk]
+        narrow = max(sp[2], sp[6]) < 0.72 * min(sp[0], sp[4])
+        ok &= narrow
+        stride = f" | 보폭 {' '.join(f'{v:.0f}' for v in sp)} → {'지나감 OK' if narrow else '지나감 실패(3·7번이 1·5번보다 좁아야)'}"
+    band = "" if one_band else f" | 띠 실패: 칸마다 띠가 하나여야 한다 (띠 덩어리 {' '.join(map(str, blobs))})"
+    verdict = "반대 다리 OK" if legs else ("반대 다리 실패(1번은 +{0}보다 앞, 5번은 -{0}보다 뒤여야 한다)".format(KEY8_TOL)
+                                       if d in DIR8_SIGN else "반대 다리 실패(1번이 5번보다 확실히 앞이어야 한다)")
+    print(f"  {name} [{d}] 초록 다리 앞쪽 정도 {line} → {verdict}{band}{stride}")
+    return ok
+
+
+def process_dir8(cid: str, sources: dict, debug: bool) -> None:
+    """8방향 걷기 시트 NN_<id>_walk8_<방향>.png (방향: e·se·s·sw·w·nw·n·ne, 4열×4행 16장)
+    또는 열쇠 장면 시트 NN_<id>_key8_<방향>.png (4열×2행 8장, 초록 띠 검사 — 있으면 walk8보다 먼저 쓴다)
+    → assets/characters/<id>_dir8.png (8행 = DIR8 순서, 0열 서 있기 + 1~16열 걷기 한 바퀴, 칸 128×112)
+      + <id>_dir8.json (있는 방향 목록). 없는 방향은 게임이 가까운 방향이나 좌우 짝을 뒤집어 쓴다."""
+    frames = 16
+    out = Image.new("RGBA", (DIR4_CELL_W * (1 + frames), CELL_H * len(DIR8)), (0, 0, 0, 0))
+    present = []
+    for r, d in enumerate(DIR8):
+        src = sources.get(d)
+        if src is None:
+            continue
+        key = "_key8_" in src.stem
+        cols, rows = (4, 2) if key else DIR8_GRID
+        marks: dict = {}
+        cells = load_cells(src, cols, rows, marks if key else None, drop_edge=True, pad=0.08 if key else 0.12,
+                           shade=False)
+        walk = [cells[(i // cols, i % cols)] for i in range(cols * rows)]
+        if key:
+            DIR8_CHECKS.append(check_key8(src.name, d, walk, [marks.get(("xy", i // cols, i % cols)) for i in range(8)],
+                                          [marks.get(("n", i // cols, i % cols), 0) for i in range(8)]))
+        walk = [c for c in walk if c]
+        heights = [c[3] for c in walk]
+        scale = BODY_H * 0.97 / max(float(np.median(heights)), 1.0)
+        place(out, min(walk, key=_spread), r, 0, scale, DIR4_CELL_W)
+        for k in range(frames):
+            place(out, walk[k * len(walk) // frames], r, 1 + k, scale, DIR4_CELL_W)
+        present.append(d)
+        print(f"  {src.name}: {cols}×{rows} = {len(walk)}장 → {d}")
+    DST.mkdir(parents=True, exist_ok=True)
+    out.save(DST / f"{cid}_dir8.png")
+    import json
+    (DST / f"{cid}_dir8.json").write_text(json.dumps({"dirs": present, "frames": frames}))
+    if debug:
+        dbg = Image.new("RGBA", out.size, (110, 150, 110, 255))
+        dbg.alpha_composite(out)
+        dbg.save(DST.parent.parent / ".screenshots" / f"sprite_{cid}_dir8.png")
+    print(f"{cid}: 8방향 걷기 {len(present)}방향 ({', '.join(present)})")
+
+
+DIR8_SHEET_ROWS = ["s", "sw", "w", "nw", "n"]   ## 한 장짜리 8방향 시트의 줄 (나머지 ↘ → ↗는 게임이 좌우를 뒤집어 쓴다)
+KEEP_TINT = {"civ_f", "merchant", "firefighter"}   ## 옷이 배경과 같은 계열인 인물 (초록 배경에 국방색 재킷·카키 바지·형광 반사띠) — 옷 안쪽의 배경 기운은 지우지 않는다
+
+
+def process_dir8_sheet(src: Path, cid: str, frames: int, debug: bool) -> None:
+    """한 장짜리 8방향 걷기 시트 NN_<id>_walk<N>_dir8.png (N열 × 5행: ↓ · ↙ · ← · ↖ · ↑, 줄마다 한 바퀴 N장 — 예: walk24, walk12)
+    → assets/characters/<id>_dir8.png (8행 = DIR8 순서, 0열 서 있기 + 1~N열 걷기, 칸 128×112) + .json (frames N).
+    방향별 시트(walk8·key8)가 있어도 이것으로 모두 바꾼다.
+    배경(초록·마젠타)은 그림 전체에서 섞인 만큼 푼다(unmix_key) — 팔·다리 틈이 어두운 배경색으로 칠해진 압축 그림이다."""
+    cells = load_cells(src, frames, len(DIR8_SHEET_ROWS), drop_edge=True, pad=0.06, unmix=True, keep_tint=cid in KEEP_TINT,
+                       hpad=0.15)
+    out = Image.new("RGBA", (DIR4_CELL_W * (1 + frames), CELL_H * len(DIR8)), (0, 0, 0, 0))
+    present = []
+    for i, d in enumerate(DIR8_SHEET_ROWS):
+        r = DIR8.index(d)
+        walk = [c for c in (cells[(i, k)] for k in range(frames)) if c]
+        heights = [c[3] for c in walk]
+        scale = BODY_H * 0.97 / max(float(np.median(heights)), 1.0)
+        place(out, min(walk, key=_spread), r, 0, scale, DIR4_CELL_W)
+        for k in range(frames):
+            place(out, walk[k * len(walk) // frames], r, 1 + k, scale, DIR4_CELL_W)
+        present.append(d)
+    DST.mkdir(parents=True, exist_ok=True)
+    out.save(DST / f"{cid}_dir8.png")
+    import json
+    (DST / f"{cid}_dir8.json").write_text(json.dumps({"dirs": present, "frames": frames}))
+    if debug:
+        dbg = Image.new("RGBA", out.size, (110, 150, 110, 255))
+        dbg.alpha_composite(out)
+        dbg.save(DST.parent.parent / ".screenshots" / f"sprite_{cid}_dir8.png")
+    print(f"{cid}: 8방향 걷기 한 장 시트 {frames}장 ({', '.join(present)})")
+
+
+def main() -> None:
+    debug = "--debug" in sys.argv
+    # NN_<id>.png 전부 (NN은 순서일 뿐, id가 data/npc 파일 이름과 같아야 한다). 인자로 id를 주면 그것만
+    only = [a for a in sys.argv[1:] if not a.startswith("--")]
+    for src in sorted(SRC.glob("[0-9][0-9]_*.png")):
+        if src.stem.endswith(EXTRA) or any(t in src.stem for t in ("_walk8_", "_key8_", "_walk_dir4_", "_run_dir4_")) or src.stem.endswith("_dir8"):
+            continue
+        cid = src.stem[3:]
+        if not only or cid in only:
+            process(src, cid, debug)
+    dir8: dict = {}
+    for kind in ("_walk8_", "_key8_"):          # 나중 것(key8)이 덮어쓴다
+        for src in sorted(SRC.glob(f"[0-9][0-9]_*{kind}*.png")):
+            cid, d = src.stem[3:].rsplit(kind, 1)
+            if d in DIR8:
+                dir8.setdefault(cid, {})[d] = src
+    for cid, sources in dir8.items():
+        if not only or cid in only:
+            process_dir8(cid, sources, debug)
+    for src in sorted(SRC.glob("[0-9][0-9]_*_walk*_dir8.png")):      # 한 장짜리 시트가 있으면 방향별 시트를 덮어쓴다
+        m = re.fullmatch(r"\d\d_(.+)_walk(\d+)_dir8", src.stem)
+        if m and (not only or m[1] in only):
+            process_dir8_sheet(src, m[1], int(m[2]), debug)
+    for src in sorted(SRC.glob("[0-9][0-9]_*_walk_dir4.png")):
+        cid = src.stem[3:-len("_walk_dir4")]
+        if not only or cid in only:
+            process_dir4(src, cid, debug)
+    if "--check-legs" in sys.argv:
+        # 한 바퀴 시트의 초록 다리 표시 검사 (코덱스·제미나이가 반대 다리를 제대로 그렸는지)
+        if not LEG_MARKS and not DIR8_CHECKS:
+            print("검사할 한 바퀴 시트가 없다")
+            sys.exit(2)
+        ok = check_legs() if LEG_MARKS else True
+        if DIR8_CHECKS:
+            print(f"  8방향 열쇠 장면: {sum(DIR8_CHECKS)}/{len(DIR8_CHECKS)} 통과")
+            ok &= all(DIR8_CHECKS)
+        if not ok:
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -54,6 +54,7 @@ func setup(p_npc: NpcType, p_rng: RandomNumberGenerator, p_loop: PackedVector2Ar
 
 func _ready() -> void:
 	motion_mode = MOTION_MODE_FLOATING
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR     # 인물 그림(PersonRig 스프라이트)을 줄여 그릴 때 깨지지 않게
 	collision_layer = Layers.PEOPLE
 	collision_mask = Layers.WORLD
 	var shape := CollisionShape2D.new()
@@ -191,11 +192,11 @@ func resume_walking() -> void:
 
 
 ## 2.5D: 깊이(월드 x+y)로 그리는 순서를 정한다
-## 모습(걸음 12단계·방향·상태·말풍선)이 바뀔 때만 다시 그린다 — 물리 틱마다 그리면 사람 수만큼 비싸다
+## 모습(걸음 24단계·방향·상태·말풍선)이 바뀔 때만 다시 그린다 — 물리 틱마다 그리면 사람 수만큼 비싸다
 func _process(_delta: float) -> void:
 	z_as_relative = not IsoView.enabled
 	z_index = IsoView.z_of(global_position) if IsoView.enabled else 0
-	var key := [int(walk_phase * 12.0 / TAU), snappedf(facing, 0.05), state, speech_time > 0.0, speech,
+	var key := [int(walk_phase * 24.0 / TAU), snappedf(facing, 0.05), state, speech_time > 0.0, speech,
 		IsoView.enabled, npc, shirt]
 	if key != _drawn_key:
 		_drawn_key = key
@@ -220,11 +221,9 @@ func _draw() -> void:
 		PersonDrawer.draw_blood(self, facing)
 	var down := state == State.KNOCKED or state == State.DEAD
 	if IsoView.enabled:
-		# 2.5D: 서 있으면 세워 그리고, 쓰러지면 바닥에 눕힌다
-		if down:
-			PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, true, npc.body_scale, npc, look_seed)
-		else:
-			PersonDrawer.draw_standing(self, facing, walk_phase, shirt, pants, hair, npc.body_scale, null, npc, look_seed)
+		# 2.5D: 4×2 스프라이트 시트(PersonRig)로 정지·걷기·달리기·쓰러짐을 그린다
+		var gait: float = 0.0 if down or state == State.IDLE else (2.0 if state in [State.DODGE, State.FLEE] else 1.0)
+		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, npc.body_scale, npc, look_seed, null, down)
 		if speech_time > 0.0 and speech != "" and state != State.DEAD:
 			PersonDrawer.draw_speech(self, speech, npc.body_scale)
 		return

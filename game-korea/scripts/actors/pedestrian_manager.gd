@@ -8,13 +8,11 @@ signal person_hurt(ped: Pedestrian, by_player: bool, killed: bool)   ## 차·총
 
 const COUNT := 24
 const SEED := 20261011
+## 거리에 나오는 종. 학생·어르신·아이는 뺐다 (사용자 요청 2026-10-16 — 데이터 파일은 남겨 둔다)
 const NPC_TYPES: Array[NpcType] = [
 	preload("res://data/npc/civ_m.tres"),
 	preload("res://data/npc/civ_f.tres"),
-	preload("res://data/npc/student.tres"),
 	preload("res://data/npc/office.tres"),
-	preload("res://data/npc/elder.tres"),
-	preload("res://data/npc/child.tres"),
 	preload("res://data/npc/homeless.tres"),
 	preload("res://data/npc/foreigner.tres"),
 	preload("res://data/npc/merchant.tres"),

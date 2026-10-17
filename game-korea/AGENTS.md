@@ -34,7 +34,7 @@
 - 그리기·매 프레임 계산을 늘렸으면 `godot --path . res://tools/perf_probe.tscn`으로 전후를 비교하고 숫자를 보고한다 (주행 평균·끊김 수, 폭발 평균·끊김 수).
 
 ## 5. 끝내기 전에 반드시 확인
-1. `CLAUDE.md`의 "작업 후 반드시 실행" 12개를 전부 돌린다. 하나라도 FAIL이면 끝난 게 아니다.
+1. `CLAUDE.md`의 "작업 후 반드시 실행" 13개를 전부 돌린다. 하나라도 FAIL이면 끝난 게 아니다.
 2. 경찰·차 내구도·피해 수치를 고쳤으면 police_test의 ★3 도주 결과 줄(생존·체포 판 수)을 그대로 옮겨 적는다.
 3. 교통 AI를 고쳤으면 `-- --seed=1`, `-- --seed=99`, `-- --seed=7 --chapter=4`로도 traffic_test를 돌린다.
 4. 화면이 바뀌면 창 모드로 본다: `godot --path . res://tools/screenshot.tscn -- --only=iso` (출력에 `Invalid polygon`·`SCRIPT ERROR` 없어야 함). 해당 갤러리(건물·차량·사람·불)도 CLAUDE.md에 적힌 대로 본다.
@@ -62,3 +62,59 @@
 ```
 - 돌리지 않은 테스트를 통과했다고 쓰지 않는다. 추측은 추측이라고 쓴다.
 - 새로 알게 된 함정(다음 사람이 또 밟을 것)이 있으면 보고에 적는다. `CLAUDE.md`에 넣을지는 사용자가 정한다.
+
+## 7. 참고 이미지 · 설계도 경로 (Claude Code · Codex 공용)
+
+사용자가 제공·생성한 분야별 참고 시안과 파츠 명세는 아래 경로에 정리돼 있다. 작업 전에 해당 폴더의 `README.md`와 `manifest.json`을 먼저 읽는다.
+
+### 7.1 성인 NPC 12종 설계도 · 사방 보행 스프라이트 시트 (`output/imagegen/characters/`)
+- **명세 문서**: `output/imagegen/characters/README.md`, `docs/17_성인_NPC_능력치_설계.md`, `data/codex/adult_roster.json`
+- **통합 시트 및 사방 보행 시트 (`output/imagegen/characters/`)**:
+  - `npc_walk_sheet_1_to_6.png` — 1~6번(`civ_f`, `office`, `delivery`, `merchant`, `gang_f`, `boss`) 6프레임 사방 보행·달리기 시트 (앞모습 정지·왼발·오른발 + 뒷모습 정지·왼발·달리기)
+  - `npc_walk_sheet_7_to_12.png` — 7~12번(`thug`, `thief`, `police`, `swat`, `firefighter`, `assassin`) 6프레임 사방 보행·달리기 시트
+  - `npc_12_turnaround_v1.png` — 12종 2.5D 기립 전신 앞모습(우하단)·뒷모습(우상단) 한 쌍 설계도 시트
+  - `npc_parts_spec_v1.png` — `PersonDrawer` 높이 기준(`y = 0` 발끝 ~ `y = -31` 모자), 4방향·걷기(`stride`)·쓰러짐(`knocked`), `NpcType` 파츠 모듈(`outfit`, `hat`, `face`, `prop`) 기준표
+  - `adult_roster_v1.png` — 성인 캐릭터 대표 12종 도감 포스터 (원본)
+- **1인씩 잘라 둔 개별 PNG 12종 (`output/imagegen/characters/parts/`)**:
+  - `01_civ_f.png` (일반 시민), `02_office.png` (직장인), `03_delivery.png` (배달원), `04_merchant.png` (상인), `05_gang_f.png` (조직원), `06_boss.png` (조직 보스), `07_thug.png` (폭력배), `08_thief.png` (도둑), `09_police.png` (경찰), `10_swat.png` (특공대), `11_firefighter.png` (소방관), `12_assassin.png` (암살자)
+- **관련 코드·검증**: `scripts/actors/person_drawer.gd`, `scripts/actors/person_rig.gd`, `data/npc/*.tres`, `scenes/ui/adult_codex.tscn`, `godot --path . res://tools/person_gallery.tscn -- --shot` (`.screenshots/person_gallery.png`)
+
+### 7.2 첫 진입 메인 타이틀 화면 및 개별 파츠 (`output/imagegen/title_screen/`)
+- **명세 문서**: `output/imagegen/title_screen/README.md`, `output/imagegen/title_screen/parts/manifest.json`
+- **통합 설계도 경로**:
+  - `output/imagegen/title_screen/title_master_v1.png` — 메인 타이틀 화면 완성 시안 (16:9, 1280×720)
+  - `output/imagegen/title_screen/parts_sheet_1_bg_fx.png` ~ `parts_sheet_3_ui_logo.png` — 배경·인물·차량·UI 파츠 분리 시트 3종
+- **개별 PNG 파츠 경로 (`output/imagegen/title_screen/parts/`)**:
+  - 배경 레이어: `01_bg_skyline.png` (원경 밤하늘·남산타워·한강 다리), `02_bg_neon_street.png` (중경 네온 상가·전경 젖은 아스팔트 노면)
+  - 전경 인물 컷아웃: `03_char_protagonist.png` (주인공), `04_char_boss.png` (조직 보스), `05_char_police.png` (경찰관)
+  - 추격 차량·헬기: `06_veh_striker.png` (스포츠카 스트라이커), `07_veh_police_front.png` (경찰차 전방), `08_veh_police_rear.png` (경찰차 후방), `09_veh_swat_van.png` (특공대 장갑차), `10_veh_police_heli.png` (경찰 헬기 + 탐조등)
+  - 타이틀 로고·UI 스킨: `11_ui_title_logo.png` (「서울 거리」 로고 + 슬로건 배너), `12_ui_menu_skins.png` (네온 메뉴 프레임 + 버튼 선택/기본/비활성 3상태 무지 스킨)
+- **연동 시 주의**: 본편 진입(`scripts/main.gd` · `scripts/ui/save_menu.gd`)에 타이틀 메뉴를 연결할 때, 헤드리스 테스트나 자식 노드 마운트(`get_parent() != get_tree().root`), `--chapter=N` 실행 인자에서는 기존 `load_on_start` 조건을 유지해 자동 테스트 12개가 멈추지 않게 한다.
+
+### 7.3 전체 건물 39종 + 공통 파츠 1:1 개별 PNG 경로 (`output/imagegen/buildings_blueprints/README.md`)
+- **전체 매핑 문서**: `output/imagegen/buildings_blueprints/README.md`, `output/imagegen/buildings_blueprints/subdivided/manifest.json`
+- **① 기본 주거·상업·산업 건물 15종 개별 PNG (`scripts/world/building_model.gd`)**:
+  - 앞면 15개: `assets/buildings/assembled_v1/buildings/01_house.png` ~ `15_campsite.png` (`01_house`, `02_villa`, `03_officetel`, `04_apartment`, `05_rowhouse`, `06_gosiwon`, `07_oneroom`, `08_mixed_use`, `09_commercial`, `10_office`, `11_warehouse`, `12_factory`, `13_hanok`, `14_jjokbang`, `15_campsite`)
+  - 뒷면 15개: `assets/buildings/assembled_v1/rear/01_house_rear.png` ~ `15_campsite_rear.png`
+- **② 기능(특수) 건물 8종 개별 PNG (`scripts/world/special_building.gd` · `special_decor.gd`)**:
+  - 폴더: `assets/buildings/special_concepts_v1/parts/`
+  - 파일: `01_police.png` (경찰서), `02_hospital.png` (병원), `03_gang_tower.png` (강남 사옥), `04_gang_office.png` (건달파 사무실), `05_gang_dock.png` (밀수단 거점), `06_car_center.png` (정비소), `07_sauna.png` (24시 사우나), `08_convenience.png` (편의점 GO25)
+- **③ 랜드마크 6종 및 구성 모듈 9종 개별 PNG (`scripts/world/landmark_building.gd` · `landmark_decor.gd`)**:
+  - 전체 부지 6개: `assets/buildings/landmarks_concepts_v1/parts/01_landmark_tower.png` (서울 타워 공원), `02_terminal.png` (고속터미널), `03_market.png` (재래시장), `04_industrial_dock.png` (공단 부두), `05_broadcast.png` (여의도 방송국), `06_checkpoint.png` (다리 검문소)
+  - 모듈 앞면 9개: `assets/buildings/landmark_modules_v1/parts_front/01_landmark_tower.png` ~ `09_barrier.png` (`01_landmark_tower`, `02_terminal`, `03_market`, `04_dock_crane`, `05_broadcast`, `06_checkpoint`, `07_container`, `08_dock_warehouse`, `09_barrier`)
+  - 모듈 뒷면 9개: `assets/buildings/landmark_modules_v1/parts_rear/01_landmark_tower_rear.png` ~ `09_barrier_rear.png`
+- **④ 서울 거리 특수 건물 10종 개별 PNG (`scripts/world/street_building.gd` · `street_decor.gd`)**:
+  - 앞·뒤·평면 설계보드 10개: `output/imagegen/street_buildings/parts_modeling/01_church.png` (교회), `02_motel.png` (모텔), `03_gas_station.png` (주유소), `04_nightlife.png` (유흥 건물), `05_parking_tower.png` (주차타워), `06_school.png` (학교), `07_subway.png` (지하철 출입구), `08_fire_station.png` (소방서), `09_finance_tower.png` (금융타워), `10_print_alley.png` (인쇄·공구 골목)
+  - 뒷면 시안 10개: `output/imagegen/street_buildings/parts_rear/01_church_rear.png` ~ `10_print_alley_rear.png`
+  - 현재 코드 렌더 캡처 10개: `.screenshots/one_CHURCH.png` ~ `.screenshots/one_SUBWAY.png`
+- **⑤ 건물 공통 모듈 파츠 16종 개별 PNG (`scripts/world/building_view.gd`)**:
+  - 폴더: `assets/buildings/modular_v1/parts/` (`01_wall_brick_windows.png` ~ `16_water_tank.png`)
+- **검증 명령**:
+  - 기본 15종: `godot --path . res://tools/building_gallery.tscn -- --shot` (개별 비교 시 `--ids=HOUSE,HANOK` 등)
+  - 기능 8종: `godot --path . res://tools/building_gallery.tscn -- --shot --set=special`
+  - 랜드마크: `godot --path . res://tools/building_gallery.tscn -- --shot --set=landmarks`
+  - 거리 10종: `godot --path . res://tools/building_gallery.tscn -- --shot --set=street`
+
+### 7.4 기타 월드 · 차량 · 도로 참고 이미지 경로
+- **차량 27종**: `docs/12_차량_이미지.md`, `docs/images/vehicles/`, `assets/vehicles/reference_v1/`
+- **도로 재질**: `output/imagegen/roads/road_design_v1.png`

@@ -3,6 +3,9 @@ extends Node2D
 ## 실행: godot --path . res://tools/person_gallery.tscn
 ## 저장: ... -- --shot  →  .screenshots/person_gallery.png
 ## 몇 종만 크게: ... -- --shot --ids=office,boss  →  .screenshots/person_gallery_office.png (설계도와 비교할 때)
+## 관절 있는 사람(PersonRig) 비교: ... -- --rig [--ids=civ_m,police,office] (주인공은 player). --walk면 8방향 걷기만 크게  — 한 줄에 기존 그림 · 새 뼈대 8방향 걷기 · 달리기 · 서 있기.
+##   움직이는 걸 창으로 보거나, --shot이면 .screenshots/person_rig.png
+## 설계도(성인 12종 앞·뒤)와 맞춰 보기: ... -- --sheet [--shot]  →  .screenshots/person_sheet.png (--all이면 그림이 있는 종 전부)
 
 const TOP := 64.0
 const COLS := 8
@@ -19,8 +22,40 @@ class Doll:
 				npc.hair_colors[0], npc.body_scale, null, npc, 0)
 
 
+## 관절 있는 사람 한 명 (걷기 위상을 스스로 돌린다)
+class RigDoll:
+	extends Node2D
+	var npc: NpcType
+	var facing := 0.0
+	var gait := 1.0
+	var phase := 0.0
+	var down := false
+
+	func _ready() -> void:
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+
+	func _process(delta: float) -> void:
+		phase += delta * (0.0 if gait <= 0.0 else 6.5 + 3.5 * maxf(gait - 1.0, 0.0))
+		queue_redraw()
+
+	func _draw() -> void:
+		if npc == null:
+			# 주인공 (--ids=player)
+			PersonRig.draw(self, facing, phase, gait, Color(0.2, 0.2, 0.22), Color(0.3, 0.33, 0.4), Color(0.08, 0.08, 0.08),
+				1.0, null, 0, null, down)
+			return
+		PersonRig.draw(self, facing, phase, gait, npc.shirt_colors[0], npc.pants_colors[0], npc.hair_colors[0],
+			npc.body_scale, npc, 0, null, down)
+
+
 func _ready() -> void:
 	IsoView.enabled = true
+	if "--rig" in OS.get_cmdline_user_args():
+		_rig_compare()
+		return
+	if "--sheet" in OS.get_cmdline_user_args():
+		_sheet()
+		return
 	var files: Array = []
 	for f in DirAccess.get_files_at("res://data/npc"):
 		if f.ends_with(".tres"):
@@ -71,6 +106,147 @@ func _ready() -> void:
 		var path := ProjectSettings.globalize_path("res://.screenshots/%s.png" % name)
 		get_viewport().get_texture().get_image().save_png(path)
 		print("사람 도감 저장: ", path)
+		get_tree().quit()
+
+
+## --rig: 종마다 한 줄 — [기존 그림] [새 뼈대 8방향 걷기] [달리기] [서 있기]
+func _rig_compare() -> void:
+	var ids := _ids()
+	if "--all" in OS.get_cmdline_user_args():
+		# 그림이 있는 종 전부 (assets/characters, 주인공 제외)
+		ids = PackedStringArray()
+		for f in DirAccess.get_files_at("res://assets/characters"):
+			if f.ends_with(".png") and f != "player.png" and ResourceLoader.exists("res://data/npc/" + f.get_basename() + ".tres"):
+				ids.append(f.get_basename())
+	if ids.is_empty():
+		ids = PackedStringArray(["civ_f", "office", "police", "boss"])
+	var walk_only := "--walk" in OS.get_cmdline_user_args()
+	var cols := 8 if walk_only else 11
+	var view := get_viewport().get_visible_rect().size
+	var cell := Vector2(view.x / cols, (view.y - TOP) / ids.size())
+	var zoom := minf(6.0 if walk_only else 4.2, cell.y / 40.0)
+	get_viewport().canvas_transform = IsoView.canvas(view, Vector2.ZERO, zoom)
+	var inv := get_viewport().canvas_transform.affine_inverse()
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var title := Label.new()
+	title.text = "인물 (PersonRig) — 기존 · 8방향 걷기 · 달리기 · 쓰러짐"
+	title.position = Vector2(20, 14)
+	title.add_theme_font_size_override("font_size", 22)
+	layer.add_child(title)
+	var heads := ["기존", "→", "↘", "↓", "↙", "←", "↖", "↑", "↗", "달리기", "쓰러짐"]
+	if walk_only:
+		heads = heads.slice(1, 9)
+	for c in cols:
+		var h := Label.new()
+		h.text = heads[c]
+		h.position = Vector2(c * cell.x, 42)
+		h.size = Vector2(cell.x, 20)
+		h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		h.add_theme_font_size_override("font_size", 14)
+		layer.add_child(h)
+	var front := Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(Vector2(1, 0.45)))
+	for row in ids.size():
+		var npc: NpcType = null if ids[row] == "player" else load("res://data/npc/%s.tres" % ids[row])
+		for c in cols:
+			var at: Vector2 = inv * Vector2((c + 0.5) * cell.x, TOP + (row + 0.86) * cell.y)
+			if walk_only:
+				# 걷기만: 열 c = 화면 기준 8방향 (→부터 시계 방향)
+				var wd := RigDoll.new()
+				wd.npc = npc
+				wd.facing = Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(c * PI / 4.0)))
+				wd.phase = c * 0.8
+				add_child(wd)
+				wd.global_position = at
+				continue
+			if c == 0 and npc == null:
+				continue
+			if c == 0:
+				var d := Doll.new()
+				d.npc = npc
+				d.facing = front
+				add_child(d)
+				d.global_position = at
+				continue
+			var rd := RigDoll.new()
+			rd.npc = npc
+			if c <= 8:
+				# 화면 기준 8방향 (→부터 시계 방향)을 보는 월드 방향
+				var screen_dir := Vector2.RIGHT.rotated((c - 1) * PI / 4.0)
+				rd.facing = Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(screen_dir))
+				rd.phase = c * 0.8
+			else:
+				rd.facing = front
+				rd.gait = 2.0 if c == 9 else 0.0
+				rd.down = c == 10
+			add_child(rd)
+			rd.global_position = at
+		var label := Label.new()
+		label.text = "%s  %s" % ["주인공" if npc == null else npc.display_name, ids[row]]
+		label.position = Vector2(4, TOP + row * cell.y + 2)
+		label.add_theme_font_size_override("font_size", 13)
+		layer.add_child(label)
+	if "--shot" in OS.get_cmdline_user_args():
+		for i in 4:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var path := ProjectSettings.globalize_path("res://.screenshots/person_rig.png")
+		get_viewport().get_texture().get_image().save_png(path)
+		print("관절 사람 저장: ", path)
+		get_tree().quit()
+
+
+## --sheet: 설계도처럼 성인 12종을 4×3 칸에 앞·뒤로 세운다 (관절 그림). --ids로 바꿀 수 있다
+func _sheet() -> void:
+	var ids := _ids()
+	if "--all" in OS.get_cmdline_user_args():
+		# 그림이 있는 종 전부 (assets/characters, 주인공 제외)
+		ids = PackedStringArray()
+		for f in DirAccess.get_files_at("res://assets/characters"):
+			if f.ends_with(".png") and f != "player.png" and ResourceLoader.exists("res://data/npc/" + f.get_basename() + ".tres"):
+				ids.append(f.get_basename())
+	if ids.is_empty():
+		ids = PackedStringArray(["civ_f", "office", "delivery", "merchant", "gang_f", "boss", "thug", "thief",
+			"police", "swat", "firefighter", "assassin"])
+	var cols := 4 if ids.size() <= 12 else 7
+	var rows := ceili(ids.size() / float(cols))
+	var view := get_viewport().get_visible_rect().size
+	var cell := Vector2(view.x / cols, (view.y - TOP) / rows)
+	get_viewport().canvas_transform = IsoView.canvas(view, Vector2.ZERO, minf(5.0, cell.y / 40.0))
+	var inv := get_viewport().canvas_transform.affine_inverse()
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var title := Label.new()
+	title.text = "서울 거리 프로젝트 · 인물 %d종 앞·뒤 (그림이 없는 종은 관절 그림)" % ids.size()
+	title.position = Vector2(20, 14)
+	title.add_theme_font_size_override("font_size", 22)
+	layer.add_child(title)
+	var front := Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(Vector2(-1, 0.45)))
+	var back := Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(Vector2(1, -0.45)))
+	for i in ids.size():
+		var npc: NpcType = load("res://data/npc/%s.tres" % ids[i])
+		var corner := Vector2((i % cols) * cell.x, TOP + (i / cols) * cell.y)
+		for k in 2:
+			var rd := RigDoll.new()
+			rd.npc = npc
+			rd.gait = 0.0
+			rd.facing = front if k == 0 else back
+			add_child(rd)
+			rd.global_position = inv * (corner + Vector2(cell.x * (0.32 + k * 0.36), cell.y * 0.8))
+		var label := Label.new()
+		label.text = "%d. %s (%s)" % [i + 1, npc.display_name, ids[i]]
+		label.position = corner + Vector2(0, cell.y - 22)
+		label.size = Vector2(cell.x, 20)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 13)
+		layer.add_child(label)
+	if "--shot" in OS.get_cmdline_user_args():
+		for i in 4:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var path := ProjectSettings.globalize_path("res://.screenshots/person_sheet.png")
+		get_viewport().get_texture().get_image().save_png(path)
+		print("성인 관절 도감 저장: ", path)
 		get_tree().quit()
 
 

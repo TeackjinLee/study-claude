@@ -1,0 +1,1397 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>인물 모션 편집기</title>
+<!--
+  서울 거리 프로젝트 — 인물 모션 편집기 (브라우저에서 파일로 바로 연다. 서버·설치 없음)
+  그림(시트)을 넣으면 배경을 지우고 칸으로 잘라, 방향·동작(서 있기·걷기·달리기)마다 장면 순서를 엮는다.
+  방향키(WASD)로 미리 보고, Shift는 달리기. 결과는 같은 칸 크기·같은 발끝·같은 키로 맞춰 내보낸다.
+  게임 8방향 형식(<id>_dir8.png + .json)은 assets/characters/에 그대로 넣으면 PersonRig._draw_dir8이 쓴다.
+  다듬기 규칙은 tools/prepare_character_sprites.py와 같다: 테두리 플러드필로 배경 지우기, 초록 다리 띠는 신발 색으로,
+  시트마다 같은 배율(키 가운데값), 발끝은 가장 아래 점, 가로는 위쪽 55%(머리·몸통)의 무게중심.
+-->
+<style>
+:root{
+  --bg:#15171c;--panel:#1d2027;--panel2:#262a33;--line:#343a46;--text:#e7e9ef;--dim:#98a0b3;
+  --acc:#4f9dff;--acc2:#ffb347;--bad:#ff6b6b;--ok:#5fd38d;
+  --checker:repeating-conic-gradient(#2b2f38 0 25%,#23262e 0 50%) 0 0/12px 12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:13px/1.45 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;display:flex;flex-direction:column}
+header{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
+header .sp{flex:1}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer;font:inherit;white-space:nowrap}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button.warn:hover{border-color:var(--bad);color:var(--bad)}
+button.small{padding:2px 7px;font-size:12px}
+button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+input,select{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:5px;padding:3px 5px;font:inherit}
+input[type=number]{width:58px}
+input[type=checkbox]{accent-color:var(--acc)}
+label{white-space:nowrap}
+main{flex:1;min-height:0;display:grid;grid-template-columns:300px minmax(0,1fr) 500px}
+main>section{overflow:auto;padding:10px 12px;border-right:1px solid var(--line);min-height:0}
+main>section:last-child{border-right:0}
+h2{font-size:12px;margin:6px 0 8px;color:var(--dim);font-weight:600;letter-spacing:.03em;text-transform:none}
+.hint{color:var(--dim);font-size:12px}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:5px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:10px}
+.card .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.card canvas.thumb{width:100%;display:block;background:var(--checker);border-radius:4px;margin:6px 0}
+.opts{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 6px;align-items:center;font-size:12px}
+.opts input[type=number]{width:100%}
+.opts select{width:100%}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:18px 10px;text-align:center;color:var(--dim);cursor:pointer}
+.drop:hover,body.dragging .drop{border-color:var(--acc);color:var(--text)}
+/* 방향 고르기 */
+.modes{display:flex;gap:6px;margin-bottom:8px}
+.pad{display:grid;grid-template-columns:repeat(3,74px);grid-template-rows:repeat(3,52px);gap:5px}
+.pad button{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px;line-height:1.1}
+.pad button b{font-size:20px}
+.pad button small{font-size:11px;color:var(--dim)}
+.pad button.on small{color:#fff}
+.pad button.empty{opacity:.55}
+.pad .mid{display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;color:var(--dim)}
+.top{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+/* 장면 줄 */
+.strip{display:flex;flex-wrap:wrap;gap:6px;min-height:110px;padding:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.strip.over{border-color:var(--acc)}
+.fr{position:relative;border:2px solid transparent;border-radius:6px;background:var(--checker);cursor:grab;user-select:none}
+.fr canvas{display:block;height:92px}
+.fr .no{position:absolute;left:3px;top:1px;font-size:11px;color:#fff;text-shadow:0 0 3px #000}
+.fr .src{position:absolute;left:3px;bottom:1px;font-size:10px;color:#ddd;text-shadow:0 0 3px #000}
+.fr .x{position:absolute;right:2px;top:2px;width:18px;height:18px;padding:0;font-size:11px;line-height:16px;border-radius:9px;opacity:0}
+.fr:hover .x{opacity:1}
+.fr.sel{border-color:var(--acc)}
+.fr.play{box-shadow:0 0 0 2px var(--acc2)}
+.fr.before{box-shadow:-5px 0 0 -1px var(--acc)}
+.fr.miss{opacity:.4}
+.strip .end{width:30px;align-self:stretch;border-radius:6px}
+.strip .end.before{box-shadow:-5px 0 0 -1px var(--acc)}
+/* 칸 모음 */
+.pool{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 10px}
+.pool .pf{position:relative;background:var(--checker);border:1px solid var(--line);border-radius:4px;cursor:pointer}
+.pool .pf:hover{border-color:var(--acc)}
+.pool .pf img{display:block;height:70px}
+.pool .pf span{position:absolute;left:2px;top:0;font-size:10px;color:#fff;text-shadow:0 0 3px #000}
+.pool .pf.used{border-color:#3d6b4f}
+/* 미리보기 */
+#pvwrap{position:relative;height:max(320px,52vh);border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+#pv{width:100%;height:100%;display:block;outline:none}
+#pvwrap:focus-within{border-color:var(--acc)}
+#pvinfo{position:absolute;left:8px;top:6px;font-size:12px;color:#fff;text-shadow:0 0 3px #000;pointer-events:none}
+#pvkeys{position:absolute;right:8px;bottom:6px;font-size:11px;color:#ddd;text-shadow:0 0 3px #000;pointer-events:none;text-align:right}
+.grid2{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 8px;align-items:center;font-size:12px}
+.grid2 input[type=number]{width:100%}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#000c;color:#fff;padding:7px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9}
+#toast.show{opacity:1}
+details summary{cursor:pointer;color:var(--dim);margin:8px 0}
+details p,details li{color:var(--dim);font-size:12px}
+@media (max-width:1200px){main{grid-template-columns:260px minmax(0,1fr)}main>section:last-child{grid-column:1/-1;border-top:1px solid var(--line)}}
+@media (max-width:760px){main{display:block;overflow:auto}main>section{border-right:0;border-bottom:1px solid var(--line);overflow:visible}}
+</style>
+</head>
+<body>
+<header>
+  <h1>인물 모션 편집기</h1>
+  <label>이름(id) <input id="cid" value="character" style="width:110px"></label>
+  <button id="bOpen" class="primary">그림 넣기</button>
+  <input id="file" type="file" accept="image/*" multiple hidden>
+  <span class="sp"></span>
+  <button id="bUndo" title="되돌리기 (⌘Z)">↶</button>
+  <button id="bRedo" title="다시 하기 (⇧⌘Z)">↷</button>
+  <button id="bSaveProj">작업 저장</button>
+  <button id="bLoadProj">작업 열기</button>
+  <input id="projFile" type="file" accept=".json,application/json" hidden>
+  <button id="bExport">시트 내보내기</button>
+  <button id="bExportGame" class="primary">게임 8방향 내보내기</button>
+  <button id="bReset" class="warn">새로 시작</button>
+</header>
+<main>
+  <!-- 왼쪽: 원본 그림 -->
+  <section>
+    <h2>원본 그림</h2>
+    <div class="drop" id="drop">여기로 그림을 끌어 놓거나 눌러서 고르기<br><span class="hint">PNG·WebP·JPG, 여러 장 한 번에</span></div>
+    <div id="sheets" style="margin-top:10px"></div>
+    <details>
+      <summary>쓰는 법</summary>
+      <ol>
+        <li>그림을 넣으면 배경(마젠타·흰색·투명)을 지우고 열×행 칸으로 자릅니다. 칸 수가 틀리면 열·행을 고치세요.</li>
+        <li>가운데에서 동작(서 있기·걷기·달리기)과 방향을 고르고, 아래 칸 모음에서 장면을 눌러 넣습니다. 끌어서 순서를 바꾸고, ✕나 Delete로 뺍니다.</li>
+        <li>오른쪽 미리보기에서 방향키(또는 WASD)를 누르면 그 방향 동작이 나오고, Shift를 같이 누르면 달리기입니다. 스페이스는 멈춤, 쉼표·마침표는 한 장씩 넘깁니다.</li>
+        <li>없는 방향은 게임처럼 좌우 짝을 뒤집어 쓰고, 그것도 없으면 가장 가까운 방향을 씁니다.</li>
+        <li>크기는 오른쪽 "결과 칸"에서 정합니다. 모든 그림이 같은 칸 크기·같은 발끝·같은 키로 맞춰집니다.</li>
+        <li>파일 이름에 <code>_walk8_e</code>·<code>_key8_se</code>·<code>_run8_w</code>처럼 동작·방향이 있으면 알아서 그 자리에 넣습니다.</li>
+        <li>작업은 이 브라우저에 자동으로 남습니다. 다른 컴퓨터로 옮기려면 "작업 저장".</li>
+      </ol>
+    </details>
+  </section>
+
+  <!-- 가운데: 동작 편집 -->
+  <section>
+    <div class="top">
+      <div>
+        <h2>동작 · 방향</h2>
+        <div class="modes" id="modes"></div>
+        <div class="pad" id="pad"></div>
+      </div>
+      <div style="flex:1;min-width:260px">
+        <h2 id="clipTitle">동작</h2>
+        <div class="row">
+          <label>한 바퀴 <input id="clipCycle" type="number" step="0.05" min="0.1" placeholder="기본"> 초</label>
+          <label><input id="clipFlip" type="checkbox"> 동작 전체 좌우 뒤집기</label>
+        </div>
+        <div class="row">
+          <button class="small" id="tResample">장 수 맞추기</button><input id="tCount" type="number" min="1" max="64" value="16">
+          <button class="small" id="tReverse">순서 거꾸로</button>
+          <button class="small" id="tRotL" title="첫 장을 맨 뒤로">◀ 한 장 돌리기</button>
+          <button class="small" id="tRotR" title="마지막 장을 맨 앞으로">한 장 돌리기 ▶</button>
+          <button class="small warn" id="tClear">비우기</button>
+        </div>
+        <div class="row">
+          <button class="small" id="tMirror">좌우 짝 방향으로 뒤집어 복사</button>
+          <span class="hint">또는</span>
+          <select id="cpMode"></select><select id="cpDir"></select>
+          <label><input id="cpFlip" type="checkbox"> 뒤집기</label>
+          <button class="small" id="tCopy">로 복사</button>
+        </div>
+      </div>
+    </div>
+
+    <h2 style="margin-top:12px">장면 순서 <span class="hint" id="stripHint"></span></h2>
+    <div class="strip" id="strip"></div>
+    <div class="row" id="selPanel"></div>
+
+    <h2 style="margin-top:14px">칸 모음 <span class="hint">— 누르면 선택한 장면 뒤에 넣고, 끌어서 원하는 자리에 놓을 수도 있습니다</span></h2>
+    <div id="pool"></div>
+  </section>
+
+  <!-- 오른쪽: 미리보기·결과 크기 -->
+  <section>
+    <h2>미리보기 <span class="hint">— 방향키·WASD로 걷기, Shift 달리기</span></h2>
+    <div id="pvwrap"><canvas id="pv" tabindex="0"></canvas><div id="pvinfo"></div><div id="pvkeys"></div></div>
+    <div class="row">
+      <label>확대 <input id="zoom" type="range" min="0.25" max="8" step="0.25" value="3" style="width:120px"></label><span id="zoomV">×3</span>
+      <button class="small" id="bGameSize" title="게임 화면에서 보이는 키(약 34px)">게임 크기</button>
+      <button class="small" id="bPause">멈춤</button>
+    </div>
+    <div class="row">
+      <label><input id="oSmooth" type="checkbox" checked> 부드럽게</label>
+      <label><input id="oMove" type="checkbox" checked> 땅 움직이기</label>
+      <label><input id="oOnion" type="checkbox"> 앞 장 겹쳐 보기</label>
+      <label><input id="oGuide" type="checkbox" checked> 칸·발끝 선</label>
+      <label><input id="oAll" type="checkbox"> 8방향 함께</label>
+    </div>
+    <div class="row">
+      <label><input id="oLoop" type="checkbox" checked> 키를 안 누를 때 편집 중인 동작 반복</label>
+      <label><input id="oFollow" type="checkbox"> 누른 방향을 편집</label>
+    </div>
+
+    <h2 style="margin-top:14px">결과 칸 <span class="hint">— 모든 장면을 같은 칸·같은 발끝·같은 키로 맞춥니다</span></h2>
+    <div class="row">
+      <select id="preset"></select>
+    </div>
+    <div class="grid2">
+      <span>칸 가로</span><input id="oW" type="number" min="16" max="1024">
+      <span>칸 세로</span><input id="oH" type="number" min="16" max="1024">
+      <span>발끝 x</span><input id="oFx" type="number">
+      <span>발끝 y</span><input id="oFy" type="number">
+      <span>키(px)</span><input id="oBody" type="number" min="8" max="1024">
+      <span>가로 기준</span><select id="oAlign">
+        <option value="torso">머리·몸통 무게중심</option>
+        <option value="box">그림 가운데</option>
+        <option value="feet">발 가운데</option>
+      </select>
+      <span>키 맞추기</span><select id="oFit" style="grid-column:2/5">
+        <option value="sheet">그림마다 같은 배율 (걸음 따라 키가 조금씩 변한다)</option>
+        <option value="outlier">튀는 장면만 맞추기 (가운데값에서 5% 넘게 벗어난 장면)</option>
+        <option value="frame">장면마다 같은 키 (모든 장면의 키를 똑같이)</option>
+      </select>
+      <span></span><div style="grid-column:2/5" class="row"><button class="small" id="bFitBody" title="쓰는 장면이 모두 칸 안에 들어오는 가장 큰 키로">키 자동 (칸에 꽉 차게)</button></div>
+    </div>
+    <h2 style="margin-top:12px">빠르기</h2>
+    <div class="grid2">
+      <span>걷기 한 바퀴(초)</span><input id="cWalk" type="number" step="0.05" min="0.1">
+      <span>달리기 한 바퀴(초)</span><input id="cRun" type="number" step="0.05" min="0.1">
+      <span>서 있기 한 바퀴(초)</span><input id="cIdle" type="number" step="0.05" min="0.1">
+      <span></span><span></span>
+      <span>걷는 속도(px/초)</span><input id="sWalk" type="number" min="0">
+      <span>달리는 속도(px/초)</span><input id="sRun" type="number" min="0">
+    </div>
+    <p class="hint">속도는 결과 칸 픽셀 기준입니다. 발이 땅에서 미끄러져 보이면 속도나 한 바퀴 시간을 맞추세요.</p>
+    <p class="hint" id="outNote"></p>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+'use strict';
+// ───────────────────────── 기본 값 ─────────────────────────
+const DIRS = ['e', 'se', 's', 'sw', 'w', 'nw', 'n', 'ne'];          // 화면 각도 순서 (0°=오른쪽, 시계 방향) — PersonRig.DIR8과 같다
+const ARROW = {e: '→', se: '↘', s: '↓', sw: '↙', w: '←', nw: '↖', n: '↑', ne: '↗'};
+const DIR_NAME = {e: '오른쪽', se: '오른쪽 아래', s: '아래(앞)', sw: '왼쪽 아래', w: '왼쪽', nw: '왼쪽 위', n: '위(뒤)', ne: '오른쪽 위'};
+const MIRROR = {e: 'w', w: 'e', se: 'sw', sw: 'se', ne: 'nw', nw: 'ne', s: 's', n: 'n'};
+const MODES = ['idle', 'walk', 'run'];
+const MODE_NAME = {idle: '서 있기', walk: '걷기', run: '달리기'};
+const PAD = [['nw', 'n', 'ne'], ['w', null, 'e'], ['sw', 's', 'se']];
+const PRESETS = {
+  dir8: {name: '게임 8방향·4방향 칸 128×112 (발끝 64,108)', w: 128, h: 112, fx: 64, fy: 108, body: 93},
+  base: {name: '게임 기본 칸 96×112 (발끝 48,108)', w: 96, h: 112, fx: 48, fy: 108, body: 96},
+  big: {name: '크게 256×224', w: 256, h: 224, fx: 128, fy: 216, body: 186},
+  custom: {name: '직접 정하기'},
+};
+const GAME = PRESETS.dir8;          // 게임 8방향 시트 칸 (person_rig.gd DIR4_CELL·DIR4_FOOT)
+const GAME_FRAMES = 16;             // 게임 8방향 걷기 장 수 (DIR8_FRAMES)
+const GAME_SCREEN_BODY = 31 * 1.1;  // 게임 화면의 서 있는 키 (SPRITE_HEIGHT × ChaseCamera.BASE_ZOOM)
+const MARKER_FILL = [34, 33, 36];   // 초록 다리 띠를 지울 때 칠하는 색 (prepare_character_sprites.py와 같다)
+const MOVE_KEYS = {ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+                   KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0]};
+
+const S = {
+  id: 'character',
+  out: {preset: 'dir8', w: 128, h: 112, fx: 64, fy: 108, body: 93, align: 'torso', fit: 'sheet'},
+  cycle: {idle: 1.6, walk: 1.0, run: 0.62},
+  speed: {walk: 34, run: 90},
+  sheets: [],
+  clips: {},                 // "walk:e" → {frames: [{f, dx, dy, flip}], cycle, flip}
+  cur: {mode: 'walk', dir: 'e'},
+  sel: -1,
+  nextSheet: 1,
+};
+const frames = new Map();    // "s1:5" → 잘라낸 장면 {canvas, w, h, ax: {torso, box, feet}, spread, thumb}
+let cellCache = new Map();   // 결과 칸 그림
+const P = {zoom: 3, smooth: true, move: true, onion: false, guide: true, all: false, loop: true, follow: false,
+           paused: false, phase: 0, pos: {x: 0, y: 0}, lastDir: 'se', keys: new Set(), shift: false, last: 0,
+           playKey: '', playIdx: -1, step: 0};
+const undoStack = [], redoStack = [];
+
+// ───────────────────────── 작은 도구 ─────────────────────────
+const $ = (s) => document.querySelector(s);
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'style') e.style.cssText = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (k === 'value') e.value = v;
+    else if (k === 'checked') e.checked = !!v;
+    else if (v !== undefined && v !== null && v !== false) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat()) if (c != null) e.append(c instanceof Node ? c : document.createTextNode(c));
+  return e;
+}
+function mk(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function hex(c) { return '#' + c.map(v => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase(); }
+function median(a) { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; }
+function download(blob, name) {
+  const a = el('a', {href: URL.createObjectURL(blob), download: name});
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const canvasBlob = (c) => new Promise(r => c.toBlob(r, 'image/png'));
+const sheetById = (id) => S.sheets.find(s => s.id === id);
+const clipKey = (mode, dir) => mode + ':' + dir;
+function clipOf(mode, dir, create) {
+  const k = clipKey(mode, dir);
+  if (!S.clips[k] && create) S.clips[k] = {frames: [], cycle: null, flip: false};
+  return S.clips[k];
+}
+const curClip = () => clipOf(S.cur.mode, S.cur.dir, true);
+const validRefs = (c) => c ? c.frames.filter(r => frames.has(r.f)) : [];
+
+// ───────────────────────── 배경 지우기 ─────────────────────────
+function borderMedian(px, w, h) {
+  const rs = [], gs = [], bs = [];
+  const add = (i) => { rs.push(px[i * 4]); gs.push(px[i * 4 + 1]); bs.push(px[i * 4 + 2]); };
+  const stepX = Math.max(1, w >> 9), stepY = Math.max(1, h >> 9);
+  for (let x = 0; x < w; x += stepX) { add(x); add((h - 1) * w + x); }
+  for (let y = 0; y < h; y += stepY) { add(y * w); add(y * w + w - 1); }
+  return [median(rs), median(gs), median(bs)];
+}
+
+// 배경 마스크에서 r px 안쪽 띠 (배경과 맞닿은 테두리)
+function growBand(bgm, w, h, r) {
+  let near = bgm.slice();
+  for (let k = 0; k < r; k++) {
+    const g = near.slice();
+    for (let y = 0; y < h; y++) {
+      const o = y * w;
+      for (let x = 0; x < w; x++) {
+        if (near[o + x]) continue;
+        if ((x > 0 && near[o + x - 1]) || (x < w - 1 && near[o + x + 1]) || (y > 0 && near[o + x - w]) || (y < h - 1 && near[o + x + w])) g[o + x] = 1;
+      }
+    }
+    near = g;
+  }
+  for (let i = 0; i < near.length; i++) if (bgm[i]) near[i] = 0;
+  return near;
+}
+
+// 다리 구분 초록(#00FF00) 띠와 번진 가장자리를 신발 색으로 칠한다. 칠한 점 수를 돌려준다
+function fillMarker(px, w, h) {
+  const n = w * h, core = new Uint8Array(n);
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    const r = px[i * 4], g = px[i * 4 + 1], b = px[i * 4 + 2];
+    if (g > 150 && r < 120 && b < 120 && px[i * 4 + 3] > 10) { core[i] = 1; count++; }
+  }
+  if (count < 30) return 0;   // 우연히 초록 점 몇 개는 그대로 둔다
+  const near = growBand(core, w, h, 2);
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    if (core[i] || (near[i] && px[o + 1] - Math.max(px[o], px[o + 2]) > 50)) {
+      px[o] = MARKER_FILL[0]; px[o + 1] = MARKER_FILL[1]; px[o + 2] = MARKER_FILL[2];
+    }
+  }
+  return count;
+}
+
+// 시트 한 장의 배경을 지워 sh.rgba(RGBA)에 둔다
+function keySheet(sh) {
+  const {w, h} = sh, n = w * h;
+  const px = new Uint8ClampedArray(sh.raw.data);
+  let transp = 0;
+  for (let i = 3; i < px.length; i += 4) if (px[i] < 10) transp++;
+  let mode = sh.opts.bg;
+  if (mode === 'auto') mode = transp > n * 0.05 ? 'alpha' : 'key';
+  const bg = borderMedian(px, w, h);
+  const isKey = Math.max(...bg) - Math.min(...bg) > 120;           // 마젠타·초록 같은 원색 배경
+  const greenKey = isKey && bg[1] > bg[0] + 80 && bg[1] > bg[2] + 80;
+  const marked = sh.opts.marker && !greenKey ? fillMarker(px, w, h) : 0;
+  let info;
+  if (mode === 'alpha') {
+    // 처음부터 투명한 그림은 그 투명도를 그대로 쓴다 (검은 옷이 배경과 함께 지워지지 않게)
+    for (let i = 0; i < n; i++) if (px[i * 4 + 3] < 10) px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = px[i * 4 + 3] = 0;
+    info = '투명 그림 그대로';
+  } else {
+    const lim = isKey ? 90 : sh.opts.tol, lim2 = lim * lim;
+    const d2 = (i) => { const r = px[i * 4] - bg[0], g = px[i * 4 + 1] - bg[1], b = px[i * 4 + 2] - bg[2]; return r * r + g * g + b * b; };
+    const bgm = new Uint8Array(n), q = new Int32Array(n);
+    let qh = 0, qt = 0;
+    const push = (i) => { if (!bgm[i] && d2(i) < lim2) { bgm[i] = 1; q[qt++] = i; } };
+    // 테두리에서 이어진 배경만 지운다 (흰 셔츠처럼 안쪽의 배경색은 남는다)
+    for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+    while (qh < qt) {
+      const i = q[qh++], x = i % w;
+      if (x > 0) push(i - 1);
+      if (x < w - 1) push(i + 1);
+      if (i >= w) push(i - w);
+      if (i < n - w) push(i + w);
+    }
+    // 원색 배경은 캐릭터에 없는 색이라 팔과 몸 사이처럼 갇힌 구멍도 지운다
+    if (isKey) for (let i = 0; i < n; i++) if (!bgm[i] && d2(i) < lim2) bgm[i] = 1;
+    // 배경과 맞닿은 테두리: 배경색이 섞인 만큼 반투명으로 하고 색에서 배경을 뺀다 (분홍 테두리 제거)
+    const band = growBand(bgm, w, h, isKey ? 3 : 2);
+    const T = isKey ? 255 : lim * 3;
+    const keyCh = [0, 1, 2].filter(c => bg[c] > 128), other = [0, 1, 2].filter(c => bg[c] <= 128);
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      if (bgm[i]) { px[o] = px[o + 1] = px[o + 2] = px[o + 3] = 0; continue; }
+      px[o + 3] = 255;
+      if (!band[i]) continue;
+      const a = Math.sqrt(d2(i)) / T;
+      if (a < 0.12) { px[o] = px[o + 1] = px[o + 2] = px[o + 3] = 0; continue; }
+      if (a < 1) {
+        for (let c = 0; c < 3; c++) px[o + c] = bg[c] + (px[o + c] - bg[c]) / a;
+        px[o + 3] = a * 255;
+      }
+      // 번진 배경색 기운 빼기 (마젠타면 빨강·파랑이 같이 높고 초록만 낮다)
+      if (isKey && keyCh.length && other.length) {
+        const lo = Math.min(...keyCh.map(c => px[o + c])), hi = Math.max(...other.map(c => px[o + c]));
+        if (lo - hi > 30) for (const c of keyCh) px[o + c] -= (lo - hi) * 0.75;
+      }
+    }
+    info = `배경 ${hex(bg)} 지움`;
+  }
+  if (marked) info += ` · 초록 띠 ${marked}점 지움`;
+  sh.rgba = px;
+  sh.keyInfo = info;
+  const c = mk(w, h);
+  c.getContext('2d').putImageData(new ImageData(px, w, h), 0, 0);
+  sh.keyCanvas = c;
+}
+
+// ───────────────────────── 칸 나누기 ─────────────────────────
+function profiles(sh) {
+  const {w, h} = sh, px = sh.rgba, cx = new Uint32Array(w), cy = new Uint32Array(h);
+  for (let y = 0; y < h; y++) {
+    let row = 0;
+    for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 40) { cx[x]++; row++; }
+    cy[y] = row;
+  }
+  return {cx, cy};
+}
+// 그림이 있는 줄(열)들의 덩어리 [시작, 끝)
+function runs(prof, other, size) {
+  const thr = Math.max(1, other * 0.003), out = [];
+  let s = -1;
+  for (let i = 0; i <= size; i++) {
+    const on = i < size && prof[i] > thr;
+    if (on && s < 0) s = i;
+    if (!on && s >= 0) { out.push([s, i]); s = -1; }
+  }
+  const merged = [];
+  for (const r of out) {
+    const last = merged[merged.length - 1];
+    if (last && r[0] - last[1] < size * 0.006) last[1] = r[1]; else merged.push([...r]);
+  }
+  return merged.filter(r => r[1] - r[0] >= size * 0.012);
+}
+// 칸 경계: 덩어리 수가 칸 수와 같으면 틈 가운데로, 아니면 똑같이 나눈 선을 근처에서 그림이 가장 적은 곳으로 옮긴다
+function bounds(rs, n, size, prof) {
+  if (rs.length === n && n > 1) {
+    const b = [0];
+    for (let i = 0; i < n - 1; i++) b.push(Math.round((rs[i][1] + rs[i + 1][0]) / 2));
+    b.push(size);
+    return b;
+  }
+  const b = Array.from({length: n + 1}, (_, i) => Math.round(i * size / n));
+  if (prof) {
+    const r = Math.round(size / n * 0.08);
+    for (let i = 1; i < n; i++) {
+      let best = b[i];
+      for (let k = b[i] - r; k <= b[i] + r; k++) if (prof[k] < prof[best]) best = k;
+      b[i] = best;
+    }
+  }
+  return b;
+}
+// 틈이 없이 붙은 줄(위 칸 발과 아래 칸 머리가 겹친다): 똑같이 나눈 선이 모두 그림이 적은 곳을 지나는 칸 수를 고른다
+function periodGuess(prof, size, maxN) {
+  let mean = 0;
+  for (let i = 0; i < size; i++) mean += prof[i];
+  mean = mean / size || 1;
+  let best = 0, bestScore = 0.5;
+  for (let n = 2; n <= maxN; n++) {
+    const r = Math.max(2, Math.round(size / n * 0.06));
+    let s = 0;
+    for (let i = 1; i < n; i++) {
+      const c = Math.round(i * size / n);
+      let m = Infinity;
+      for (let k = Math.max(0, c - r); k <= Math.min(size - 1, c + r); k++) m = Math.min(m, prof[k]);
+      s += m;
+    }
+    const score = s / (n - 1) / mean;
+    // 2칸 선이 4칸 선에 들어 있듯 배수끼리는 점수가 같다 — 같으면 더 잘게 나눈 쪽
+    if (score < bestScore - 0.03 || (best && n % best === 0 && score <= bestScore + 0.03)) { best = n; bestScore = Math.min(score, bestScore); }
+  }
+  return best;
+}
+function guessGrid(sh) {
+  const name = sh.name.toLowerCase();
+  let g = null;
+  if (/_(walk8|run8|walk16|run16)_/.test(name) || /_dir4_[sne]\b/.test(name)) g = [4, 4];
+  else if (/_key8_/.test(name)) g = [4, 2];
+  else if (/_key12_/.test(name)) g = [6, 2];   // 한 걸음 6장 × 2줄 (CODEX_KEY12_WALK4_PROMPT.md)
+  else if (/_dir4/.test(name)) g = [8, 4];
+  if (!g) {
+    const {cx, cy} = profiles(sh);
+    // 칸마다 틈이 있으면 덩어리 수, 틈이 없으면 그림이 적은 줄이 고르게 지나는 칸 수
+    const guess = (prof, other, size, maxN) => {
+      const n = runs(prof, other, size).length;
+      const p = periodGuess(prof, size, maxN);
+      return p > n ? p : n >= 1 && n <= maxN ? n : p || 0;
+    };
+    const c = guess(cx, sh.h, sh.w, 16), r = guess(cy, sh.w, sh.h, 12);
+    g = [c || 4, r || 2];
+  }
+  sh.opts.cols = g[0]; sh.opts.rows = g[1];
+}
+
+// 칸 하나: 가장 큰 덩어리 + 붙어 있는 조각만 남겨 잘라 낸다. 옆 칸에서 넘어온 조각·점은 버린다
+function cutCell(sh, x0, x1, y0, y1, ry0) {
+  const W = sh.w, px = sh.rgba, rw = x1 - x0, rh = y1 - ry0;
+  if (rw < 2 || rh < 2) return null;
+  const lab = new Int32Array(rw * rh), q = new Int32Array(rw * rh), comps = [{}];
+  for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+    const li = y * rw + x;
+    if (lab[li] || px[((ry0 + y) * W + x0 + x) * 4 + 3] <= 8) continue;
+    const id = comps.length, c = {id, area: 0, x0: x, x1: x, y0: y, y1: y};
+    comps.push(c);
+    let qh = 0, qt = 0;
+    lab[li] = id; q[qt++] = li;
+    while (qh < qt) {
+      const j = q[qh++], jx = j % rw, jy = (j - jx) / rw;
+      c.area++;
+      if (jx < c.x0) c.x0 = jx; if (jx > c.x1) c.x1 = jx;
+      if (jy < c.y0) c.y0 = jy; if (jy > c.y1) c.y1 = jy;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = jx + dx, ny = jy + dy;
+        if (nx < 0 || ny < 0 || nx >= rw || ny >= rh) continue;
+        const k = ny * rw + nx;
+        if (lab[k] || px[((ry0 + ny) * W + x0 + nx) * 4 + 3] <= 8) continue;
+        lab[k] = id; q[qt++] = k;
+      }
+    }
+  }
+  if (comps.length < 2) return null;
+  const big = comps.slice(1).reduce((a, b) => (b.area > a.area ? b : a));
+  const keep = new Uint8Array(comps.length);
+  let bx0 = 1e9, bx1 = -1, by0 = 1e9, by1 = -1, area = 0;
+  for (const c of comps.slice(1)) {
+    if (c !== big) {
+      if (c.area < Math.max(15, big.area * 0.02)) continue;
+      if (c.y1 + ry0 < y0) continue;                       // 위 칸 인물의 발 (여유 띠 안에만 있다)
+      const touch = (c.x0 === 0 && x0 > 0) || (c.x1 === rw - 1 && x1 < W) || (c.y0 === 0 && ry0 > 0) || (c.y1 === rh - 1 && y1 < sh.h);
+      if (touch && c.area < big.area * 0.25) continue;     // 옆 칸에서 넘어온 조각
+    }
+    keep[c.id] = 1; area += c.area;
+    bx0 = Math.min(bx0, c.x0); bx1 = Math.max(bx1, c.x1); by0 = Math.min(by0, c.y0); by1 = Math.max(by1, c.y1);
+  }
+  const cw = bx1 - bx0 + 1, ch = by1 - by0 + 1;
+  const img = new ImageData(cw, ch), d = img.data;
+  let sx = 0, sn = 0, fx = 0, fn = 0, lo = 1e9, hi = -1;
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const li = (by0 + y) * rw + bx0 + x;
+    if (!keep[lab[li]]) continue;
+    const s = ((ry0 + by0 + y) * W + x0 + bx0 + x) * 4, o = (y * cw + x) * 4;
+    d[o] = px[s]; d[o + 1] = px[s + 1]; d[o + 2] = px[s + 2]; d[o + 3] = px[s + 3];
+    if (px[s + 3] > 128) {
+      if (y < ch * 0.55) { sx += x; sn++; }                // 머리·몸통 무게중심 — 다리를 벌려도 흔들리지 않게
+      if (y >= ch * 0.85) { fx += x; fn++; }
+      if (y >= ch * 0.75) { lo = Math.min(lo, x); hi = Math.max(hi, x); }
+    }
+  }
+  const canvas = mk(cw, ch);
+  canvas.getContext('2d').putImageData(img, 0, 0);
+  return {canvas, w: cw, h: ch, area, spread: hi >= lo ? (hi - lo) / ch : 0,
+          ax: {torso: sn ? sx / sn + 0.5 : cw / 2, box: cw / 2, feet: fn ? fx / fn + 0.5 : cw / 2}};
+}
+
+function sliceSheet(sh) {
+  for (const id of sh.frames || []) frames.delete(id);
+  const {cols, rows} = sh.opts;
+  const {cx, cy} = profiles(sh);
+  const xs = bounds(runs(cx, sh.h, sh.w), cols, sh.w, cx), ys = bounds(runs(cy, sh.w, sh.h), rows, sh.h, cy);
+  const cut = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const y0 = ys[r], y1 = ys[r + 1];
+    // 머리카락이 윗줄로 넘어가는 그림이 있어 위로 여유를 두고 읽는다
+    const ry0 = Math.max(0, Math.round(y0 - (y1 - y0) * sh.opts.pad / 100));
+    const fr = cutCell(sh, xs[c], xs[c + 1], y0, y1, ry0);
+    cut.push(fr);
+  }
+  const maxArea = Math.max(0, ...cut.map(f => (f ? f.area : 0)));
+  sh.frames = [];
+  cut.forEach((fr, idx) => {
+    if (!fr || fr.area < maxArea * 0.2) return;            // 빈 칸 (옆 칸 조각만 있다)
+    fr.id = sh.id + ':' + idx; fr.sheet = sh.id; fr.idx = idx;
+    const t = mk(Math.max(1, Math.round(fr.w * 70 / fr.h)), 70), tx = t.getContext('2d');
+    tx.imageSmoothingQuality = 'high';
+    tx.drawImage(fr.canvas, 0, 0, t.width, t.height);
+    fr.thumb = t.toDataURL();
+    frames.set(fr.id, fr);
+    sh.frames.push(fr.id);
+  });
+  sh.median = median(sh.frames.map(id => frames.get(id).h));
+  sh.grid = {xs, ys};
+}
+
+function processSheet(sh, stage) {
+  if (stage <= 0) keySheet(sh);
+  if (stage <= 1) sliceSheet(sh);
+  cellCache.clear();
+}
+
+async function addSheet(blob, name, opts, id) {
+  const bmp = await createImageBitmap(blob);
+  const sh = {id: id || 's' + S.nextSheet++, name, blob, w: bmp.width, h: bmp.height, frames: [],
+              opts: Object.assign({cols: 0, rows: 0, bg: 'auto', tol: 40, marker: true, pad: 8, scale: 100, dy: 0}, opts || {})};
+  if (id) S.nextSheet = Math.max(S.nextSheet, parseInt(id.slice(1), 10) + 1 || S.nextSheet);
+  const c = mk(sh.w, sh.h), x = c.getContext('2d', {willReadFrequently: true});
+  x.drawImage(bmp, 0, 0);
+  sh.raw = x.getImageData(0, 0, sh.w, sh.h);
+  bmp.close && bmp.close();
+  keySheet(sh);
+  if (!sh.opts.cols || !sh.opts.rows) guessGrid(sh);
+  sliceSheet(sh);
+  S.sheets.push(sh);
+  cellCache.clear();
+  return sh;
+}
+
+// 파일 이름에서 동작·방향을 읽어 빈 자리에 넣는다 (예: 02_office_key8_se.png → 걷기 ↘)
+function autoAssign(sh) {
+  const n = sh.name.toLowerCase();
+  let mode = null, dir = null, m;
+  if ((m = n.match(/_(walk|key|run|idle)\d*_(se|sw|ne|nw|e|s|w|n)(?=[._\-]|$)/))) {
+    mode = m[1] === 'run' ? 'run' : m[1] === 'idle' ? 'idle' : 'walk'; dir = m[2];
+  } else if ((m = n.match(/_(walk|run)_(front|back)/))) {
+    mode = m[1]; dir = m[2] === 'front' ? 'se' : 'ne';      // 예전 사선 시트: 앞 ↘ · 뒤 ↗
+  } else if ((m = n.match(/_(walk|run)_dir4_(s|n|e)(?=[._\-]|$)/))) {
+    mode = m[1]; dir = m[2];
+  }
+  if (!mode) return null;
+  const c = clipOf(mode, dir, true);
+  if (c.frames.length) return null;
+  c.frames = sh.frames.map(f => ({f, dx: 0, dy: 0, flip: false}));
+  return [mode, dir];
+}
+
+// ───────────────────────── 결과 칸 그리기 ─────────────────────────
+function sheetScale(sh) { return S.out.body / Math.max(1, sh.median) * sh.opts.scale / 100; }
+const OUTLIER = 0.05;   // "튀는 장면만": 키가 시트 가운데값에서 이만큼 넘게 다르면 이 안으로 줄이거나 늘린다
+// 장면 하나의 배율 (키 맞추기 방식에 따라)
+function frameScale(fr, sh) {
+  const s = sheetScale(sh);
+  const r = fr.h / Math.max(1, sh.median);
+  if (S.out.fit === 'frame') return s / r;
+  if (S.out.fit === 'outlier') return s * Math.min(1 + OUTLIER, Math.max(1 - OUTLIER, r)) / r;
+  return s;
+}
+// 쓰는 장면(없으면 모든 장면)이 칸 밖으로 나가지 않는 가장 큰 키
+function fitBody() {
+  const o = S.out, used = [];
+  for (const c of Object.values(S.clips)) for (const r of validRefs(c)) used.push([r, !!r.flip !== !!c.flip]);
+  if (!used.length) for (const id of frames.keys()) used.push([{f: id, dx: 0, dy: 0}, false]);
+  if (!used.length) return null;
+  let best = Infinity;
+  for (const [r, flip] of used) {
+    const fr = frames.get(r.f), sh = sheetById(fr.sheet);
+    const g = frameScale(fr, sh) / o.body;            // 키 1px당 이 장면의 배율
+    const fy = o.fy + (r.dy | 0) + (sh.opts.dy | 0), fx = o.fx + (r.dx | 0);
+    const ax = fr.ax[o.align], left = flip ? fr.w - ax : ax, right = flip ? ax : fr.w - ax;
+    best = Math.min(best, (fy - 2) / (fr.h * g), (fx - 1) / (left * g), (o.w - fx - 1) / (right * g));
+  }
+  return Math.max(8, Math.floor(best));
+}
+
+// 큰 그림을 반씩 줄여 가며 줄인다 (한 번에 줄이면 거칠다)
+function scaledCanvas(fr, s) {
+  const tw = Math.max(1, Math.round(fr.w * s)), th = Math.max(1, Math.round(fr.h * s));
+  if (fr._sc && fr._sc.width === tw && fr._sc.height === th) return fr._sc;
+  let cur = fr.canvas, cw = fr.w, ch = fr.h;
+  while (cw / 2 >= tw && ch / 2 >= th) {
+    const nc = mk(Math.ceil(cw / 2), Math.ceil(ch / 2)), x = nc.getContext('2d');
+    x.imageSmoothingQuality = 'high';
+    x.drawImage(cur, 0, 0, cw, ch, 0, 0, nc.width, nc.height);
+    cur = nc; cw = nc.width; ch = nc.height;
+  }
+  const out = mk(tw, th), x = out.getContext('2d');
+  x.imageSmoothingQuality = 'high';
+  x.drawImage(cur, 0, 0, cw, ch, 0, 0, tw, th);
+  fr._sc = out;
+  return out;
+}
+
+// 장면 하나를 결과 칸(발끝·키·가로 기준을 맞춘 그림)으로
+function renderCell(ref, extraFlip) {
+  const fr = frames.get(ref.f);
+  if (!fr) return null;
+  const flip = !!ref.flip !== !!extraFlip;
+  const key = ref.f + '|' + flip + '|' + (ref.dx | 0) + '|' + (ref.dy | 0);
+  let c = cellCache.get(key);
+  if (c) return c;
+  const sh = sheetById(fr.sheet), o = S.out;
+  const sc = scaledCanvas(fr, frameScale(fr, sh));
+  const ax = Math.round(fr.ax[o.align] * sc.width / fr.w);
+  const fx = o.fx + (ref.dx | 0), fy = o.fy + (ref.dy | 0) + (sh.opts.dy | 0);
+  c = mk(o.w, o.h);
+  const x = c.getContext('2d');
+  if (flip) { x.translate(fx, 0); x.scale(-1, 1); x.drawImage(sc, -ax, fy - sc.height); }
+  else x.drawImage(sc, fx - ax, fy - sc.height);
+  if (cellCache.size > 3000) cellCache.clear();
+  cellCache.set(key, c);
+  return c;
+}
+
+// ───────────────────────── 방향 고르기 (게임과 같은 규칙) ─────────────────────────
+const hasClip = (mode, d) => validRefs(S.clips[clipKey(mode, d)]).length > 0;
+function nearest(mode, dir) {
+  const ok = DIRS.map(d => hasClip(mode, d) ? {d, flip: false}
+    : (MIRROR[d] !== d && hasClip(mode, MIRROR[d])) ? {d: MIRROR[d], flip: true} : null);
+  const k = DIRS.indexOf(dir);
+  if (ok[k]) return Object.assign({exact: true}, ok[k]);
+  // 거리가 같으면 번호가 작은 쪽 (PersonRig.dir8_pick과 같다 — ↑는 ↖, →는 ↘)
+  for (let off = 1; off <= 4; off++) {
+    for (const j of [(k - off + 8) % 8, (k + off) % 8].sort((a, b) => a - b)) if (ok[j]) return Object.assign({exact: false}, ok[j]);
+  }
+  return null;
+}
+function fallbackNote(e, dir) {
+  if (e.d === dir) return '';
+  return e.flip ? `${ARROW[e.d]}를 뒤집어 씀` : `가까운 ${ARROW[e.d]}를 씀`;
+}
+// 그 방향·동작에 실제로 그릴 장면들 {refs, flip, cycle, note, key, still}
+function resolve(mode, dir) {
+  let e = nearest(mode, dir);
+  if (e) {
+    const c = S.clips[clipKey(mode, e.d)];
+    return {refs: validRefs(c), flip: e.flip !== !!c.flip, cycle: c.cycle || S.cycle[mode], note: fallbackNote(e, dir),
+            key: e.d === dir && !e.flip ? clipKey(mode, dir) : ''};
+  }
+  if (mode === 'idle' || mode === 'run') {
+    e = nearest('walk', dir);
+    if (!e) return null;
+    const c = S.clips[clipKey('walk', e.d)], refs = validRefs(c);
+    const base = {flip: e.flip !== !!c.flip, key: ''};
+    if (mode === 'run') return Object.assign(base, {refs, cycle: (c.cycle || S.cycle.walk) * 0.55, note: ('달리기 없음 — 걷기를 빠르게 ' + fallbackNote(e, dir)).trim()});
+    // 서 있기가 없으면 다리가 가장 덜 벌어진 걷기 장면 (게임 시트 0열과 같다)
+    const still = refs.reduce((a, b) => (frames.get(b.f).spread < frames.get(a.f).spread ? b : a));
+    return Object.assign(base, {refs: [still], cycle: 1, note: ('서 있기 없음 — 걷기에서 다리 모은 장면 ' + fallbackNote(e, dir)).trim()});
+  }
+  return null;
+}
+
+// ───────────────────────── 되돌리기·자동 저장 ─────────────────────────
+function pushUndo() {
+  undoStack.push(JSON.stringify(S.clips));
+  if (undoStack.length > 120) undoStack.shift();
+  redoStack.length = 0;
+}
+function undo() {
+  if (!undoStack.length) return toast('되돌릴 것이 없습니다');
+  redoStack.push(JSON.stringify(S.clips));
+  S.clips = JSON.parse(undoStack.pop());
+  changed(true);
+}
+function redo() {
+  if (!redoStack.length) return toast('다시 할 것이 없습니다');
+  undoStack.push(JSON.stringify(S.clips));
+  S.clips = JSON.parse(redoStack.pop());
+  changed(true);
+}
+
+const DB = {
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('person-motion-editor', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  },
+  async put(v) {
+    const db = await this.open();
+    await new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, 'project'); t.oncomplete = res; t.onerror = () => rej(t.error); });
+  },
+  async get() {
+    const db = await this.open();
+    return new Promise((res, rej) => { const r = db.transaction('kv').objectStore('kv').get('project'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  },
+};
+function snapshot(withBlobs) {
+  return {version: 1, id: S.id, out: S.out, cycle: S.cycle, speed: S.speed, clips: S.clips, cur: S.cur,
+          sheets: S.sheets.map(s => ({id: s.id, name: s.name, opts: s.opts, blob: withBlobs ? s.blob : undefined}))};
+}
+let saveTimer = 0;
+function autosave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => { try { await DB.put(snapshot(true)); } catch (e) { /* 저장이 막힌 브라우저 — 무시 */ } }, 700);
+}
+async function restore(data, blobOf) {
+  S.sheets = []; frames.clear(); cellCache.clear();
+  S.nextSheet = 1;
+  for (const s of data.sheets || []) {
+    try { await addSheet(await blobOf(s), s.name, s.opts, s.id); } catch (e) { console.warn('그림을 못 읽음', s.name, e); }
+  }
+  Object.assign(S.out, data.out || {});
+  Object.assign(S.cycle, data.cycle || {});
+  Object.assign(S.speed, data.speed || {});
+  S.id = data.id || S.id;
+  S.clips = data.clips || {};
+  S.cur = data.cur || S.cur;
+  S.sel = -1;
+}
+
+// ───────────────────────── 화면 그리기 ─────────────────────────
+function changed(clipsOnly) {
+  if (!clipsOnly) cellCache.clear();
+  const c = curClip();
+  if (S.sel >= c.frames.length) S.sel = c.frames.length - 1;
+  renderPad(); renderClip(); renderPool();
+  if (!clipsOnly) renderSheets();
+  autosave();
+}
+function renderAll() { renderSheets(); renderPad(); renderClip(); renderPool(); renderOut(); }
+
+function renderSheets() {
+  const box = $('#sheets');
+  box.innerHTML = '';
+  for (const sh of S.sheets) {
+    const thumb = mk(560, Math.round(560 * sh.h / sh.w));
+    const tx = thumb.getContext('2d');
+    tx.drawImage(sh.keyCanvas, 0, 0, thumb.width, thumb.height);
+    const k = thumb.width / sh.w;
+    tx.strokeStyle = 'rgba(79,157,255,.8)'; tx.lineWidth = 1.5;
+    for (const x of sh.grid.xs) { tx.beginPath(); tx.moveTo(x * k, 0); tx.lineTo(x * k, thumb.height); tx.stroke(); }
+    for (const y of sh.grid.ys) { tx.beginPath(); tx.moveTo(0, y * k); tx.lineTo(thumb.width, y * k); tx.stroke(); }
+    tx.font = '18px sans-serif'; tx.fillStyle = '#ffb347';
+    for (const id of sh.frames) {
+      const idx = frames.get(id).idx, c = idx % sh.opts.cols, r = (idx / sh.opts.cols) | 0;
+      tx.fillText(String(idx + 1), sh.grid.xs[c] * k + 4, sh.grid.ys[r] * k + 18);
+    }
+    const num = (key, attrs, stage) => el('input', Object.assign({type: 'number', value: sh.opts[key], onchange: (e) => {
+      const v = parseFloat(e.target.value);
+      if (!isFinite(v)) return;
+      sh.opts[key] = v;
+      processSheet(sh, stage);
+      changed();
+    }}, attrs));
+    const used = new Set(Object.values(S.clips).flatMap(c => c.frames.map(r => r.f)));
+    box.append(el('div', {class: 'card'},
+      el('div', {class: 'row'}, el('span', {class: 'name', title: sh.name}, sh.name),
+        el('button', {class: 'small warn', title: '이 그림 빼기', onclick: () => removeSheet(sh)}, '✕')),
+      thumb,
+      el('div', {class: 'opts'},
+        '열', num('cols', {min: 1, max: 32}, 1), '행', num('rows', {min: 1, max: 32}, 1),
+        '배경', el('select', {onchange: (e) => { sh.opts.bg = e.target.value; processSheet(sh, 0); changed(); }},
+          ...[['auto', '자동'], ['alpha', '투명 그대로'], ['key', '배경색 지우기']].map(([v, t]) => el('option', {value: v, selected: sh.opts.bg === v}, t))),
+        '오차', num('tol', {min: 5, max: 120, title: '흰색·회색 배경을 얼마나 넓게 지울지'}, 0),
+        '위 여유%', num('pad', {min: 0, max: 40, title: '머리가 윗줄로 넘어간 그림이면 늘린다'}, 1),
+        '크기%', num('scale', {min: 10, max: 400, title: '이 그림만 더 크게·작게'}, 2),
+        '위아래', num('dy', {min: -100, max: 100, title: '이 그림만 발끝을 위(−)·아래(+)로'}, 2),
+        el('label', {style: 'grid-column:3/5'}, el('input', {type: 'checkbox', checked: sh.opts.marker, onchange: (e) => { sh.opts.marker = e.target.checked; processSheet(sh, 0); changed(); }}), ' 초록 띠 지우기')),
+      el('div', {class: 'hint'}, `${sh.w}×${sh.h} · ${sh.frames.length}장 · ${sh.keyInfo} · 키 가운데값 ${Math.round(sh.median)}px (${Math.round(Math.min(...sh.frames.map(f => frames.get(f).h)))}~${Math.round(Math.max(...sh.frames.map(f => frames.get(f).h)))}) → ×${sheetScale(sh).toFixed(3)}` +
+        (sh.frames.some(f => used.has(f)) ? '' : ' · 아직 안 씀')),
+      el('div', {class: 'row'},
+        el('button', {class: 'small', onclick: () => addAll(sh, false)}, '편집 중 동작 뒤에 전부'),
+        el('button', {class: 'small', onclick: () => addAll(sh, true)}, '전부로 바꾸기'))));
+  }
+}
+
+function removeSheet(sh) {
+  if (!confirm(`"${sh.name}" 그림을 뺄까요? 이 그림에서 넣은 장면도 빠집니다.`)) return;
+  pushUndo();
+  for (const id of sh.frames) frames.delete(id);
+  S.sheets = S.sheets.filter(s => s !== sh);
+  for (const c of Object.values(S.clips)) c.frames = c.frames.filter(r => !r.f.startsWith(sh.id + ':'));
+  changed();
+}
+
+function addAll(sh, replace) {
+  pushUndo();
+  const c = curClip(), refs = sh.frames.map(f => ({f, dx: 0, dy: 0, flip: false}));
+  if (replace) c.frames = refs; else c.frames.push(...refs);
+  S.sel = c.frames.length - 1;
+  changed(true);
+  toast(`${MODE_NAME[S.cur.mode]} ${ARROW[S.cur.dir]}: ${refs.length}장 ${replace ? '으로 바꿈' : '넣음'}`);
+}
+
+function renderPad() {
+  $('#modes').replaceChildren(...MODES.map(m => el('button', {class: m === S.cur.mode ? 'on' : '', onclick: () => { S.cur.mode = m; S.sel = -1; changed(true); }},
+    MODE_NAME[m], ' ', el('small', {class: 'hint'}, String(DIRS.filter(d => hasClip(m, d)).length)))));
+  const pad = $('#pad');
+  pad.innerHTML = '';
+  for (const row of PAD) for (const d of row) {
+    if (!d) { pad.append(el('div', {class: 'mid'}, MODE_NAME[S.cur.mode], el('br'), '방향')); continue; }
+    const n = validRefs(S.clips[clipKey(S.cur.mode, d)]).length;
+    let sub = n ? `${n}장` : '—';
+    if (!n) { const e = nearest(S.cur.mode, d); if (e) sub = e.flip ? `${ARROW[e.d]} 뒤집기` : `${ARROW[e.d]} 씀`; }
+    pad.append(el('button', {class: (d === S.cur.dir ? 'on ' : '') + (n ? '' : 'empty'), title: DIR_NAME[d],
+      onclick: () => { S.cur.dir = d; S.sel = -1; changed(true); }}, el('b', {}, ARROW[d]), el('small', {}, sub)));
+  }
+}
+
+function renderClip() {
+  const c = curClip(), refs = c.frames;
+  P.playIdx = -2;   // 줄을 새로 그렸으니 재생 표시도 다시 붙인다
+  $('#clipTitle').textContent = `${MODE_NAME[S.cur.mode]} ${ARROW[S.cur.dir]} ${DIR_NAME[S.cur.dir]} — ${refs.length}장`;
+  $('#clipCycle').value = c.cycle || '';
+  $('#clipCycle').placeholder = String(S.cycle[S.cur.mode]);
+  $('#clipFlip').checked = !!c.flip;
+  $('#stripHint').textContent = refs.length ? '— 끌어서 순서 바꾸기 · 누르면 선택 · Delete로 빼기 · ⌘D 복제' : '— 비어 있음: 아래 칸 모음에서 장면을 누르세요';
+  const strip = $('#strip');
+  strip.innerHTML = '';
+  refs.forEach((r, i) => {
+    const fr = frames.get(r.f), cell = renderCell(r, c.flip);
+    const cv = mk(S.out.w, S.out.h);
+    if (cell) cv.getContext('2d').drawImage(cell, 0, 0);
+    cv.style.width = Math.round(92 * S.out.w / S.out.h) + 'px';
+    const sh = fr && sheetById(fr.sheet);
+    const item = el('div', {class: 'fr' + (i === S.sel ? ' sel' : '') + (fr ? '' : ' miss'), draggable: 'true', 'data-i': i,
+      title: fr ? `${sh.name} · ${fr.idx + 1}번 칸` : '원본이 없어진 장면',
+      onclick: () => { S.sel = i; playFrom(i); renderClip(); },
+      ondragstart: (e) => { e.dataTransfer.setData('text/plain', 'strip:' + i); e.dataTransfer.effectAllowed = 'move'; }},
+      cv, el('span', {class: 'no'}, String(i + 1) + (r.flip ? ' ↔' : '') + (r.dx || r.dy ? ' ✥' : '')),
+      el('span', {class: 'src'}, fr ? `${S.sheets.indexOf(sh) + 1}-${fr.idx + 1}` : '없음'),
+      el('button', {class: 'x', title: '빼기', onclick: (e) => { e.stopPropagation(); delFrame(i); }}, '✕'));
+    strip.append(item);
+  });
+  strip.append(el('div', {class: 'end'}));
+  renderSel();
+}
+
+// 미리보기를 편집 중인 동작의 i번 장면부터 다시 돌린다 (멈춤 상태면 그 장면을 보여 준다)
+function playFrom(i) {
+  const c = curClip(), refs = validRefs(c), vi = refs.indexOf(c.frames[i]);
+  if (vi < 0 || !refs.length) return;
+  P.phase = (vi + 0.001) / refs.length;
+  if (!P.loop && !keyDir()) { P.loop = true; $('#oLoop').checked = true; }
+}
+
+function renderSel() {
+  const c = curClip(), r = c.frames[S.sel], box = $('#selPanel');
+  if (!r) { box.replaceChildren(el('span', {class: 'hint'}, '장면을 누르면 위치를 조금씩 옮기거나 뒤집을 수 있습니다.')); return; }
+  const fr = frames.get(r.f), sh = fr && sheetById(fr.sheet);
+  const nudge = (k) => el('input', {type: 'number', value: r[k] || 0, onchange: (e) => { pushUndo(); r[k] = parseInt(e.target.value, 10) || 0; changed(true); }});
+  box.replaceChildren(
+    el('b', {}, `${S.sel + 1}번 장면`), el('span', {class: 'hint'}, fr ? `(${sh.name} · ${fr.idx + 1}번 칸)` : '(원본 없음)'),
+    el('label', {}, '좌우 ', nudge('dx')), el('label', {}, '위아래 ', nudge('dy')),
+    el('label', {}, el('input', {type: 'checkbox', checked: r.flip, onchange: (e) => { pushUndo(); r.flip = e.target.checked; changed(true); }}), ' 뒤집기'),
+    el('button', {class: 'small', onclick: () => moveFrame(S.sel, S.sel - 1)}, '◀'),
+    el('button', {class: 'small', onclick: () => moveFrame(S.sel, S.sel + 1)}, '▶'),
+    el('button', {class: 'small', title: '이 장면이 1번이 되게 순서를 돌린다', onclick: () => {
+      const k = S.sel;
+      clipTool(c => c.frames.push(...c.frames.splice(0, k)), `${k + 1}번 장면을 첫 장으로`);
+      S.sel = 0; playFrom(0); renderClip();
+    }}, '첫 장으로'),
+    el('button', {class: 'small', onclick: () => dupFrame(S.sel)}, '복제'),
+    el('button', {class: 'small warn', onclick: () => delFrame(S.sel)}, '빼기'));
+}
+
+function renderPool() {
+  const box = $('#pool');
+  box.innerHTML = '';
+  if (!S.sheets.length) { box.append(el('p', {class: 'hint'}, '왼쪽에 그림을 넣으면 잘린 장면이 여기 나옵니다.')); return; }
+  const inClip = new Set(curClip().frames.map(r => r.f));
+  S.sheets.forEach((sh, si) => {
+    box.append(el('div', {class: 'hint'}, `${si + 1}. ${sh.name}`));
+    box.append(el('div', {class: 'pool'}, ...sh.frames.map(id => {
+      const fr = frames.get(id);
+      return el('div', {class: 'pf' + (inClip.has(id) ? ' used' : ''), draggable: 'true', title: `${fr.idx + 1}번 칸 — 눌러서 넣기`,
+        onclick: () => insertFrame(id, S.sel + 1 || curClip().frames.length),
+        ondragstart: (e) => { e.dataTransfer.setData('text/plain', 'pool:' + id); e.dataTransfer.effectAllowed = 'copy'; }},
+        el('img', {src: fr.thumb, draggable: 'false'}), el('span', {}, String(fr.idx + 1)));
+    })));
+  });
+}
+
+function renderOut() {
+  const o = S.out;
+  $('#preset').value = o.preset;
+  $('#oW').value = o.w; $('#oH').value = o.h; $('#oFx').value = o.fx; $('#oFy').value = o.fy; $('#oBody').value = o.body;
+  $('#oAlign').value = o.align;
+  $('#oFit').value = o.fit || 'sheet';
+  $('#cWalk').value = S.cycle.walk; $('#cRun').value = S.cycle.run; $('#cIdle').value = S.cycle.idle;
+  $('#sWalk').value = S.speed.walk; $('#sRun').value = S.speed.run;
+  $('#cid').value = S.id;
+  const game = o.w === GAME.w && o.h === GAME.h && o.fx === GAME.fx && o.fy === GAME.fy;
+  $('#outNote').textContent = game ? '지금 칸은 게임 8방향 시트와 같습니다. "게임 8방향 내보내기"를 assets/characters/에 넣으면 그대로 나옵니다.'
+    : '게임 8방향 내보내기는 128×112·발끝(64,108) 칸으로 맞춰 내보냅니다 (키·가로 기준은 지금 값).';
+}
+
+// ───────────────────────── 장면 고치기 ─────────────────────────
+function insertFrame(id, at) {
+  pushUndo();
+  const c = curClip();
+  at = Math.max(0, Math.min(c.frames.length, at));
+  c.frames.splice(at, 0, {f: id, dx: 0, dy: 0, flip: false});
+  S.sel = at;
+  changed(true);
+}
+function delFrame(i) {
+  const c = curClip();
+  if (i < 0 || i >= c.frames.length) return;
+  pushUndo();
+  c.frames.splice(i, 1);
+  S.sel = Math.min(i, c.frames.length - 1);
+  changed(true);
+}
+function dupFrame(i) {
+  const c = curClip();
+  if (i < 0 || i >= c.frames.length) return;
+  pushUndo();
+  c.frames.splice(i + 1, 0, Object.assign({}, c.frames[i]));
+  S.sel = i + 1;
+  changed(true);
+}
+function moveFrame(from, to) {
+  const c = curClip();
+  if (from < 0 || from >= c.frames.length) return;
+  to = Math.max(0, Math.min(c.frames.length - 1, to));
+  if (from === to) return;
+  pushUndo();
+  const [r] = c.frames.splice(from, 1);
+  c.frames.splice(to, 0, r);
+  S.sel = to;
+  changed(true);
+}
+function clipTool(fn, msg) {
+  const c = curClip();
+  if (!c.frames.length) return toast('동작이 비어 있습니다');
+  pushUndo();
+  fn(c);
+  changed(true);
+  if (msg) toast(msg);
+}
+function copyClip(mode, dir, flip) {
+  const src = curClip();
+  if (!src.frames.length) return toast('동작이 비어 있습니다');
+  if (mode === S.cur.mode && dir === S.cur.dir) return toast('같은 자리입니다');
+  const dst = clipOf(mode, dir, true);
+  if (dst.frames.length && !confirm(`${MODE_NAME[mode]} ${ARROW[dir]}에 이미 ${dst.frames.length}장이 있습니다. 덮어쓸까요?`)) return;
+  pushUndo();
+  dst.frames = src.frames.map(r => Object.assign({}, r, {flip: flip ? !r.flip : r.flip, dx: flip ? -(r.dx || 0) : r.dx}));
+  dst.cycle = src.cycle; dst.flip = src.flip;
+  changed(true);
+  toast(`${MODE_NAME[mode]} ${ARROW[dir]}로 ${dst.frames.length}장 복사${flip ? ' (뒤집음)' : ''}`);
+}
+
+// 장면 줄에서 끌어 놓기
+(function setupStrip() {
+  const strip = $('#strip');
+  const target = (e) => {
+    const items = [...strip.querySelectorAll('.fr')];
+    for (const it of items) {
+      const b = it.getBoundingClientRect();
+      if (e.clientY < b.bottom && e.clientX < b.left + b.width / 2 && e.clientY > b.top - 6) return +it.dataset.i;
+      if (e.clientY < b.top - 6) return +it.dataset.i;
+    }
+    return items.length;
+  };
+  const mark = (i) => {
+    strip.querySelectorAll('.before').forEach(x => x.classList.remove('before'));
+    const it = strip.querySelector(`.fr[data-i="${i}"]`) || strip.querySelector('.end');
+    it && it.classList.add('before');
+  };
+  strip.addEventListener('dragover', (e) => { e.preventDefault(); strip.classList.add('over'); mark(target(e)); });
+  strip.addEventListener('dragleave', (e) => { if (!strip.contains(e.relatedTarget)) { strip.classList.remove('over'); mark(-1); } });
+  strip.addEventListener('drop', (e) => {
+    e.preventDefault();
+    strip.classList.remove('over');
+    const data = e.dataTransfer.getData('text/plain') || '';
+    let at = target(e);
+    if (data.startsWith('strip:')) {
+      const from = +data.slice(6);
+      if (at > from) at--;
+      moveFrame(from, at);
+    } else if (data.startsWith('pool:')) insertFrame(data.slice(5), at);
+  });
+})();
+
+// ───────────────────────── 미리보기 ─────────────────────────
+function keyDir() {
+  let x = 0, y = 0;
+  for (const k of P.keys) { const v = MOVE_KEYS[k]; if (v) { x += v[0]; y += v[1]; } }
+  x = Math.sign(x); y = Math.sign(y);
+  if (!x && !y) return null;
+  return DIRS[(Math.round(Math.atan2(y, x) / (Math.PI / 4)) + 8) % 8];
+}
+function previewTarget() {
+  const d = keyDir();
+  if (d) { P.lastDir = d; return {mode: P.shift ? 'run' : 'walk', dir: d, keyed: true}; }
+  if (P.loop) return {mode: S.cur.mode, dir: S.cur.dir, keyed: false};
+  return {mode: 'idle', dir: P.lastDir, keyed: false};
+}
+
+function drawGround(ctx, W, H, z, ox, oy) {
+  ctx.fillStyle = '#3a4038';
+  ctx.fillRect(0, 0, W, H);
+  const step = 32 * z;
+  ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
+  const sx = ((ox % step) + step) % step, sy = ((oy % step) + step) % step;
+  ctx.beginPath();
+  for (let x = sx; x < W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = sy; y < H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  // 땅이 움직이는 게 잘 보이게 점을 찍는다
+  ctx.fillStyle = 'rgba(255,255,255,.12)';
+  for (let x = sx - step; x < W + step; x += step) for (let y = sy - step; y < H + step; y += step) ctx.fillRect(x + step * 0.5 - 1, y + step * 0.37 - 1, 2, 2);
+}
+
+function drawActor(ctx, res, idx, cx, cy, z, guides) {
+  const o = S.out;
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath(); ctx.ellipse(cx, cy, o.body * 0.21 * z, o.body * 0.075 * z, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.imageSmoothingEnabled = P.smooth;
+  ctx.imageSmoothingQuality = 'high';
+  const n = res.refs.length;
+  if (P.onion && n > 1 && guides) {
+    const prev = renderCell(res.refs[(idx - 1 + n) % n], res.flip);
+    if (prev) { ctx.globalAlpha = 0.3; ctx.drawImage(prev, cx - o.fx * z, cy - o.fy * z, o.w * z, o.h * z); ctx.globalAlpha = 1; }
+  }
+  const cell = renderCell(res.refs[idx], res.flip);
+  if (cell) ctx.drawImage(cell, cx - o.fx * z, cy - o.fy * z, o.w * z, o.h * z);
+  if (guides && P.guide) {
+    ctx.strokeStyle = 'rgba(79,157,255,.55)'; ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(cx - o.fx * z) + 0.5, Math.round(cy - o.fy * z) + 0.5, Math.round(o.w * z), Math.round(o.h * z));
+    ctx.strokeStyle = 'rgba(255,179,71,.8)';
+    ctx.beginPath(); ctx.moveTo(cx - 40 * z, cy + 0.5); ctx.lineTo(cx + 40 * z, cy + 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 0.5, cy - 4 * z); ctx.lineTo(cx + 0.5, cy + 4 * z); ctx.stroke();
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.35)';
+    ctx.beginPath(); ctx.moveTo(cx - 30 * z, cy - o.body * z + 0.5); ctx.lineTo(cx + 30 * z, cy - o.body * z + 0.5); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function tick(t) {
+  const dt = Math.min(0.1, Math.max(0, (t - P.last) / 1000));
+  P.last = t;
+  const cv = $('#pv'), dpr = window.devicePixelRatio || 1;
+  const W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const ctx = cv.getContext('2d');
+  const tg = previewTarget();
+  if (P.follow && tg.keyed && (S.cur.mode !== tg.mode || S.cur.dir !== tg.dir)) { S.cur.mode = tg.mode; S.cur.dir = tg.dir; S.sel = -1; changed(true); }
+  const res = resolve(tg.mode, tg.dir);
+  const z = P.zoom * dpr;
+  if (!P.paused) P.phase += dt / (res ? res.cycle : 1);
+  if (P.step) { P.phase += P.step / Math.max(1, res ? res.refs.length : 1); P.step = 0; }
+  P.phase -= Math.floor(P.phase);
+  if (tg.keyed && P.move && !P.paused) {
+    const k = DIRS.indexOf(tg.dir), a = k * Math.PI / 4, sp = S.speed[tg.mode === 'run' ? 'run' : 'walk'];
+    P.pos.x += Math.cos(a) * sp * dt; P.pos.y += Math.sin(a) * sp * dt;
+  }
+  drawGround(ctx, W, H, z, -P.pos.x * z, -P.pos.y * z);
+  let info = '', idx = -1;
+  if (P.all) {
+    // 8방향을 한꺼번에 — 방향마다 크기·발끝이 같은지 본다
+    const zz = z * 0.55, gx = W / 3, gy = H / 3;
+    PAD.forEach((row, r) => row.forEach((d, c) => {
+      if (!d) return;
+      const rr = resolve(tg.mode, d);
+      const px = gx * (c + 0.5), py = gy * (r + 0.5) + S.out.body * zz * 0.45;
+      if (rr && rr.refs.length) drawActor(ctx, rr, Math.floor(P.phase * rr.refs.length) % rr.refs.length, px, py, zz, false);
+      ctx.fillStyle = '#fff'; ctx.font = `${12 * dpr}px sans-serif`;
+      ctx.fillText(ARROW[d] + (rr ? (rr.note ? ' *' : '') : ' 없음'), gx * c + 6 * dpr, gy * r + 16 * dpr);
+    }));
+    info = `${MODE_NAME[tg.mode]} 8방향 (* = 다른 방향 그림을 씀)`;
+  } else if (res && res.refs.length) {
+    idx = Math.floor(P.phase * res.refs.length) % res.refs.length;
+    drawActor(ctx, res, idx, Math.round(W / 2), Math.round(H / 2 + (S.out.fy - S.out.h / 2) * z), z, true);   // 칸이 화면 가운데
+    info = `${MODE_NAME[tg.mode]} ${ARROW[tg.dir]} · ${idx + 1}/${res.refs.length}장 · 한 바퀴 ${res.cycle.toFixed(2)}초` + (res.note ? ' · ' + res.note : '') + (P.paused ? ' · 멈춤' : '');
+  } else {
+    ctx.fillStyle = '#ddd'; ctx.font = `${14 * dpr}px sans-serif`; ctx.textAlign = 'center';
+    ctx.fillText(S.sheets.length ? `${MODE_NAME[tg.mode]} ${ARROW[tg.dir]}: 넣은 장면이 없습니다` : '그림을 넣으세요', W / 2, H / 2);
+    ctx.textAlign = 'left';
+  }
+  $('#pvinfo').textContent = info;
+  $('#pvkeys').textContent = tg.keyed ? '' : '방향키·WASD 걷기 / Shift 달리기 / 스페이스 멈춤 / , . 한 장씩';
+  // 편집 중인 줄에서 지금 나오는 장면 표시
+  const pk = res && !P.all ? res.key : '';
+  const pi = pk === clipKey(S.cur.mode, S.cur.dir) ? idx : -1;
+  if (pi !== P.playIdx || pk !== P.playKey) {
+    P.playIdx = pi; P.playKey = pk;
+    document.querySelectorAll('#strip .fr.play').forEach(x => x.classList.remove('play'));
+    if (pi >= 0) {
+      // 줄에는 원본이 없어진 장면도 있어, 실제 그리는 순서(validRefs)를 줄 번호로 바꾼다
+      const all = curClip().frames, r = validRefs(curClip())[pi];
+      const it = document.querySelector(`#strip .fr[data-i="${all.indexOf(r)}"]`);
+      it && it.classList.add('play');
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// ───────────────────────── 내보내기 ─────────────────────────
+async function exportSheet() {
+  const list = [];
+  for (const m of MODES) for (const d of DIRS) {
+    const c = S.clips[clipKey(m, d)], refs = validRefs(c);
+    if (refs.length) list.push({m, d, c, refs});
+  }
+  if (!list.length) return toast('내보낼 동작이 없습니다');
+  const o = S.out, cols = Math.max(...list.map(x => x.refs.length));
+  const out = mk(o.w * cols, o.h * list.length), x = out.getContext('2d');
+  const meta = {cell: [o.w, o.h], foot: [o.fx, o.fy], body: o.body, clips: []};
+  list.forEach((it, row) => {
+    it.refs.forEach((r, col) => { const cell = renderCell(r, it.c.flip); if (cell) x.drawImage(cell, col * o.w, row * o.h); });
+    meta.clips.push({name: `${it.m}_${it.d}`, mode: it.m, dir: it.d, row, frames: it.refs.length, cycle: it.c.cycle || S.cycle[it.m]});
+  });
+  download(await canvasBlob(out), `${S.id}_motion.png`);
+  download(new Blob([JSON.stringify(meta, null, 1)], {type: 'application/json'}), `${S.id}_motion.json`);
+  toast(`${list.length}개 동작 · 칸 ${o.w}×${o.h} · ${cols}열로 내보냄`);
+}
+
+// 게임 형식: 8행(→ ↘ ↓ ↙ ← ↖ ↑ ↗) × (0열 서 있기 + 1~16열 걷기), 칸 128×112, 발끝 (64,108) + {"dirs", "frames"}
+async function exportGame() {
+  const present = DIRS.filter(d => hasClip('walk', d));
+  if (!present.length) return toast('걷기 동작이 하나도 없습니다');
+  const keep = Object.assign({}, S.out);
+  Object.assign(S.out, {w: GAME.w, h: GAME.h, fx: GAME.fx, fy: GAME.fy});
+  cellCache.clear();
+  try {
+    const out = mk(GAME.w * (1 + GAME_FRAMES), GAME.h * DIRS.length), x = out.getContext('2d');
+    const notes = [];
+    DIRS.forEach((d, row) => {
+      if (!present.includes(d)) return;
+      const c = S.clips[clipKey('walk', d)], refs = validRefs(c);
+      const idle = validRefs(S.clips[clipKey('idle', d)]);
+      const still = idle.length ? idle[0] : refs.reduce((a, b) => (frames.get(b.f).spread < frames.get(a.f).spread ? b : a));
+      const ic = idle.length ? S.clips[clipKey('idle', d)].flip : c.flip;
+      x.drawImage(renderCell(still, ic), 0, row * GAME.h);
+      for (let k = 0; k < GAME_FRAMES; k++) x.drawImage(renderCell(refs[Math.floor(k * refs.length / GAME_FRAMES)], c.flip), (1 + k) * GAME.w, row * GAME.h);
+      if (refs.length !== GAME_FRAMES) notes.push(`${ARROW[d]} ${refs.length}장→16장`);
+    });
+    download(await canvasBlob(out), `${S.id}_dir8.png`);
+    download(new Blob([JSON.stringify({dirs: present, frames: GAME_FRAMES})], {type: 'application/json'}), `${S.id}_dir8.json`);
+    toast(`${S.id}_dir8.png·.json 내보냄 — ${present.map(d => ARROW[d]).join(' ')}` + (notes.length ? ` (${notes.join(', ')})` : '') + ' → assets/characters/에 넣으세요');
+  } finally {
+    Object.assign(S.out, keep);
+    cellCache.clear();
+  }
+}
+
+async function saveProject() {
+  const data = snapshot(false);
+  data.sheets = await Promise.all(S.sheets.map(async s => ({id: s.id, name: s.name, opts: s.opts,
+    data: await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(s.blob); })})));
+  download(new Blob([JSON.stringify(data)], {type: 'application/json'}), `${S.id}_motion_project.json`);
+  toast('작업 파일을 저장했습니다 (그림 포함)');
+}
+async function loadProject(file) {
+  try {
+    const data = JSON.parse(await file.text());
+    pushUndo();
+    await restore(data, async s => (await fetch(s.data)).blob());
+    renderAll(); autosave();
+    toast(`작업을 열었습니다 — 그림 ${S.sheets.length}장`);
+  } catch (e) { alert('작업 파일을 읽지 못했습니다: ' + e.message); }
+}
+
+// ───────────────────────── 그림 넣기 ─────────────────────────
+async function addFiles(files) {
+  const imgs = [...files].filter(f => f.type.startsWith('image/') || /\.(png|webp|jpe?g|gif|bmp)$/i.test(f.name));
+  if (!imgs.length) return;
+  pushUndo();
+  const msgs = [];
+  for (const f of imgs) {
+    try {
+      const sh = await addSheet(f, f.name);
+      const a = autoAssign(sh);
+      if (a) msgs.push(`${f.name} → ${MODE_NAME[a[0]]} ${ARROW[a[1]]}`);
+      else if (!curClip().frames.length) {
+        curClip().frames = sh.frames.map(id => ({f: id, dx: 0, dy: 0, flip: false}));
+        msgs.push(`${f.name} → 편집 중인 ${MODE_NAME[S.cur.mode]} ${ARROW[S.cur.dir]}`);
+      } else msgs.push(`${f.name}: ${sh.frames.length}장 (칸 모음에서 골라 넣으세요)`);
+      if (S.id === 'character') {
+        const m = f.name.match(/^\d+_([a-z_]+?)(?:_(?:walk|run|key|idle|dir)[^.]*)?\.\w+$/i);
+        if (m) S.id = m[1].toLowerCase();
+      }
+    } catch (e) { msgs.push(`${f.name}: 읽지 못함 (${e.message})`); }
+  }
+  renderAll(); autosave();
+  toast(msgs.join(' / '));
+}
+
+// ───────────────────────── 이벤트 연결 ─────────────────────────
+function bind() {
+  $('#bOpen').onclick = () => $('#file').click();
+  $('#drop').onclick = () => $('#file').click();
+  $('#file').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+  $('#bLoadProj').onclick = () => $('#projFile').click();
+  $('#projFile').onchange = (e) => { if (e.target.files[0]) loadProject(e.target.files[0]); e.target.value = ''; };
+  $('#bSaveProj').onclick = saveProject;
+  $('#bExport').onclick = exportSheet;
+  $('#bExportGame').onclick = exportGame;
+  $('#bUndo').onclick = undo;
+  $('#bRedo').onclick = redo;
+  $('#bReset').onclick = async () => {
+    if (!confirm('그림과 동작을 모두 비우고 새로 시작할까요? (저장한 작업 파일은 그대로입니다)')) return;
+    S.sheets = []; S.clips = {}; S.sel = -1; S.id = 'character'; frames.clear(); cellCache.clear();
+    undoStack.length = 0; redoStack.length = 0;
+    renderAll(); autosave();
+  };
+  $('#cid').onchange = (e) => { S.id = e.target.value.trim().replace(/[^\w\-]/g, '_') || 'character'; e.target.value = S.id; autosave(); };
+
+  // 창 어디에 끌어 놓아도 그림을 받는다
+  addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); document.body.classList.add('dragging'); } });
+  addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
+  addEventListener('drop', (e) => {
+    document.body.classList.remove('dragging');
+    if (e.dataTransfer.files.length) { e.preventDefault(); addFiles(e.dataTransfer.files); }
+  });
+
+  // 동작 도구
+  $('#clipCycle').onchange = (e) => { pushUndo(); const v = parseFloat(e.target.value); curClip().cycle = v > 0 ? v : null; changed(true); };
+  $('#clipFlip').onchange = (e) => { pushUndo(); curClip().flip = e.target.checked; changed(true); };
+  $('#tResample').onclick = () => {
+    const n = Math.max(1, Math.min(64, parseInt($('#tCount').value, 10) || 16));
+    clipTool(c => { const old = c.frames; c.frames = Array.from({length: n}, (_, i) => Object.assign({}, old[Math.floor(i * old.length / n)])); }, `${n}장으로 맞춤`);
+  };
+  $('#tReverse').onclick = () => clipTool(c => c.frames.reverse(), '순서를 거꾸로');
+  $('#tRotL').onclick = () => clipTool(c => c.frames.push(c.frames.shift()));
+  $('#tRotR').onclick = () => clipTool(c => c.frames.unshift(c.frames.pop()));
+  $('#tClear').onclick = () => clipTool(c => { c.frames = []; }, '비움');
+  $('#tMirror').onclick = () => {
+    const m = MIRROR[S.cur.dir];
+    if (m === S.cur.dir) return toast(`${ARROW[m]}는 좌우 짝이 자기 자신입니다`);
+    copyClip(S.cur.mode, m, true);
+  };
+  $('#cpMode').replaceChildren(...MODES.map(m => el('option', {value: m}, MODE_NAME[m])));
+  $('#cpDir').replaceChildren(...DIRS.map(d => el('option', {value: d}, ARROW[d] + ' ' + DIR_NAME[d])));
+  $('#tCopy').onclick = () => copyClip($('#cpMode').value, $('#cpDir').value, $('#cpFlip').checked);
+
+  // 결과 칸
+  $('#preset').replaceChildren(...Object.entries(PRESETS).map(([k, p]) => el('option', {value: k}, p.name)));
+  $('#preset').onchange = (e) => {
+    const p = PRESETS[e.target.value];
+    S.out.preset = e.target.value;
+    if (p.w) Object.assign(S.out, {w: p.w, h: p.h, fx: p.fx, fy: p.fy, body: p.body});
+    renderOut(); changed();
+  };
+  const outNum = (id, key) => { $(id).onchange = (e) => { const v = parseFloat(e.target.value); if (!(v > -1e4)) return; S.out[key] = Math.round(v); S.out.preset = 'custom'; renderOut(); changed(); }; };
+  outNum('#oW', 'w'); outNum('#oH', 'h'); outNum('#oFx', 'fx'); outNum('#oFy', 'fy'); outNum('#oBody', 'body');
+  $('#oAlign').onchange = (e) => { S.out.align = e.target.value; changed(); };
+  $('#oFit').onchange = (e) => { S.out.fit = e.target.value; changed(); };
+  $('#bFitBody').onclick = () => {
+    const b = fitBody();
+    if (!b) return toast('그림을 먼저 넣으세요');
+    S.out.body = b; S.out.preset = 'custom';
+    renderOut(); changed();
+    toast(`키를 ${b}px로 — 모든 장면이 칸 ${S.out.w}×${S.out.h} 안에 들어옵니다`);
+  };
+  const num = (id, obj, key) => { $(id).onchange = (e) => { const v = parseFloat(e.target.value); if (v >= 0) { obj[key] = v; autosave(); renderClip(); } }; };
+  num('#cWalk', S.cycle, 'walk'); num('#cRun', S.cycle, 'run'); num('#cIdle', S.cycle, 'idle');
+  num('#sWalk', S.speed, 'walk'); num('#sRun', S.speed, 'run');
+
+  // 미리보기
+  const setZoom = (v) => { P.zoom = v; $('#zoom').value = v; $('#zoomV').textContent = '×' + (+v).toFixed(2).replace(/\.?0+$/, ''); };
+  $('#zoom').oninput = (e) => setZoom(parseFloat(e.target.value));
+  $('#bGameSize').onclick = () => setZoom(Math.max(0.1, GAME_SCREEN_BODY / S.out.body));
+  $('#bPause').onclick = () => { P.paused = !P.paused; $('#bPause').classList.toggle('on', P.paused); };
+  for (const [id, k] of [['#oSmooth', 'smooth'], ['#oMove', 'move'], ['#oOnion', 'onion'], ['#oGuide', 'guide'], ['#oAll', 'all'], ['#oLoop', 'loop'], ['#oFollow', 'follow']]) {
+    $(id).onchange = (e) => { P[k] = e.target.checked; };
+  }
+  setZoom(P.zoom);
+
+  // 단추를 누른 뒤 스페이스·방향키가 그 단추로 가지 않게
+  document.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) b.blur(); });
+  const typing = (t) => (t.tagName === 'INPUT' && !['checkbox', 'radio', 'range', 'button'].includes(t.type)) || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT';
+  addEventListener('keydown', (e) => {
+    P.shift = e.shiftKey;
+    const mod = e.metaKey || e.ctrlKey;
+    if (typing(e.target)) return;
+    if (mod && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+    if (mod && e.code === 'KeyD') { e.preventDefault(); dupFrame(S.sel); return; }
+    if (mod) return;
+    if (MOVE_KEYS[e.code]) { P.keys.add(e.code); e.preventDefault(); return; }
+    if (e.code === 'Space') { e.preventDefault(); $('#bPause').click(); return; }
+    if (e.code === 'Comma') { P.paused = true; $('#bPause').classList.add('on'); P.step = -1; return; }
+    if (e.code === 'Period') { P.paused = true; $('#bPause').classList.add('on'); P.step = 1; return; }
+    if ((e.code === 'Delete' || e.code === 'Backspace') && S.sel >= 0) { e.preventDefault(); delFrame(S.sel); }
+  });
+  addEventListener('keyup', (e) => { P.shift = e.shiftKey; P.keys.delete(e.code); });
+  addEventListener('blur', () => { P.keys.clear(); P.shift = false; });
+}
+
+async function start() {
+  bind();
+  try {
+    const data = await DB.get();
+    if (data && data.sheets && data.sheets.length) {
+      await restore(data, async s => s.blob);
+      toast(`지난 작업을 불러왔습니다 — 그림 ${S.sheets.length}장`);
+    }
+  } catch (e) { /* 저장소를 못 쓰는 브라우저 — 빈 작업으로 시작 */ }
+  renderAll();
+  requestAnimationFrame(tick);
+}
+// 시험용 (콘솔·자동 확인에서 쓴다): App.addUrl('경로.png')
+window.App = {S, frames, P, resolve, renderCell,
+  async addUrl(url, name) { const b = await (await fetch(url)).blob(); await addFiles([new File([b], name || url.split('/').pop(), {type: b.type})]); }};
+start();
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@ const FH := IsoView.FLOOR_HEIGHT
 const NAVY := Color(0.1, 0.2, 0.5)
 const GREEN := Color(0.16, 0.46, 0.36)
 const RED := Color(0.82, 0.12, 0.14)
+const HELIPAD := Color(0.26, 0.28, 0.3)   ## 병원 옥상 헬리패드 바닥
 const GOLD := Color(0.86, 0.66, 0.26)
 const STEEL := Color(0.3, 0.31, 0.33)
 const LINE := Color(0.92, 0.92, 0.88, 0.75)
@@ -97,6 +98,10 @@ static func _hospital(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingType
 	BuildingModel._stair_house(main, seed)
 	BuildingModel._units(main, seed, 4)
 	BuildingModel._plant(main, Vector2(0.06, 0.62), Vector2(0.22, 0.22), 4.0, BuildingModel.HEDGE)   # 옥상 화단
+	# 옥상 헬리패드 (북동쪽: 계단실은 북서쪽, 실외기는 남동쪽이라 비어 있다)
+	var pad := BuildingModel._plant(main, Vector2(0.5, 0.05), Vector2(0.25, 0.4), 1.5, HELIPAD)
+	pad.roof = &"helipad"
+	pad.roof_color = HELIPAD
 	out.append(main)
 	# 초록 계단탑: 본관 남동쪽 모서리에서 남쪽으로 조금 나오고, 본관보다 한 층 높다 (본관보다 앞이라 나중에 그려진다)
 	var core := _box(Rect2(Vector2(b.end.x - core_w, b.end.y - 36.0), Vector2(core_w, 50.0)), 0.0, h + FH,
@@ -187,6 +192,10 @@ static func _gang_dock(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingTyp
 	var box := _box(box_r, 0.0, 34.0, t.wall_color.darkened(0.2), &"flat", t.wall_color.darkened(0.1), &"metal", seed + 1)
 	box.deco = [&"container_doors"]
 	out.append(box)
+	# 투광등: 창고 앞마당 양끝의 높은 기둥 (lamp_pole은 높이 60을 넘으면 투광등 — 밤에 마당을 비춘다)
+	for fx in [b.position.x + 16.0, b.end.x - 14.0]:
+		out.append(_box(Rect2(Vector2(fx, b.end.y + 10.0), Vector2(4, 4)), 0.0, 86.0, Color("2f3437"), &"lamp_pole",
+			Color("2f3437"), &"none", seed))
 
 
 # ── 정비소: 콘크리트 1층 차고, 파란 '정비소' 간판, 리프트 보이는 열린 칸과 닫힌 셔터, 옥상 태양광 ──
@@ -236,14 +245,19 @@ static func _sauna(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingType, s
 	out.append(body)
 	# 은색 굴뚝: 땅에서 옥상 위로 (본채 동쪽 옆)
 	var c := Vector2(b.end.x + 21.0, b.position.y + b.size.y * 0.55)
-	out.append(_box(Rect2(c - Vector2(15, 15), Vector2(30, 30)), 0.0, h + 66.0, Color(0.7, 0.7, 0.68), &"chimney",
-		Color(0.52, 0.5, 0.48), &"none", seed))
+	out.append(_box(Rect2(c - Vector2(15, 15), Vector2(30, 30)), 0.0, h + 66.0, Color(0.7, 0.7, 0.68), &"sauna_chimney",
+		Color(0.8, 0.2, 0.18), &"none", seed))   # 꼭대기 붉은 띠와 온천 마크 (SpecialDecor)
 
 
 # ── 편의점 GO25: 흰 1층 상자, 청록·주황·빨강 띠와 상호, 불 켜진 통유리, 앞 파라솔 없는 플라스틱 탁자 ──
 
 static func _body_store(r: Rect2) -> Rect2:
 	return _fit(r, Vector2(200, 140), Vector2(0.5, 0.2))
+
+
+## 가게 앞 플라스틱 탁자 자리 (바닥 그림과 파라솔이 같이 쓴다)
+static func _store_tables(b: Rect2) -> Array[Vector2]:
+	return [Vector2(b.position.x + 40.0, b.end.y + 28.0), Vector2(b.position.x + 110.0, b.end.y + 28.0)]
 
 
 static func _convenience(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingType, seed: int, height: float) -> void:
@@ -259,6 +273,12 @@ static func _convenience(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingT
 		unit.deco = [&"fan"]
 		body.on_top.append(unit)
 	out.append(body)
+	# 앞 탁자 위 파라솔 (우산은 사람 키 위라 막지 않는다)
+	var cloths := [Color(0.1, 0.58, 0.55), Color(0.95, 0.5, 0.15)]
+	var spots := _store_tables(b)
+	for k in spots.size():
+		out.append(_box(Rect2(spots[k] - Vector2(15, 15), Vector2(30, 30)), 26.0, 31.0, cloths[k], &"parasol",
+			Color(0.95, 0.95, 0.92), &"none", seed + k))
 	_trees(out, r, seed, [Vector2(0.92, 0.18)], 0.9)
 
 
@@ -442,8 +462,7 @@ static func _ground_store(ci: CanvasItem, r: Rect2, seed: int) -> void:
 	ci.draw_rect(r, BuildingModel.STONE.darkened(0.2), false, 2.0)
 	ci.draw_rect(Rect2(b.position.x, b.end.y, b.size.x, 10.0), Color(1.0, 0.95, 0.75, 0.12))   # 가게 불빛
 	# 앞 플라스틱 탁자·의자 (파랑), 아이스크림 냉동고, 박스
-	for k in 2:
-		var at := Vector2(b.position.x + 40.0 + k * 70.0, b.end.y + 28.0)
+	for at in _store_tables(b):
 		BuildingModel.low_box(ci, Rect2(at - Vector2(9, 7), Vector2(18, 14)), 9.0, Color(0.2, 0.4, 0.8))
 		for side in [-1.0, 1.0]:
 			BuildingModel.low_box(ci, Rect2(at + Vector2(side * 16.0 - 4.0, -4.0), Vector2(8, 8)), 6.0, Color(0.25, 0.48, 0.85))

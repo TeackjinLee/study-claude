@@ -158,6 +158,10 @@ func _shoot(m: GangMember, space: PhysicsDirectSpaceState2D, target: Vector2) ->
 	var dir := (target - pos).normalized()
 	m.facing = Vector2.UP.angle_to(dir)
 	var exclude: Array[RID] = [m.get_rid()]
+	if w.melee and m.npc.stat_power > 0:
+		# 공격 한 번의 사본에만 적용한다 — 플레이어와 다른 NPC의 무기는 그대로다.
+		w = w.duplicate() as WeaponType
+		w.damage *= m.npc.melee_multiplier()
 	combat.fire(pos if w.melee else pos + dir * 10.0, dir, w, false, exclude)
 
 

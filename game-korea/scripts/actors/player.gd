@@ -26,6 +26,7 @@ var screen_walk := true
 
 func _ready() -> void:
 	motion_mode = MOTION_MODE_FLOATING
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR     # 인물 그림(PersonRig 스프라이트)을 줄여 그릴 때 깨지지 않게
 	collision_layer = Layers.PEOPLE
 	collision_mask = Layers.WORLD | Layers.VEHICLES
 	var shape := CollisionShape2D.new()
@@ -122,12 +123,16 @@ func zoom_ratio() -> float:
 func _draw() -> void:
 	if is_dead():
 		PersonDrawer.draw_blood(self, facing)
-		PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, true)
+		if IsoView.enabled:
+			PersonRig.draw(self, facing, walk_phase, 0.0, shirt, pants, hair, 1.0, null, 0, null, true)
+		else:
+			PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, true)
 		return
 	# 보행자 사이에서 주인공을 찾기 쉽게 발밑에 노란 고리
 	draw_arc(Vector2.ZERO, 11.0, 0.0, TAU, 24, Color(1.0, 0.85, 0.2, 0.55), 2.0)
 	if IsoView.enabled:
-		PersonDrawer.draw_standing(self, facing, walk_phase, shirt, pants, hair, 1.0, arsenal.current())
+		var gait: float = 0.0 if velocity.length_squared() < 1.0 else (2.0 if velocity.length() > WALK_SPEED + 20.0 else 1.0)
+		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, 1.0, null, 0, arsenal.current(), false)
 		return
 	PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair)
 	var w := arsenal.current()

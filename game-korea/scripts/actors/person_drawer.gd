@@ -19,7 +19,7 @@ static func draw(ci: CanvasItem, facing: float, phase: float, shirt: Color, pant
 		hair: Color, knocked := false, size := 1.0, look: NpcType = null, seed := 0) -> void:
 	ci.draw_set_transform(_base(ci), facing, Vector2(size, size))
 	# 위에서 보면 머리 꼭대기만 보인다: 모자·복면을 쓰면 그 색
-	if look and (look.face == &"balaclava" or (look.hat != &"" and _has(seed, 0, look.hat_chance))):
+	if look and (look.face == &"balaclava" or (look.hat != &"" and look.hat != &"ponytail" and _has(seed, 0, look.hat_chance))):
 		hair = look.hat_color
 	if knocked:
 		# 바닥에 엎어진 모습: 몸이 진행 방향으로 길게 눕는다
@@ -59,6 +59,8 @@ static func draw_blood(ci: CanvasItem, facing: float) -> void:
 ## 앞모습에서 몸의 앞쪽은 +x다 (눈·모자 챙·넥타이가 +x 쪽).
 static func draw_standing(ci: CanvasItem, facing: float, phase: float, shirt: Color, pants: Color,
 		hair: Color, size := 1.0, weapon: WeaponType = null, look: NpcType = null, seed := 0) -> void:
+	if PersonRig.draw_from_actor(ci, facing, phase, size, look, weapon, false):
+		return
 	var g := _ground(ci)
 	ci.draw_set_transform(IsoView.lift(g), 0.0, Vector2.ONE)
 	ci.draw_circle(Vector2.ZERO, 6.5 * size, Color(0, 0, 0, 0.32))
@@ -73,6 +75,7 @@ static func draw_standing(ci: CanvasItem, facing: float, phase: float, shirt: Co
 	var prop: StringName = look.prop if look and _has(seed, 1, look.prop_chance) else &""
 	var prop_color: Color = look.prop_color if look else Color.BLACK
 	var sleeve := SKIN if outfit == &"tank" else shirt
+	var tailored := outfit == &"suit" or outfit == &"pinstripe"
 	var hand := Vector2(5 - stride * 0.6, -10.5)
 	# 등에 멘 것: 앞모습이면 몸 뒤에 먼저 그린다
 	if not back:
@@ -82,6 +85,8 @@ static func draw_standing(ci: CanvasItem, facing: float, phase: float, shirt: Co
 	var leg_f := Vector2(2 + stride * 0.7, 0)
 	ci.draw_line(Vector2(-2, -10), leg_b, pants.darkened(0.25), 3.0)
 	ci.draw_line(Vector2(2, -10), leg_f, pants, 3.0)
+	ci.draw_line(Vector2(2.8, -8.5), leg_f + Vector2(0.8, -2), pants.lightened(0.12), 0.7)
+	ci.draw_line(Vector2(-2, -5), Vector2(-0.9, -4.6), pants.darkened(0.3), 0.6)
 	match outfit:
 		&"tracksuit":
 			ci.draw_line(Vector2(3.3, -10), leg_f + Vector2(1.3, 0), trim, 0.8)
@@ -96,6 +101,16 @@ static func draw_standing(ci: CanvasItem, facing: float, phase: float, shirt: Co
 			# 검은 구두 (앞코가 앞쪽으로)
 			ci.draw_rect(Rect2(leg_b.x - 1.6, -1.3, 3.7, 1.5), SHOES.darkened(0.3))
 			ci.draw_rect(Rect2(leg_f.x - 1.6, -1.3, 3.7, 1.5), SHOES)
+	# 신발·바지 주름: 모든 방향에서 발바닥 기준점은 그대로 둔다.
+	for foot in [leg_b, leg_f]:
+		var shoe := Color("d8d9cf") if prop == &"delivery" or (outfit == &"jacket" and look and look.long_hair) else SHOES
+		ci.draw_rect(Rect2(foot.x - 1.6, -1.5, 4.0, 1.8), shoe)
+		ci.draw_line(foot + Vector2(-1.5, 0.2), foot + Vector2(2.4, 0.2), shoe.lightened(0.18), 0.6)
+		if outfit == &"armor" or outfit == &"tank":
+			ci.draw_rect(Rect2(foot.x - 1.6, -3, 3.2, 2), SHOES)
+			ci.draw_line(Vector2(foot.x, -6.8), Vector2(foot.x + 1.5, -6.8), pants.lightened(0.15), 0.7)
+	if tailored:
+		ci.draw_line(Vector2(2, -8), leg_f + Vector2(0, -2), pants.lightened(0.10), 0.45)
 	# 뒤 팔
 	ci.draw_line(Vector2(-4.5, -19), Vector2(-5 + stride * 0.6, -11), sleeve.darkened(0.3), 2.6)
 	# 몸통
@@ -112,7 +127,10 @@ static func draw_standing(ci: CanvasItem, facing: float, phase: float, shirt: Co
 		ci.draw_circle(Vector2(2.4, -12), 0.9, Color(0.1, 0.07, 0.05))
 	# 앞 팔
 	var elbow := Vector2(5 - stride * 0.6, -11)
-	ci.draw_line(Vector2(4.5, -19), elbow, sleeve.darkened(0.1), 2.6)
+	var joint := Vector2(5.4, -15.7)
+	ci.draw_line(Vector2(4.5, -19), joint, sleeve, 2.8)
+	ci.draw_line(joint, elbow, sleeve.darkened(0.15), 2.4)
+	ci.draw_line(Vector2(4.9, -18.5), joint + Vector2(0.4, -0.4), sleeve.lightened(0.13), 0.65)
 	match outfit:
 		&"tracksuit":
 			ci.draw_line(Vector2(5.4, -19), elbow + Vector2(0.9, 0), trim, 0.7)
@@ -123,10 +141,20 @@ static func draw_standing(ci: CanvasItem, facing: float, phase: float, shirt: Co
 			ci.draw_line(Vector2(4.5, -18.2).lerp(elbow, 0.15), Vector2(4.5, -19).lerp(elbow, 0.6), Color(0.18, 0.26, 0.36, 0.85), 1.3)
 		&"hanbok":
 			ci.draw_circle(elbow + Vector2(0, 0.3), 1.5, trim)
-	ci.draw_circle(hand, 1.4, SKIN)
-	_carry_hand(ci, prop, prop_color, hand, back)
+	if outfit == &"apron" or (hat == &"police"):
+		ci.draw_line(Vector2(4.5, -19).lerp(elbow, 0.42), elbow, SKIN, 2.2)
+		ci.draw_line(Vector2(4.5, -19).lerp(elbow, 0.35), Vector2(4.5, -19).lerp(elbow, 0.48), shirt.lightened(0.15), 2.9)
+	ci.draw_circle(hand, 1.4, Color("20282d") if outfit in [&"armor", &"tank", &"stripes"] else SKIN)
+	if outfit == &"armor":
+		ci.draw_rect(Rect2(elbow.x - 1.5, elbow.y - 4, 3, 2.5), trim.darkened(0.2))
+	_carry_hand(ci, &"" if weapon and not weapon.melee and prop == &"rifle" else prop, prop_color, hand, back)
 	if weapon and not weapon.melee:
 		ci.draw_rect(Rect2(4.5, -13 - weapon.slot * 0.5, 7 + weapon.slot, 2.5), Color(0.1, 0.1, 0.12))
+	if look and look.stat_health > 0:
+		# 성인 설계도: 머리 비율을 줄이고 목을 연결한다. 발·전체 높이 좌표는 유지한다.
+		ci.draw_rect(Rect2(-1.2, -23.3, 2.8, 2.8), SKIN.darkened(0.12))
+		var head_frame := IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(size * flip, size))
+		ci.draw_set_transform_matrix(head_frame.translated_local(Vector2(0, -25)).scaled_local(Vector2(0.78, 0.83)).translated_local(Vector2(0, 25)))
 	_head(ci, look, hat, hair, back)
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
@@ -174,13 +202,26 @@ static func _torso(ci: CanvasItem, outfit: StringName, shirt: Color, pants: Colo
 				ci.draw_line(Vector2(0.4, -21), Vector2(2.6, -17), Color(0.97, 0.97, 0.95), 1.2)
 				ci.draw_line(Vector2(2.2, -16.5), Vector2(3.6, -12.5), trim, 1.3)
 			return
-	ci.draw_rect(Rect2(-4.5, -21, 9, 12), shirt)
+	_quad(ci, Vector2(-4.5, -21), Vector2(4.5, -21), Vector2(3.7, -9), Vector2(-3.7, -9), shirt)
+	_quad(ci, Vector2(-4.5, -21), Vector2(-2.6, -20), Vector2(-2.4, -9), Vector2(-3.7, -9), shirt.darkened(0.24))
+	ci.draw_line(Vector2(3.5, -19), Vector2(3, -10), shirt.lightened(0.1), 0.65)
 	ci.draw_rect(Rect2(-4.5, -21, 9, 2), shirt.lightened(0.15))
 	match outfit:
 		&"jacket":
-			if not back:
-				ci.draw_rect(Rect2(1, -20.5, 2.6, 10.5), trim)
-		&"suit":
+			if back:
+				ci.draw_line(Vector2(-3.5, -18), Vector2(3.6, -18), shirt.darkened(0.25), 0.65)
+			else:
+				ci.draw_rect(Rect2(0.4, -20.5, 3, 10.5), trim)
+				ci.draw_line(Vector2(0.2, -20), Vector2(0.2, -10), shirt.lightened(0.3), 0.6)
+				ci.draw_rect(Rect2(-3.3, -14, 2.2, 2.4), shirt.darkened(0.16))
+		&"suit", &"pinstripe":
+			if outfit == &"pinstripe":
+				for x in [-3.0, -1.0, 1.0, 3.0]:
+					ci.draw_line(Vector2(x, -20), Vector2(x * 0.85, -8), shirt.lightened(0.16), 0.4)
+				if not back:
+					for y in [-13.0, -10.5]:
+						ci.draw_rect(Rect2(-0.4, y, 0.65, 0.65), Color("ad9973"))
+						ci.draw_rect(Rect2(2.4, y, 0.65, 0.65), Color("ad9973"))
 			# 정장 윗옷은 엉덩이까지 덮는다 (설계도 OFFICE: 열린 깃 사이 흰 셔츠와 넥타이)
 			ci.draw_rect(Rect2(-4.5, -9, 9, 1.6), shirt.darkened(0.06))
 			if back:
@@ -198,7 +239,7 @@ static func _torso(ci: CanvasItem, outfit: StringName, shirt: Color, pants: Colo
 			ci.draw_line(Vector2(-4.1, -21), Vector2(-4.1, -9), trim, 0.8)
 			if not back:
 				ci.draw_line(Vector2(2.2, -21), Vector2(2.2, -9), trim.darkened(0.3), 0.6)
-		&"vest":
+		&"vest", &"armor":
 			ci.draw_rect(Rect2(-4.7, -20.5, 9.4, 10.5), trim)
 			if not back:
 				ci.draw_line(Vector2(2, -20.5), Vector2(2, -10), trim.darkened(0.3), 0.8)
@@ -206,9 +247,22 @@ static func _torso(ci: CanvasItem, outfit: StringName, shirt: Color, pants: Colo
 				ci.draw_rect(Rect2(-4.7, -15.6, 9.4, 1.3), Color(0.92, 0.92, 0.9))
 			else:
 				ci.draw_rect(Rect2(-3, -18.5, 4, 3), trim.lightened(0.12))
+				if back:
+					# 등판 표식은 작은 화면에서도 읽히는 밝은 패치와 획으로 표현한다.
+					ci.draw_rect(Rect2(-2.8, -18.6, 5.6, 1.9), trim.darkened(0.3))
+					for x in 5:
+						ci.draw_line(Vector2(-2.2 + x, -18.2), Vector2(-2.2 + x, -17.2), Color("bbc4cc"), 0.45)
+				else:
+					for x in [-2.8, -0.5, 1.8]:
+						ci.draw_rect(Rect2(x, -15.3, 1.8, 3.3), trim.lightened(0.18))
+				ci.draw_rect(Rect2(-4.7, -10.8, 9.4, 1.2), Color("151b20"))
+				ci.draw_rect(Rect2(0.6, -10.8, 1.2, 1.2), Color("7b858d"))
 		&"stripes":
 			ci.draw_rect(Rect2(-4.5, -16, 9, 1.6), trim)
 			ci.draw_rect(Rect2(-4.5, -12.2, 9, 1.2), trim)
+			ci.draw_line(Vector2(-2.8, -20), Vector2(-2.8, -10), Color("33332c"), 1.2)
+			ci.draw_line(Vector2(2.8, -20), Vector2(2.8, -10), Color("33332c"), 1.2)
+			ci.draw_rect(Rect2(-1.5, -14.2, 3, 2), shirt.darkened(0.2))
 		&"camo":
 			ci.draw_rect(Rect2(-3, -19, 3, 2), shirt.darkened(0.35))
 			ci.draw_rect(Rect2(1, -15.5, 3, 2.5), shirt.lightened(0.18))
@@ -217,9 +271,12 @@ static func _torso(ci: CanvasItem, outfit: StringName, shirt: Color, pants: Colo
 		&"apron":
 			if back:
 				ci.draw_rect(Rect2(-4.5, -15, 9, 0.9), trim)
+				ci.draw_line(Vector2(0, -15), Vector2(-2, -11.5), trim, 0.7)
+				ci.draw_line(Vector2(0, -15), Vector2(2, -12), trim, 0.7)
 			else:
 				ci.draw_rect(Rect2(-2.2, -17.5, 6.8, 11.5), trim)
 				ci.draw_line(Vector2(-1.5, -17.5), Vector2(-0.5, -21), trim, 0.8)
+				ci.draw_rect(Rect2(-0.6, -12.5, 3.5, 2.5), trim.lightened(0.12))
 
 
 static func _tri(ci: CanvasItem, a: Vector2, b: Vector2, c: Vector2, color: Color) -> void:
@@ -233,13 +290,27 @@ static func _quad(ci: CanvasItem, a: Vector2, b: Vector2, c: Vector2, d: Vector2
 ## 등에 메는 것 (앞모습이면 몸 뒤, 뒷모습이면 몸 위)
 static func _carry_back(ci: CanvasItem, prop: StringName, c: Color, back: bool) -> void:
 	match prop:
-		&"backpack":
+		&"backpack", &"delivery":
 			if back:
 				ci.draw_rect(Rect2(-3.8, -20.5, 7.6, 9.5), c)
 				ci.draw_rect(Rect2(-2.6, -15, 5.2, 3), c.darkened(0.25))
+				ci.draw_rect(Rect2(-3.8, -20.5, 7.6, 9.5), c.darkened(0.5), false, 0.7)
+				ci.draw_line(Vector2(-3.5, -18), Vector2(3.5, -18), c.lightened(0.24), 0.8)
 			else:
 				ci.draw_rect(Rect2(-8, -20.5, 4, 9.5), c)
 				ci.draw_line(Vector2(-3, -21), Vector2(-1.5, -13), c.darkened(0.3), 0.9)
+		&"handbag", &"satchel":
+			var x := 2.5 if back else -6.0
+			ci.draw_line(Vector2(-2, -21), Vector2(x + 2, -12), c.darkened(0.4), 0.9)
+			ci.draw_rect(Rect2(x, -14, 5, 4.5), c)
+			ci.draw_rect(Rect2(x, -14, 5, 1.5), c.lightened(0.15))
+			ci.draw_rect(Rect2(x + 2, -12.8, 0.8, 0.9), CLASP)
+		&"air_tank":
+			var x := -2.0 if back else -6.5
+			ci.draw_rect(Rect2(x, -20, 4, 9), c)
+			ci.draw_rect(Rect2(x, -18, 4, 1.2), Color("35372e"))
+			ci.draw_rect(Rect2(x, -13.5, 4, 1.2), Color("35372e"))
+			ci.draw_line(Vector2(x + 3, -21), Vector2(x + 5, -16), Color("30362d"), 1.0)
 		&"sack":
 			ci.draw_circle(Vector2(-1.5, -20) if back else Vector2(-7, -19), 4.4, c)
 			ci.draw_rect(Rect2(-2.5, -24.6, 2, 1.4) if back else Rect2(-6, -23.7, 2, 1.4), c.darkened(0.35))
@@ -267,10 +338,18 @@ static func _carry_hand(ci: CanvasItem, prop: StringName, c: Color, hand: Vector
 		&"baton":
 			ci.draw_line(hand, hand + Vector2(3.4, -7), c, 1.9)
 			ci.draw_circle(hand + Vector2(3.4, -7), 1.3, c.lightened(0.4))
-		&"box":
+		&"box", &"delivery":
 			if not back:
-				ci.draw_rect(Rect2(hand.x - 4.5, hand.y - 6.5, 7, 6), c)
+				ci.draw_rect(Rect2(hand.x - 4.5, hand.y - 6.5, 7, 6), Color("b18b5c") if prop == &"delivery" else c)
 				ci.draw_rect(Rect2(hand.x - 4.5, hand.y - 4.2, 7, 1.1), Color(0.95, 0.95, 0.9))
+		&"rifle":
+			ci.draw_line(hand + Vector2(-5, -5), hand + Vector2(7, -1), c.lightened(0.18), 2.0)
+			ci.draw_line(hand + Vector2(6, -1), hand + Vector2(10, 0), c.darkened(0.2), 1.0)
+			ci.draw_line(hand + Vector2(0, -3), hand + Vector2(-1, 0), c, 1.8)
+		&"blades":
+			for x in [-8.0, 6.0]:
+				ci.draw_line(Vector2(x, -11), Vector2(x + 1, -7), Color("252931"), 1.3)
+				_tri(ci, Vector2(x + 0.4, -7), Vector2(x + 2, -7), Vector2(x + 4, -3), c)
 		&"phone":
 			ci.draw_rect(Rect2(hand.x - 0.6, hand.y - 3.6, 1.8, 3), Color(0.1, 0.1, 0.12))
 
@@ -292,16 +371,36 @@ static func _head(ci: CanvasItem, look: NpcType, hat: StringName, hair: Color, b
 		if not back:
 			ci.draw_circle(Vector2(1.5, -24.7), 2.8, SKIN)
 			ci.draw_circle(Vector2(2.4, -25.1), 0.75, eye)
+			if face == &"mask":
+				ci.draw_rect(Rect2(0, -24.5, 4.2, 2.4), Color("171c24"))
+		else:
+			ci.draw_line(Vector2(-1, -29), Vector2(0, -22), hat_c.lightened(0.15), 0.65)
 		return
+	if hat == &"ponytail":
+		ci.draw_line(Vector2(-2.5, -28), Vector2(-5, -19), hair, 2.7)
+		ci.draw_line(Vector2(-4.5, -24), Vector2(-5.5, -18), hair.lightened(0.12), 0.7)
+		ci.draw_rect(Rect2(-4.3, -27, 2, 1), Color("74717e"))
 	if look and look.long_hair:
 		ci.draw_rect(Rect2(-4.2, -25.5, 8.4, 8.5) if back else Rect2(-4.7, -26, 3.6, 8.5), hair)
-	ci.draw_circle(Vector2(0, -25), 4.2, SKIN)
+	_quad(ci, Vector2(-3.6, -27.6), Vector2(3.4, -27.6), Vector2(3.2, -22), Vector2(-1.8, -21.5), SKIN)
+	_tri(ci, Vector2(-3.6, -27.6), Vector2(-1.8, -21.5), Vector2(-3.8, -23), SKIN.darkened(0.18))
 	if back:
 		ci.draw_circle(Vector2(0, -25.4), 4.2, hair)
+		ci.draw_line(Vector2(-2.5, -27.5), Vector2(-3, -23.5), hair.lightened(0.14), 0.65)
 	else:
 		ci.draw_arc(Vector2(0, -25), 4.0, PI * 0.95, TAU * 0.98, 10, hair, 3.0)
-		ci.draw_circle(Vector2(2.2, -25), 0.8, eye)
+		ci.draw_line(Vector2(1.3, -26), Vector2(3.1, -25.8), hair, 0.6)
+		ci.draw_circle(Vector2(2.2, -25), 0.45, eye)
+		_tri(ci, Vector2(3, -25), Vector2(4.1, -23.5), Vector2(2.9, -23.4), SKIN.darkened(0.15))
+		ci.draw_line(Vector2(1.5, -22.6), Vector2(2.8, -22.7), Color("976a53"), 0.45)
+		ci.draw_circle(Vector2(-1.7, -24.7), 0.85, SKIN.darkened(0.08))
 		match face:
+			&"glasses":
+				ci.draw_rect(Rect2(-0.2, -26, 2, 1.8), eye, false, 0.45)
+				ci.draw_rect(Rect2(2.1, -26, 2, 1.8), eye, false, 0.45)
+				ci.draw_line(Vector2(1.8, -25.4), Vector2(2.1, -25.4), eye, 0.5)
+			&"mask":
+				ci.draw_rect(Rect2(-0.1, -24.7, 4.3, 2.6), Color("1b2027"))
 			&"sunglasses":
 				ci.draw_rect(Rect2(0.3, -26, 4.3, 1.8), Color(0.04, 0.04, 0.05))
 			&"goggles":
@@ -311,6 +410,11 @@ static func _head(ci: CanvasItem, look: NpcType, hat: StringName, hair: Color, b
 				ci.draw_rect(Rect2(-0.6, -23.4, 4.6, 2.5), hair.lerp(Color(0.45, 0.43, 0.4), 0.3))
 	var dark := hat_c.darkened(0.3)
 	match hat:
+		&"headband":
+			ci.draw_rect(Rect2(-4.3, -27.8, 8.6, 1.5), hat_c)
+			if back:
+				ci.draw_line(Vector2(-2, -27), Vector2(-4, -23), hat_c, 1)
+				ci.draw_line(Vector2(-2, -27), Vector2(0, -23), hat_c, 1)
 		&"cap":
 			ci.draw_rect(Rect2(-4.4, -29.8, 8.8, 3.6), hat_c)
 			ci.draw_rect(Rect2(-3.4, -30.6, 6.8, 1), hat_c)

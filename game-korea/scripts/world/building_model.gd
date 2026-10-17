@@ -10,6 +10,7 @@ class_name BuildingModel
 const FH := IsoView.FLOOR_HEIGHT
 const INSET := 10.0                        ## 부지 가장자리 → 본채 벽 (화단·포장 띠)
 const UNIT := Color(0.64, 0.65, 0.64)      ## 실외기·옥탑 콘크리트
+const VILLA_TANK := Color(0.93, 0.75, 0.2)   ## 빌라 옥상 노란 원통 물탱크
 const PAVING := Color(0.36, 0.35, 0.34)
 const GRASS := Color(0.2, 0.3, 0.17)
 const EARTH := Color(0.46, 0.4, 0.3)
@@ -158,7 +159,7 @@ static func _tower(out: Array[Piece], r: Rect2, t: BuildingType, seed: int, heig
 			body.deco = [&"piloti", &"balcony", &"name"]
 			_stair_house(body, seed)
 			_units(body, seed, 2)
-			_tank(body, seed)
+			_tank(body, seed, VILLA_TANK)
 		&"gosiwon":
 			body.windows = &"slit"
 			body.deco = [&"shops", &"vsign"]
@@ -425,12 +426,12 @@ static func _stair_house(parent: Piece, seed: int, color := UNIT) -> void:
 	parent.on_top.append(box)
 
 
-## 물탱크
-static func _tank(parent: Piece, seed: int) -> void:
+## 물탱크 (기본 파랑. 빌라는 노란 원통)
+static func _tank(parent: Piece, seed: int, color := Color(0.35, 0.55, 0.75)) -> void:
 	var r := parent.rect
 	var c := r.position + r.size * Vector2(0.2 + hash01(seed, 11) * 0.2, 0.55)
 	parent.on_top.append(_box(Rect2(c - Vector2(11, 11), Vector2(22, 22)), parent.h1, parent.h1 + 16.0,
-		Color(0.35, 0.55, 0.75), &"tank", Color(0.35, 0.55, 0.75), &"none", seed))
+		color, &"tank", color, &"none", seed))
 
 
 ## 나무 한 그루 (바닥 자리 at, 크기 배율 s)
