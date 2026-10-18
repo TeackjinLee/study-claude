@@ -763,7 +763,7 @@ def _place_punch(out: Image.Image, meta: dict, cid: str, src: Path, n: int, col:
     print(f"  {src.name}: 주먹 {n}장 ({', '.join(punches)}), 배율 {scale:.3f}")
 
 
-def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | None", run_frames: int, debug: bool,
+def process_dir8_sheet(cid: str, walk_src: "Path | None", frames: int, run_src: "Path | None", run_frames: int, debug: bool,
                        fall_src: "Path | None" = None, fall_frames: int = 0,
                        punch_src: "Path | None" = None, punch_frames: int = 0) -> None:
     """한 장짜리 8방향 걷기 시트 NN_<id>_walk<N>_dir8.png (N열 × 5행: ↓ · ↙ · ← · ↖ · ↑, 줄마다 한 바퀴 N장 — 예: walk24, walk12)
@@ -773,10 +773,12 @@ def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | N
     → assets/characters/<id>_dir8.png (8행 = DIR8 순서, 0열 서 있기 + 1~N열 걷기 [+ N+1~N+M열 달리기], 칸 128×112)
       + .json (dirs·frames [+ run_dirs·run_frames]). 방향별 시트(walk8·key8)가 있어도 이것으로 모두 바꾼다.
     배경(초록·마젠타)은 그림 전체에서 섞인 만큼 푼다(unmix_key) — 팔·다리 틈이 어두운 배경색으로 칠해진 압축 그림이다.
-    달리기 크기는 머리 폭 비율로 걷기에 맞춘다(몸을 숙여 키가 줄어든다)."""
+    달리기 크기는 머리 폭 비율로 걷기에 맞춘다(몸을 숙여 키가 줄어든다).
+    걷기 시트 없이 달리기만 있으면(walk_src None) 걷기 칸 없이 달리기만 넣는다(.json dirs [] · frames 0) —
+    게임은 서 있기·걷기를 예전 그림으로, 달리기만 이것으로 그린다. 키는 걷기 키의 RUN_H_RANGE 가운데로."""
     opts = dict(drop_edge=True, pad=0.06, unmix=True, keep_tint=cid in KEEP_TINT, hpad=0.15)
-    walk_rows = _sheet_rows(walk_src, frames)
-    cells = load_cells(walk_src, frames, _sheet_nrows(walk_src), **opts)
+    walk_rows = _sheet_rows(walk_src, frames) if walk_src else []
+    cells = load_cells(walk_src, frames, _sheet_nrows(walk_src), **opts) if walk_src else {}
     run_rows = _sheet_rows(run_src, run_frames) if run_src else []
     turns = [(d, t) for _, d, _, t in run_rows if t]
     cols = 1 + frames + (run_frames if run_src else 0) + sum(len(t[1]) for _, t in turns) + (fall_frames if fall_src else 0) + (punch_frames if punch_src else 0)
@@ -801,10 +803,13 @@ def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | N
         runs = {d: [c for c in (rcells[(i, k)] for k in keep) if c] for i, d, keep, _ in run_rows}
         # 걷기 그림의 머리 폭(게임 크기)과 같아지게
         run_head = float(np.median([_head_w(c) for cs in runs.values() for c in cs]))
-        scale = float(np.median(heads)) / max(run_head, 1.0)
-        # 머리를 크게 그린 그림이면 몸이 작아진다 — 달리기 키가 걷기 키의 85~92% 안에 들게 (숙인 만큼만 작게)
         run_h = float(np.median([c[3] for cs in runs.values() for c in cs]))
-        scale = min(max(scale, BODY_H * 0.97 * RUN_H_RANGE[0] / run_h), BODY_H * 0.97 * RUN_H_RANGE[1] / run_h)
+        if heads:
+            scale = float(np.median(heads)) / max(run_head, 1.0)
+            # 머리를 크게 그린 그림이면 몸이 작아진다 — 달리기 키가 걷기 키의 85~92% 안에 들게 (숙인 만큼만 작게)
+            scale = min(max(scale, BODY_H * 0.97 * RUN_H_RANGE[0] / run_h), BODY_H * 0.97 * RUN_H_RANGE[1] / run_h)
+        else:
+            scale = BODY_H * 0.97 * sum(RUN_H_RANGE) / 2 / run_h
         for d, run in runs.items():
             r = DIR8.index(d)
             # 줄마다 키를 맞춘다 — 생성 그림은 ↓ 줄을 다른 줄보다 20%쯤 작게 그리곤 한다 (걷기는 줄마다 같은 키로 맞춘다)
@@ -838,7 +843,8 @@ def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | N
         dbg = Image.new("RGBA", out.size, (110, 150, 110, 255))
         dbg.alpha_composite(out)
         dbg.save(DST.parent.parent / ".screenshots" / f"sprite_{cid}_dir8.png")
-    print(f"{cid}: 8방향 걷기 한 장 시트 {frames}장 ({', '.join(present)})" + (f" · 달리기 {run_frames}장" if run_src else ""))
+    print(f"{cid}: " + (f"8방향 걷기 한 장 시트 {frames}장 ({', '.join(present)})" if walk_src else "걷기 시트 없음 (서 있기·걷기는 예전 그림)")
+          + (f" · 달리기 {run_frames}장" if run_src else ""))
 
 def main() -> None:
     debug = "--debug" in sys.argv
@@ -859,6 +865,7 @@ def main() -> None:
     for cid, sources in dir8.items():
         if not only or cid in only:
             process_dir8(cid, sources, debug)
+    walked = set()
     for src in sorted(SRC.glob("[0-9][0-9]_*_walk*_dir8.png")):      # 한 장짜리 시트가 있으면 방향별 시트를 덮어쓴다
         m = re.fullmatch(r"\d\d_(.+)_walk(\d+)_dir8", src.stem)
         if m and (not only or m[1] in only):
@@ -872,6 +879,12 @@ def main() -> None:
                       if (cm := re.fullmatch(rf"\d\d_{re.escape(m[1])}_combo(\d+)_dir8", f.stem))]
             punch_src, punch_n = combos[0] if combos else (None, 0)
             process_dir8_sheet(m[1], src, int(m[2]), run_src, run_n, debug, fall_src, fall_n, punch_src, punch_n)
+        if m:
+            walked.add(m[1])
+    for src in sorted(SRC.glob("[0-9][0-9]_*_run*_dir8.png")):       # 걷기 시트 없이 달리기만 받은 인물 (걷기 시트가 오면 위에서 같이 붙는다)
+        m = re.fullmatch(r"\d\d_(.+)_run(\d+)_dir8", src.stem)
+        if m and m[1] not in walked and m[1] not in dir8 and (not only or m[1] in only):
+            process_dir8_sheet(m[1], None, 0, src, int(m[2]), debug)
     for src in sorted(SRC.glob("[0-9][0-9]_*_walk_dir4.png")):
         cid = src.stem[3:-len("_walk_dir4")]
         if not only or cid in only:

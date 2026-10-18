@@ -1643,7 +1643,7 @@ function gOk(have) {
     : (have.includes(DIRS[GR.MIRROR[k]]) && GR.MIRROR[k] !== k ? [GR.MIRROR[k], true] : null));
 }
 function gInfo(m) {
-  return {frames: m.frames || 16, ok: gOk(m.dirs || []), runFrames: m.run_frames || 0, runOk: gOk(m.run_dirs || []),
+  return {frames: m.frames ?? 16, ok: gOk(m.dirs || []), runFrames: m.run_frames || 0, runOk: gOk(m.run_dirs || []),
           fallFrames: m.fall_frames || 0, fallCol: m.fall_col || 0, fallOk: gOk(m.fall_dirs || []),
           punchFrames: m.punch_frames || 0, punchCol: m.punch_col || 0, punchOk: gOk(m.punch_dirs || [])};
 }
@@ -1714,9 +1714,10 @@ function gCell(ctx, ch, col, row, flip, x, y, z, alpha) {
   ctx.restore();
 }
 function gThumb(ch) {
-  const cv = mk(96, 84), x = cv.getContext('2d'), s = ch.info.ok[2] || ch.info.ok.find(Boolean);
+  // 걷기 칸이 없는 시트(달리기만)는 달리기 첫 칸
+  const i = ch.info, walk = i.ok.some(Boolean), ok = walk ? i.ok : i.runOk, s = ok[2] || ok.find(Boolean);
   x.imageSmoothingQuality = 'high';
-  if (s) gCell(x, ch, 0, s[0], s[1], 48, 82, 0.74);
+  if (s) gCell(x, ch, walk ? 0 : 1 + i.frames, s[0], s[1], 48, 82, 0.74);
   return cv;
 }
 function gRenderList() {
@@ -1729,7 +1730,7 @@ function gRenderList() {
   }
   $('#gCount').textContent = `${G.chars.length}종`;
   box.replaceChildren(...G.chars.map(ch => {
-    const i = ch.info, tags = [`걷기 ${i.frames}`];
+    const i = ch.info, tags = [i.frames ? `걷기 ${i.frames}` : '걷기 없음(게임은 예전 그림)'];
     if (i.runFrames) tags.push(`달리기 ${i.runFrames}`);
     if (i.fallFrames) tags.push('넘어짐');
     if (i.punchFrames) tags.push('주먹');
@@ -1917,7 +1918,7 @@ function gTick(t) {
       const shownDir = DIRS[main.k], srcDir = DIRS[main.row];
       info = `${ch.name} · ${main.label} ${ARROW[shownDir]}` + (main.flip ? ` (${ARROW[srcDir]} 줄 뒤집기)` : '') +
         ` · ${main.i + 1}/${main.n}장 · ${main.col}열 ${main.row + 1}행` + (G.paused ? ' · 멈춤' : '');
-    }
+    } else info = `${ch.name} · 이 동작은 8방향 그림이 없다 (게임은 예전 2방향 그림으로 그린다)`;
   }
   $('#gInfo').textContent = info;
   $('#gKeys').textContent = ka != null ? '' : '방향키·WASD 걷기 / Shift 달리기 / J 주먹 / F 넘어지기 / 스페이스 멈춤';

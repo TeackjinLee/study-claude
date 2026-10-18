@@ -1,6 +1,6 @@
 // tools/gen_motion_index.py가 만든다 — 손으로 고치지 않는다
 window.GAME_DIR8 = {
- "version": 1792297834,
+ "version": 1792299077,
  "chars": [
   {
    "name": "주인공",
@@ -53,6 +53,29 @@ window.GAME_DIR8 = {
     ],
     "punch_frames": 12,
     "punch_col": 41
+   }
+  },
+  {
+   "name": "강남 조직원",
+   "scale": 1.0,
+   "walk": 65.0,
+   "run": 175.0,
+   "id": "gang_gangnam",
+   "meta": {
+    "dirs": [],
+    "frames": 0,
+    "run_dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n",
+     "nw",
+     "w",
+     "sw"
+    ],
+    "run_frames": 8,
+    "turns": []
    }
   },
   {
@@ -381,6 +404,29 @@ window.GAME_DIR8 = {
      "n"
     ],
     "frames": 12,
+    "run_dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n",
+     "nw",
+     "w",
+     "sw"
+    ],
+    "run_frames": 8,
+    "turns": []
+   }
+  },
+  {
+   "name": "버스 기사",
+   "scale": 1.0,
+   "walk": 60.0,
+   "run": 160.0,
+   "id": "bus_driver",
+   "meta": {
+    "dirs": [],
+    "frames": 0,
     "run_dirs": [
      "s",
      "se",
