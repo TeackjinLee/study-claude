@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = &"CIV_F"
 display_name = "시민 (여성)"
+walk_scale = 0.9
 idle_chance = 0.35
 reaction = 1.0
 spawn_weight = 3.0

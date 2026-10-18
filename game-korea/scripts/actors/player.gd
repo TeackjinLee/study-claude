@@ -22,6 +22,8 @@ var pants := Color(0.2, 0.22, 0.3)
 var hair := Color(0.05, 0.05, 0.05)
 ## false면 2.5D 화면에서도 W가 월드 북쪽 (테스트가 월드 방향으로 걷게 할 때)
 var screen_walk := true
+## 이 시간(초) 동안은 걸어도 겨눈 쪽을 바라본다 (마우스 조준)
+var _aim_hold := 0.0
 
 
 func _ready() -> void:
@@ -47,8 +49,10 @@ func _physics_process(delta: float) -> void:
 		dir = IsoView.walk_dir(dir)
 	var speed := RUN_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
 	velocity = dir * speed
+	_aim_hold = maxf(_aim_hold - delta, 0.0)
 	if dir != Vector2.ZERO:
-		facing = Vector2.UP.angle_to(dir)
+		if _aim_hold <= 0.0:
+			facing = Vector2.UP.angle_to(dir)
 		walk_phase += delta * velocity.length() / 9.0
 	move_and_slide()
 	_sort()
@@ -105,6 +109,13 @@ func punch() -> void:
 	_combo = (_combo + 1) % PersonRig.PUNCH_SEGS.size() if now - _combo_at <= COMBO_GAP else 0
 	_combo_at = now
 	set_meta(&"punch", [_combo, now])
+
+
+## dir 쪽을 바라보고, hold초 동안은 걷는 방향으로 돌지 않는다
+func face(dir: Vector2, hold := 0.0) -> void:
+	if dir != Vector2.ZERO:
+		facing = Vector2.UP.angle_to(dir)
+	_aim_hold = maxf(_aim_hold, hold)
 
 
 func is_dead() -> bool:

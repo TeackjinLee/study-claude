@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = &"FOREIGNER"
 display_name = "외국인"
+walk_scale = 0.9
 walk_speed_min = 50
 walk_speed_max = 65
 run_speed = 170

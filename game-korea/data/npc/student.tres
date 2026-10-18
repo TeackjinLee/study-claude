@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = &"STUDENT"
 display_name = "학생"
+walk_scale = 0.9
 walk_speed_min = 60.0
 walk_speed_max = 80.0
 run_speed = 195.0

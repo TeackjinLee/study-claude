@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = &"CIV_M"
 display_name = "시민 (남성)"
+walk_scale = 0.9
 walk_speed_min = 55.0
 walk_speed_max = 75.0
 run_speed = 175.0

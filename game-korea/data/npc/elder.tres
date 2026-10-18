@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = &"ELDER"
 display_name = "어르신"
+walk_scale = 0.9
 walk_speed_min = 30
 walk_speed_max = 45
 run_speed = 110

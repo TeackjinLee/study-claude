@@ -9,9 +9,11 @@ extends Resource
 @export_range(0, 10) var stat_speed := 0
 @export_range(0, 10) var stat_power := 0
 @export var walk_speed_min := 50.0:
-	get: return 35.0 + stat_speed * 3.0 if stat_speed > 0 else walk_speed_min
+	get: return (35.0 + stat_speed * 3.0 if stat_speed > 0 else walk_speed_min) * walk_scale
 @export var walk_speed_max := 72.0:
-	get: return 57.0 + stat_speed * 3.0 if stat_speed > 0 else walk_speed_max
+	get: return (57.0 + stat_speed * 3.0 if stat_speed > 0 else walk_speed_max) * walk_scale
+## 걷는 속도 배율 (일반 시민 0.9 — 거리를 느긋하게 걷게). 달리기(도망)는 그대로
+@export var walk_scale := 1.0
 @export var run_speed := 170.0:
 	get: return 110.0 + stat_speed * 12.0 if stat_speed > 0 else run_speed
 ## 인도 모퉁이에서 잠깐 멈춰 설 확률

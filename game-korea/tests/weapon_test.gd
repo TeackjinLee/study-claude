@@ -24,6 +24,7 @@ func _ready() -> void:
 	_test_ballistics()
 	await _test_pickup()
 	await _test_kills()
+	await _test_mouse_aim()
 	await _test_drive_by()
 	await _test_crimes()
 	await _test_police_shoot_back()
@@ -204,6 +205,35 @@ func _test_kills() -> void:
 	await _frames(2)
 	_expect(q.state == Pedestrian.State.FLEE, "총소리에 근처 시민이 도망친다 (%d)" % q.state)
 	_expect(main.wallet.money == Wallet.START_MONEY, "돈은 그대로")
+	await _free(main)
+
+
+## 마우스 조준: 2.5D에서 서 있는 사람의 몸을 누르면 그 사람을, 빈 곳은 커서 아래 바닥 점을 겨눈다
+func _test_mouse_aim() -> void:
+	var main := _make_main()
+	await _frames(2)
+	var player: Player = main.player
+	var w: PlayerWeapons = main.weapons
+	var at := player.global_position
+	var ct := IsoView.canvas(Vector2(1280, 720), at, 2.0)
+	var p := _civilian_ahead(main, 1, 60.0)
+	p.global_position += Vector2(18, 0)
+	var torso := ct * (p.global_position + IsoView.lift(IsoView.ground(p.global_position) + IsoView.PERSON_HEIGHT * 0.6 * p.npc.body_scale))
+	var d := w.screen_dir(at, torso, ct)
+	var want := (p.global_position - at).normalized()
+	_expect(d.angle_to(want) < 0.01, "몸통을 누르면 그 사람 발밑을 겨눈다 (%.3f rad 차이)" % d.angle_to(want))
+	var spot := at + Vector2(-70, 40)
+	d = w.screen_dir(at, ct * (spot + IsoView.lift(IsoView.ground(at))), ct)
+	_expect(absf(d.angle_to((spot - at).normalized())) < 0.01, "빈 곳은 커서 아래 바닥 점 쪽으로 정확히 (부채꼴 자동 조준 없음)")
+	d = w.screen_dir(at, ct * (at + IsoView.lift(IsoView.ground(at))), ct)
+	_expect(d.is_equal_approx(Vector2.UP.rotated(player.facing)), "커서가 발밑이면 바라보는 쪽")
+	player.face(Vector2.RIGHT, 0.3)
+	Input.action_press("accelerate")
+	await _frames(5)
+	_expect(absf(angle_difference(player.facing, Vector2.UP.angle_to(Vector2.RIGHT))) < 0.01, "겨눈 뒤 잠깐은 걸어도 겨눈 쪽을 본다")
+	await _frames(30)
+	Input.action_release("accelerate")
+	_expect(absf(angle_difference(player.facing, Vector2.UP.angle_to(Vector2.RIGHT))) > 0.5, "잠시 뒤엔 다시 걷는 쪽을 본다")
 	await _free(main)
 
 

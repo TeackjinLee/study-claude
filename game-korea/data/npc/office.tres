@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = &"OFFICE"
 display_name = "직장인"
+walk_scale = 0.9
 idle_chance = 0.1
 reaction = 0.9
 spawn_weight = 2.0
