@@ -882,6 +882,12 @@ static func draw_sheet_frame(ci: CanvasItem, facing: float, phase: float, gait: 
 		look: NpcType, down: bool) -> bool:
 	if not use_sprites:
 		return false
+	if down and _draw_dir8_fall(ci, facing, size, look):
+		return true
+	if not down and ci.has_meta(&"dir8_fall"):
+		ci.remove_meta(&"dir8_fall")
+	if not down and _draw_dir8_punch(ci, facing, size, look):
+		return true
 	if not down and (_draw_dir8(ci, facing, phase, gait, size, look) or _draw_dir4(ci, facing, phase, gait, size, look)):
 		return true
 	var tex := sprite_for(look)
@@ -1169,6 +1175,10 @@ const DIR8_FRAMES := 16                ## .json에 frames가 없을 때 걷기 �
 const DIR8_HOLD := deg_to_rad(12.0)
 const DIR8_TURN_STEP := 0.07           ## 주인공: 방향을 크게 바꾸면 45°씩 이만큼(초)마다 돌아 보인다 (한 칸 차이는 바로)
 const DIR8_TURN_FRAME := 0.045         ## 주인공: 도는 장면(.json turns) 한 장 시간
+const DIR8_FALL_FRAME := 0.09          ## 주인공: 넘어짐(.json fall_*) 한 장 시간 — 마지막 칸(누운 자세)에서 멈춘다
+const PUNCH_FRAME := 0.07              ## 주인공: 주먹 콤보(.json punch_*) 한 장 시간
+## 콤보 한 번에 넘길 칸 (주먹 시트 안의 0부터 번호): 잽 · 스트레이트 · 훅. 0번·11번은 싸움 자세
+const PUNCH_SEGS := [[1, 2, 3], [4, 5, 6], [7, 8, 9, 10]]
 static var _dir8 := {}
 
 
@@ -1184,7 +1194,11 @@ static func dir8_for(look: NpcType) -> Dictionary:
 			if data is Dictionary:
 				info = {"tex": load(png), "frames": int(data.get("frames", DIR8_FRAMES)), "ok": _dir8_ok(data.get("dirs", [])),
 						"run_frames": int(data.get("run_frames", 0)), "run_ok": _dir8_ok(data.get("run_dirs", [])),
-						"turns": data.get("turns", [])}
+						"turns": data.get("turns", []),
+						"fall_frames": int(data.get("fall_frames", 0)), "fall_col": int(data.get("fall_col", 0)),
+						"fall_ok": _dir8_ok(data.get("fall_dirs", [])),
+						"punch_frames": int(data.get("punch_frames", 0)), "punch_col": int(data.get("punch_col", 0)),
+						"punch_ok": _dir8_ok(data.get("punch_dirs", []))}
 		_dir8[id] = info
 	return _dir8[id]
 
@@ -1262,5 +1276,108 @@ static func _draw_dir8(ci: CanvasItem, facing: float, phase: float, gait: float,
 	ci.draw_colored_polygon(_ellipse_pts(Vector2.ZERO, 6.5 * size, 2.6 * size), Color(0, 0, 0, 0.32))
 	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(flip * s, s)))
 	ci.draw_texture_rect_region(info["tex"], Rect2(-DIR4_FOOT, DIR4_CELL), Rect2(Vector2(col, row) * DIR4_CELL, DIR4_CELL))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	return true
+
+
+## 넘어짐 그림으로 쓰러진다 (주인공만 — 매 프레임 다시 그리는 것만 장면이 넘어간다. 보행자는 예전처럼 눕힌 그림).
+## 처음 쓰러져 그린 때부터 DIR8_FALL_FRAME마다 한 장씩, 마지막 칸(누운 자세)에서 멈춘다. 방향은 그때 보이던 방향.
+## 다시 서서 그리면(병원에서 살아나면) 처음부터 — draw_sheet_frame이 지운다
+static func _draw_dir8_fall(ci: CanvasItem, facing: float, size: float, look: NpcType) -> bool:
+	if look != null:
+		return false
+	var info := dir8_for(look)
+	if info.is_empty() or int(info["fall_frames"]) == 0:
+		return false
+	var ok: Array = info["fall_ok"]
+	var now := Time.get_ticks_msec() / 1000.0
+	if not ci.has_meta(&"dir8_fall"):
+		var dir := IsoView.to_screen_dir(Vector2.UP.rotated(facing))
+		var k0 := dir8_pick(dir, ci.get_meta(&"dir8_show", -1), ok)
+		if k0 < 0:
+			return false
+		ci.set_meta(&"dir8_fall", [k0, now])
+	var fall: Array = ci.get_meta(&"dir8_fall")
+	var k: int = fall[0]
+	var n: int = info["fall_frames"]
+	var i := mini(int((now - float(fall[1])) / DIR8_FALL_FRAME), n - 1)
+	var row: int = ok[k][0]
+	var flip := -1.0 if ok[k][1] else 1.0
+	var g := PersonDrawer._ground(ci)
+	var s := SPRITE_HEIGHT * size / SPRITE_BODY
+	var src := Rect2(Vector2(int(info["fall_col"]) + i, row) * DIR4_CELL, DIR4_CELL)
+	# 그림자: 서 있을 때는 발밑 타원, 누울수록 그 칸 그림이 차지한 자리(폭·깊이)에 맞춘 납작한 타원으로
+	var lie := float(i) / float(maxi(n - 1, 1))
+	var used := _fall_used(info["tex"], src)
+	var body_c := Vector2((used.get_center().x - DIR4_FOOT.x) * flip, used.end.y - DIR4_FOOT.y) * s
+	var c := Vector2(body_c.x, body_c.y - used.size.y * s * 0.36).lerp(Vector2.ZERO, 1.0 - lie)
+	var rx := lerpf(6.5 * size, used.size.x * s * 0.5, lie)
+	var ry := lerpf(2.6 * size, maxf(used.size.y * s * 0.36, 2.6 * size), lie)
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g))
+	if lie <= 0.0:
+		ci.draw_colored_polygon(_ellipse_pts(Vector2.ZERO, rx, ry), Color(0, 0, 0, 0.32))
+	else:
+		# 가장자리가 부드럽게 번지는 타원 (가운데 짙고 밖으로 옅어진다) — 서 있는 타원에서 이어지게 짙기를 맞춘다
+		ci.draw_texture_rect(_soft_shadow(), Rect2(c - Vector2(rx, ry) * 1.25, Vector2(rx, ry) * 2.5), false,
+				Color(0, 0, 0, lerpf(0.32, 0.5, lie)))
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(flip * s, s)))
+	if lie > 0.0:
+		# 바닥에 닿은 몸 둘레의 짙은 그늘 (같은 그림을 검게, 조금 아래로)
+		ci.draw_texture_rect_region(info["tex"], Rect2(-DIR4_FOOT + Vector2(0.0, 2.5), DIR4_CELL), src, Color(0, 0, 0, 0.3 * lie))
+	ci.draw_texture_rect_region(info["tex"], Rect2(-DIR4_FOOT, DIR4_CELL), src)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	return true
+
+
+static var _fall_rects := {}
+static var _soft: Texture2D = null
+
+## 가운데가 짙고 가장자리로 옅어지는 동그라미 (넘어진 몸 그림자). 반지름의 80%까지는 거의 다 짙고, 그 밖은 0으로 번진다
+static func _soft_shadow() -> Texture2D:
+	if _soft == null:
+		var img := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+		for y in 64:
+			for x in 64:
+				var d := Vector2(x + 0.5 - 32.0, y + 0.5 - 32.0).length() / 32.0
+				img.set_pixel(x, y, Color(1, 1, 1, 1.0 - smoothstep(0.45, 1.0, d)))
+		_soft = ImageTexture.create_from_image(img)
+	return _soft
+
+## 넘어짐 칸 하나에서 그림이 차지한 영역 (칸 안 좌표, 그림자 크기용 — 칸마다 한 번 잰다)
+static func _fall_used(tex: Texture2D, src: Rect2) -> Rect2:
+	var key := [tex.get_rid(), src]
+	if not _fall_rects.has(key):
+		var r := tex.get_image().get_region(Rect2i(src)).get_used_rect()
+		_fall_rects[key] = Rect2(r) if r.size.x > 0 else Rect2(DIR4_FOOT - Vector2(10, 90), Vector2(20, 90))
+	return _fall_rects[key]
+
+
+## 주먹 콤보 그림 (주인공만). 노드 메타 punch = [콤보 몇 번째(0 잽·1 스트레이트·2 훅), 시작 시각(초)]가 있으면
+## 그 토막(PUNCH_SEGS)을 PUNCH_FRAME마다 넘긴다 — 다 넘기면 false를 돌려 평소 그림(서 있기·걷기)으로 돌아간다
+static func _draw_dir8_punch(ci: CanvasItem, facing: float, size: float, look: NpcType) -> bool:
+	if look != null or not ci.has_meta(&"punch"):
+		return false
+	var info := dir8_for(look)
+	if info.is_empty() or int(info["punch_frames"]) < 11:
+		return false
+	var punch: Array = ci.get_meta(&"punch")
+	var seg: Array = PUNCH_SEGS[int(punch[0]) % PUNCH_SEGS.size()]
+	var i := int((Time.get_ticks_msec() / 1000.0 - float(punch[1])) / PUNCH_FRAME)
+	if i < 0 or i >= seg.size():
+		return false
+	var ok: Array = info["punch_ok"]
+	var dir := IsoView.to_screen_dir(Vector2.UP.rotated(facing))
+	var k := dir8_pick(dir, ci.get_meta(&"dir8_show", -1), ok)
+	if k < 0:
+		return false
+	var row: int = ok[k][0]
+	var flip := -1.0 if ok[k][1] else 1.0
+	var g := PersonDrawer._ground(ci)
+	var s := SPRITE_HEIGHT * size / SPRITE_BODY
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g))
+	ci.draw_colored_polygon(_ellipse_pts(Vector2.ZERO, 7.5 * size, 2.8 * size), Color(0, 0, 0, 0.32))
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(flip * s, s)))
+	ci.draw_texture_rect_region(info["tex"], Rect2(-DIR4_FOOT, DIR4_CELL),
+			Rect2(Vector2(int(info["punch_col"]) + int(seg[i]), row) * DIR4_CELL, DIR4_CELL))
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	return true

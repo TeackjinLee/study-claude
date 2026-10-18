@@ -3,7 +3,7 @@ extends Node2D
 ## 실행: godot --path . res://tools/person_gallery.tscn
 ## 저장: ... -- --shot  →  .screenshots/person_gallery.png
 ## 몇 종만 크게: ... -- --shot --ids=office,boss  →  .screenshots/person_gallery_office.png (설계도와 비교할 때)
-## 관절 있는 사람(PersonRig) 비교: ... -- --rig [--ids=civ_m,police,office] (주인공은 player). --walk면 8방향 걷기만, --run이면 8방향 달리기만 크게  — 한 줄에 기존 그림 · 새 뼈대 8방향 걷기 · 달리기 · 서 있기.
+## 관절 있는 사람(PersonRig) 비교: ... -- --rig [--ids=civ_m,police,office] (주인공은 player). --walk면 8방향 걷기만, --run이면 8방향 달리기만, --fall이면 8방향 넘어짐만(2초마다 다시), --punch면 8방향 주먹 콤보만 크게  — 한 줄에 기존 그림 · 새 뼈대 8방향 걷기 · 달리기 · 서 있기.
 ##   움직이는 걸 창으로 보거나, --shot이면 .screenshots/person_rig.png
 ## 설계도(성인 12종 앞·뒤)와 맞춰 보기: ... -- --sheet [--shot]  →  .screenshots/person_sheet.png (--all이면 그림이 있는 종 전부)
 
@@ -34,8 +34,25 @@ class RigDoll:
 	func _ready() -> void:
 		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
+	var fall_loop := 0.0      ## 0보다 크면 쓰러짐을 이 초마다 처음부터 다시 (--fall)
+	var _fall_t := 0.0
+	var punch_loop := false   ## 주먹 콤보를 0.35초마다 이어 지른다 (--punch)
+	var _punch_t := 0.0
+	var _punch_n := 0
+
 	func _process(delta: float) -> void:
 		phase += delta * (0.0 if gait <= 0.0 else 6.5 + 3.5 * maxf(gait - 1.0, 0.0))
+		if punch_loop:
+			_punch_t -= delta
+			if _punch_t <= 0.0:
+				_punch_t = 0.35 if _punch_n % 3 != 2 else 0.9   # 훅 다음엔 잠깐 쉰다
+				set_meta(&"punch", [_punch_n % 3, Time.get_ticks_msec() / 1000.0])
+				_punch_n += 1
+		if fall_loop > 0.0:
+			_fall_t += delta
+			if _fall_t >= fall_loop:
+				_fall_t = 0.0
+				remove_meta(&"dir8_fall")
 		queue_redraw()
 
 	func _draw() -> void:
@@ -121,7 +138,9 @@ func _rig_compare() -> void:
 	if ids.is_empty():
 		ids = PackedStringArray(["civ_f", "office", "police", "boss"])
 	var run_only := "--run" in OS.get_cmdline_user_args()
-	var walk_only := "--walk" in OS.get_cmdline_user_args() or run_only
+	var fall_only := "--fall" in OS.get_cmdline_user_args()
+	var punch_only := "--punch" in OS.get_cmdline_user_args()
+	var walk_only := "--walk" in OS.get_cmdline_user_args() or run_only or fall_only or punch_only
 	var cols := 8 if walk_only else 11
 	var view := get_viewport().get_visible_rect().size
 	var cell := Vector2(view.x / cols, (view.y - TOP) / ids.size())
@@ -132,6 +151,10 @@ func _rig_compare() -> void:
 	add_child(layer)
 	var title := Label.new()
 	title.text = "인물 (PersonRig) — 8방향 달리기" if run_only else "인물 (PersonRig) — 기존 · 8방향 걷기 · 달리기 · 쓰러짐"
+	if fall_only:
+		title.text = "인물 (PersonRig) — 8방향 넘어짐 (2초마다 다시)"
+	if punch_only:
+		title.text = "인물 (PersonRig) — 8방향 주먹 콤보 (잽 · 스트레이트 · 훅)"
 	title.position = Vector2(20, 14)
 	title.add_theme_font_size_override("font_size", 22)
 	layer.add_child(title)
@@ -158,6 +181,13 @@ func _rig_compare() -> void:
 				wd.facing = Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(c * PI / 4.0)))
 				wd.phase = c * 0.8
 				wd.gait = 2.0 if run_only else 1.0
+				if punch_only:
+					wd.gait = 0.0
+					wd.punch_loop = true
+				if fall_only:
+					wd.gait = 0.0
+					wd.down = true
+					wd.fall_loop = 2.0
 				add_child(wd)
 				wd.global_position = at
 				continue
@@ -191,6 +221,10 @@ func _rig_compare() -> void:
 	if "--shot" in OS.get_cmdline_user_args():
 		for i in 4:
 			await get_tree().process_frame
+		if fall_only:
+			await get_tree().create_timer(PersonRig.DIR8_FALL_FRAME * 9.0).timeout   # 다 누운 뒤
+		if punch_only:
+			await get_tree().create_timer(0.35 + PersonRig.PUNCH_FRAME * 1.5).timeout   # 스트레이트를 뻗은 때
 		await RenderingServer.frame_post_draw
 		var path := ProjectSettings.globalize_path("res://.screenshots/person_rig.png")
 		get_viewport().get_texture().get_image().save_png(path)

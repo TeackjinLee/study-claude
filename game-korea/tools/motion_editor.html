@@ -35,6 +35,29 @@ input[type=number]{width:58px}
 input[type=checkbox]{accent-color:var(--acc)}
 label{white-space:nowrap}
 main{flex:1;min-height:0;display:grid;grid-template-columns:300px minmax(0,1fr) 500px}
+/* 탭 */
+.tabs{display:flex;gap:0;margin-right:8px}
+.tabs button{border-radius:0}.tabs button:first-child{border-radius:6px 0 0 6px}.tabs button:last-child{border-radius:0 6px 6px 0}
+.game-only{display:none}
+body.game .ed-only{display:none}
+body.game .game-only{display:inline}
+main#gameView{display:none;grid-template-columns:250px minmax(0,1fr) 330px}
+body.game main#editor{display:none}
+body.game main#gameView{display:grid}
+#gList .gc{display:flex;gap:8px;align-items:center;width:100%;text-align:left;padding:4px 6px;margin-bottom:4px}
+#gList .gc canvas{width:48px;height:42px;background:var(--checker);border-radius:4px;flex:none}
+#gList .gc span{display:flex;flex-direction:column;min-width:0}
+#gList .gc small{color:var(--dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#gList .gc.on small{color:#fff}
+#gWrap{position:relative;height:max(320px,58vh);border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+#gv{width:100%;height:100%;display:block;outline:none}
+#gInfo{position:absolute;left:8px;top:6px;font-size:12px;color:#fff;text-shadow:0 0 3px #000;pointer-events:none}
+#gKeys{position:absolute;right:8px;bottom:6px;font-size:11px;color:#ddd;text-shadow:0 0 3px #000;pointer-events:none;text-align:right}
+.gstrip{display:flex;flex-wrap:wrap;gap:4px;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:8px;min-height:70px}
+.gstrip canvas{height:64px;background:var(--checker);border-radius:4px;border:2px solid transparent}
+.gstrip canvas.play{border-color:var(--acc2)}
+#gMeta{font-size:12px;color:var(--dim)}
+#gMeta b{color:var(--text)}
 main>section{overflow:auto;padding:10px 12px;border-right:1px solid var(--line);min-height:0}
 main>section:last-child{border-right:0}
 h2{font-size:12px;margin:6px 0 8px;color:var(--dim);font-weight:600;letter-spacing:.03em;text-transform:none}
@@ -59,7 +82,7 @@ h2{font-size:12px;margin:6px 0 8px;color:var(--dim);font-weight:600;letter-spaci
 .pad .mid{display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;color:var(--dim)}
 .top{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
 /* 장면 줄 */
-.strip{display:flex;flex-wrap:wrap;gap:6px;min-height:110px;padding:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.strip{user-select:none;display:flex;flex-wrap:wrap;gap:6px;min-height:110px;padding:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
 .strip.over{border-color:var(--acc)}
 .fr{position:relative;border:2px solid transparent;border-radius:6px;background:var(--checker);cursor:grab;user-select:none}
 .fr canvas{display:block;height:92px}
@@ -68,6 +91,7 @@ h2{font-size:12px;margin:6px 0 8px;color:var(--dim);font-weight:600;letter-spaci
 .fr .x{position:absolute;right:2px;top:2px;width:18px;height:18px;padding:0;font-size:11px;line-height:16px;border-radius:9px;opacity:0}
 .fr:hover .x{opacity:1}
 .fr.sel{border-color:var(--acc)}
+.fr.focus{outline:2px solid #fff;outline-offset:1px}
 .fr.play{box-shadow:0 0 0 2px var(--acc2)}
 .fr.before{box-shadow:-5px 0 0 -1px var(--acc)}
 .fr.miss{opacity:.4}
@@ -80,6 +104,9 @@ h2{font-size:12px;margin:6px 0 8px;color:var(--dim);font-weight:600;letter-spaci
 .pool .pf img{display:block;height:70px}
 .pool .pf span{position:absolute;left:2px;top:0;font-size:10px;color:#fff;text-shadow:0 0 3px #000}
 .pool .pf.used{border-color:#3d6b4f}
+.pool .pf.pick{border-color:var(--acc2);box-shadow:0 0 0 2px var(--acc2)}
+.pool .pf i{position:absolute;right:2px;bottom:1px;font-size:10px;font-style:normal;background:var(--acc2);color:#000;border-radius:7px;padding:0 4px}
+.poolbar{min-height:26px}
 /* 미리보기 */
 #pvwrap{position:relative;height:max(320px,52vh);border-radius:8px;overflow:hidden;border:1px solid var(--line)}
 #pv{width:100%;height:100%;display:block;outline:none}
@@ -94,15 +121,19 @@ details summary{cursor:pointer;color:var(--dim);margin:8px 0}
 details p,details li{color:var(--dim);font-size:12px}
 @media (max-width:1200px){main{grid-template-columns:260px minmax(0,1fr)}main>section:last-child{grid-column:1/-1;border-top:1px solid var(--line)}}
 @media (max-width:760px){main{display:block;overflow:auto}main>section{border-right:0;border-bottom:1px solid var(--line);overflow:visible}}
+@media (max-width:1200px){main#gameView{grid-template-columns:220px minmax(0,1fr)}main#gameView>section:last-child{grid-column:1/-1;border-top:1px solid var(--line)}}
+@media (max-width:760px){body.game main#gameView{display:block;overflow:auto}}
 </style>
 </head>
 <body>
 <header>
   <h1>인물 모션 편집기</h1>
-  <label>이름(id) <input id="cid" value="character" style="width:110px"></label>
-  <button id="bOpen" class="primary">그림 넣기</button>
+  <div class="tabs"><button id="tabEdit" class="on">편집</button><button id="tabGame">게임 그림 보기</button></div>
+  <span class="ed-only"><label>이름(id) <input id="cid" value="character" style="width:110px"></label>
+  <button id="bOpen" class="primary">그림 넣기</button></span>
   <input id="file" type="file" accept="image/*" multiple hidden>
   <span class="sp"></span>
+  <span class="ed-only">
   <button id="bUndo" title="되돌리기 (⌘Z)">↶</button>
   <button id="bRedo" title="다시 하기 (⇧⌘Z)">↷</button>
   <button id="bSaveProj">작업 저장</button>
@@ -111,8 +142,10 @@ details p,details li{color:var(--dim);font-size:12px}
   <button id="bExport">시트 내보내기</button>
   <button id="bExportGame" class="primary">게임 8방향 내보내기</button>
   <button id="bReset" class="warn">새로 시작</button>
+  </span>
+  <span class="game-only hint" id="gHead"></span>
 </header>
-<main>
+<main id="editor">
   <!-- 왼쪽: 원본 그림 -->
   <section>
     <h2>원본 그림</h2>
@@ -227,8 +260,51 @@ details p,details li{color:var(--dim);font-size:12px}
     <p class="hint" id="outNote"></p>
   </section>
 </main>
+<!-- 게임 그림 보기: assets/characters/<id>_dir8.png를 게임(PersonRig._draw_dir8)과 같은 규칙으로 돌린다 -->
+<main id="gameView">
+  <section>
+    <h2>인물 <span class="hint" id="gCount"></span></h2>
+    <div id="gList"></div>
+    <div class="row"><button class="small" id="gReload" title="python3 tools/gen_motion_index.py 를 다시 돌렸으면 누른다">다시 읽기</button>
+      <button class="small" id="gFolder" title="목록 파일이 없을 때 assets/characters 폴더를 직접 고른다">폴더 고르기</button>
+      <input id="gDir" type="file" webkitdirectory multiple hidden></div>
+    <p class="hint">목록은 <code>tools/motion_game_index.js</code>입니다. 그림을 새로 뽑으면(<code>prepare_character_sprites.py</code>) 같이 바뀝니다. 직접 바꾸려면 <code>python3 tools/gen_motion_index.py</code> 후 "다시 읽기".</p>
+  </section>
+  <section>
+    <div id="gWrap"><canvas id="gv" tabindex="0"></canvas><div id="gInfo"></div><div id="gKeys"></div></div>
+    <h2 style="margin-top:10px">지금 쓰는 줄 <span class="hint" id="gStripHint"></span></h2>
+    <div class="gstrip" id="gStrip"></div>
+  </section>
+  <section>
+    <h2>동작 <span class="hint">— 키를 안 누를 때 보여 줄 것</span></h2>
+    <div class="modes" id="gModes"></div>
+    <h2>방향</h2>
+    <div class="pad" id="gPad"></div>
+    <h2 style="margin-top:12px">보기</h2>
+    <div class="row"><label>확대 <input id="gZoom" type="range" min="0.5" max="6" step="0.25" value="3" style="width:120px"></label><span id="gZoomV">×3</span>
+      <button class="small" id="gGame" title="게임 화면에서 보이는 크기">게임 크기</button></div>
+    <div class="row">
+      <label><input id="gAll8" type="checkbox"> 8방향 함께</label>
+      <label><input id="gEvery" type="checkbox"> 모든 인물 함께</label>
+    </div>
+    <div class="row">
+      <label><input id="gScale" type="checkbox" checked> 인물 키 배율(body_scale)</label>
+      <label><input id="gMove" type="checkbox" checked> 땅 움직이기</label>
+      <label><input id="gSmooth" type="checkbox" checked> 부드럽게</label>
+    </div>
+    <div class="row">
+      <label>빠르기 <input id="gSpeed" type="range" min="0.1" max="2" step="0.05" value="1" style="width:110px"></label><span id="gSpeedV">×1</span>
+      <button class="small" id="gPause">멈춤</button>
+    </div>
+    <h2 style="margin-top:12px">조작</h2>
+    <p class="hint">방향키·WASD 걷기 · Shift 달리기 · J(또는 Ctrl·클릭) 주먹 — 0.7초 안에 이어 누르면 잽 → 스트레이트 → 훅 · F 넘어지기/일어나기 · 스페이스 멈춤 · , . 한 장씩</p>
+    <p class="hint">게임과 같은 규칙입니다: 없는 방향은 좌우 짝을 뒤집고(↘ ← ↙), 그것도 없으면 가장 가까운 방향. 경계에서는 직전 방향을 12° 더 지킵니다. 주인공은 크게 돌면 45°씩 0.07초마다 돌아 보입니다. 걸음은 속도에 맞춰 넘깁니다(걷기 위상 = 거리 ÷ 9).</p>
+    <div class="card" id="gMeta"></div>
+  </section>
+</main>
 <div id="toast"></div>
 
+<script src="motion_game_index.js"></script>
 <script>
 'use strict';
 // ───────────────────────── 기본 값 ─────────────────────────
@@ -260,7 +336,11 @@ const S = {
   sheets: [],
   clips: {},                 // "walk:e" → {frames: [{f, dx, dy, flip}], cycle, flip}
   cur: {mode: 'walk', dir: 'e'},
-  sel: -1,
+  sel: -1,                   // 장면 줄에서 마지막으로 누른 장면 (Shift로 넓힐 때 기준은 anchor)
+  pick: new Set(),           // 장면 줄에서 고른 장면들 (Shift 누르고 누르면 사이를 모두, ⌘ 누르고 누르면 하나씩 더하고 뺀다)
+  anchor: -1,
+  poolPick: [],              // 칸 모음에서 고른 장면 id (Shift·⌘로 고르고 "넣기")
+  poolAnchor: null,
   nextSheet: 1,
 };
 const frames = new Map();    // "s1:5" → 잘라낸 장면 {canvas, w, h, ax: {torso, box, feet}, spread, thumb}
@@ -307,6 +387,15 @@ function clipOf(mode, dir, create) {
 }
 const curClip = () => clipOf(S.cur.mode, S.cur.dir, true);
 const validRefs = (c) => c ? c.frames.filter(r => frames.has(r.f)) : [];
+// 장면 하나만 고른다 (-1이면 아무것도 안 고름)
+function setSel(i) { S.sel = i; S.anchor = i; S.pick = new Set(i >= 0 ? [i] : []); }
+// 고른 장면 번호 (작은 것부터)
+function selIdx() {
+  const n = curClip().frames.length;
+  const p = [...S.pick].filter(i => i >= 0 && i < n).sort((a, b) => a - b);
+  return p.length ? p : (S.sel >= 0 && S.sel < n ? [S.sel] : []);
+}
+function setPick(list, focus) { S.pick = new Set(list); S.sel = focus ?? (list.length ? list[list.length - 1] : -1); S.anchor = list.length ? list[0] : -1; }
 
 // ───────────────────────── 배경 지우기 ─────────────────────────
 function borderMedian(px, w, h) {
@@ -801,14 +890,16 @@ async function restore(data, blobOf) {
   S.id = data.id || S.id;
   S.clips = data.clips || {};
   S.cur = data.cur || S.cur;
-  S.sel = -1;
+  setSel(-1);
 }
 
 // ───────────────────────── 화면 그리기 ─────────────────────────
 function changed(clipsOnly) {
   if (!clipsOnly) cellCache.clear();
   const c = curClip();
-  if (S.sel >= c.frames.length) S.sel = c.frames.length - 1;
+  if (S.sel >= c.frames.length) setSel(c.frames.length - 1);
+  for (const i of [...S.pick]) if (i >= c.frames.length) S.pick.delete(i);
+  S.poolPick = S.poolPick.filter(id => frames.has(id));
   renderPad(); renderClip(); renderPool();
   if (!clipsOnly) renderSheets();
   autosave();
@@ -873,13 +964,13 @@ function addAll(sh, replace) {
   pushUndo();
   const c = curClip(), refs = sh.frames.map(f => ({f, dx: 0, dy: 0, flip: false}));
   if (replace) c.frames = refs; else c.frames.push(...refs);
-  S.sel = c.frames.length - 1;
+  setSel(c.frames.length - 1);
   changed(true);
   toast(`${MODE_NAME[S.cur.mode]} ${ARROW[S.cur.dir]}: ${refs.length}장 ${replace ? '으로 바꿈' : '넣음'}`);
 }
 
 function renderPad() {
-  $('#modes').replaceChildren(...MODES.map(m => el('button', {class: m === S.cur.mode ? 'on' : '', onclick: () => { S.cur.mode = m; S.sel = -1; changed(true); }},
+  $('#modes').replaceChildren(...MODES.map(m => el('button', {class: m === S.cur.mode ? 'on' : '', onclick: () => { S.cur.mode = m; setSel(-1); changed(true); }},
     MODE_NAME[m], ' ', el('small', {class: 'hint'}, String(DIRS.filter(d => hasClip(m, d)).length)))));
   const pad = $('#pad');
   pad.innerHTML = '';
@@ -889,7 +980,7 @@ function renderPad() {
     let sub = n ? `${n}장` : '—';
     if (!n) { const e = nearest(S.cur.mode, d); if (e) sub = e.flip ? `${ARROW[e.d]} 뒤집기` : `${ARROW[e.d]} 씀`; }
     pad.append(el('button', {class: (d === S.cur.dir ? 'on ' : '') + (n ? '' : 'empty'), title: DIR_NAME[d],
-      onclick: () => { S.cur.dir = d; S.sel = -1; changed(true); }}, el('b', {}, ARROW[d]), el('small', {}, sub)));
+      onclick: () => { S.cur.dir = d; setSel(-1); changed(true); }}, el('b', {}, ARROW[d]), el('small', {}, sub)));
   }
 }
 
@@ -900,19 +991,24 @@ function renderClip() {
   $('#clipCycle').value = c.cycle || '';
   $('#clipCycle').placeholder = String(S.cycle[S.cur.mode]);
   $('#clipFlip').checked = !!c.flip;
-  $('#stripHint').textContent = refs.length ? '— 끌어서 순서 바꾸기 · 누르면 선택 · Delete로 빼기 · ⌘D 복제' : '— 비어 있음: 아래 칸 모음에서 장면을 누르세요';
+  $('#stripHint').textContent = refs.length ? '— 끌어서 순서 바꾸기 · 누르면 선택 · Shift 누르고 누르면 사이를 모두 · ⌘ 누르고 누르면 하나씩 더하기 · ⌘A 모두 · Delete로 빼기 · ⌘D 복제' : '— 비어 있음: 아래 칸 모음에서 장면을 누르세요';
   const strip = $('#strip');
   strip.innerHTML = '';
+  const picked = new Set(selIdx());
   refs.forEach((r, i) => {
     const fr = frames.get(r.f), cell = renderCell(r, c.flip);
     const cv = mk(S.out.w, S.out.h);
     if (cell) cv.getContext('2d').drawImage(cell, 0, 0);
     cv.style.width = Math.round(92 * S.out.w / S.out.h) + 'px';
     const sh = fr && sheetById(fr.sheet);
-    const item = el('div', {class: 'fr' + (i === S.sel ? ' sel' : '') + (fr ? '' : ' miss'), draggable: 'true', 'data-i': i,
+    const item = el('div', {class: 'fr' + (picked.has(i) ? ' sel' : '') + (picked.size > 1 && i === S.sel ? ' focus' : '') + (fr ? '' : ' miss'), draggable: 'true', 'data-i': i,
       title: fr ? `${sh.name} · ${fr.idx + 1}번 칸` : '원본이 없어진 장면',
-      onclick: () => { S.sel = i; playFrom(i); renderClip(); },
-      ondragstart: (e) => { e.dataTransfer.setData('text/plain', 'strip:' + i); e.dataTransfer.effectAllowed = 'move'; }},
+      onclick: (e) => pickFrame(i, e),
+      ondragstart: (e) => {
+        // 고른 장면 중 하나를 끌면 고른 장면을 모두 옮긴다
+        const group = picked.has(i) ? selIdx() : [i];
+        e.dataTransfer.setData('text/plain', 'strip:' + group.join(',')); e.dataTransfer.effectAllowed = 'move';
+      }},
       cv, el('span', {class: 'no'}, String(i + 1) + (r.flip ? ' ↔' : '') + (r.dx || r.dy ? ' ✥' : '')),
       el('span', {class: 'src'}, fr ? `${S.sheets.indexOf(sh) + 1}-${fr.idx + 1}` : '없음'),
       el('button', {class: 'x', title: '빼기', onclick: (e) => { e.stopPropagation(); delFrame(i); }}, '✕'));
@@ -930,7 +1026,22 @@ function playFrom(i) {
   if (!P.loop && !keyDir()) { P.loop = true; $('#oLoop').checked = true; }
 }
 
+// 장면 줄에서 누르기: 그냥 = 하나만, Shift = 기준 장면부터 여기까지, ⌘·Ctrl = 하나씩 더하고 빼기
+function pickFrame(i, e) {
+  if (e.shiftKey && S.anchor >= 0) {
+    const a = Math.min(S.anchor, i), b = Math.max(S.anchor, i);
+    S.pick = new Set(Array.from({length: b - a + 1}, (_, k) => a + k));
+    S.sel = i;
+  } else if (e.metaKey || e.ctrlKey) {
+    if (S.pick.has(i) && S.pick.size > 1) S.pick.delete(i); else S.pick.add(i);
+    S.sel = i; S.anchor = i;
+  } else setSel(i);
+  playFrom(i); renderClip();
+}
+
 function renderSel() {
+  const many = selIdx();
+  if (many.length > 1) return renderMulti(many);
   const c = curClip(), r = c.frames[S.sel], box = $('#selPanel');
   if (!r) { box.replaceChildren(el('span', {class: 'hint'}, '장면을 누르면 위치를 조금씩 옮기거나 뒤집을 수 있습니다.')); return; }
   const fr = frames.get(r.f), sh = fr && sheetById(fr.sheet);
@@ -944,10 +1055,118 @@ function renderSel() {
     el('button', {class: 'small', title: '이 장면이 1번이 되게 순서를 돌린다', onclick: () => {
       const k = S.sel;
       clipTool(c => c.frames.push(...c.frames.splice(0, k)), `${k + 1}번 장면을 첫 장으로`);
-      S.sel = 0; playFrom(0); renderClip();
+      setSel(0); playFrom(0); renderClip();
     }}, '첫 장으로'),
     el('button', {class: 'small', onclick: () => dupFrame(S.sel)}, '복제'),
     el('button', {class: 'small warn', onclick: () => delFrame(S.sel)}, '빼기'));
+}
+
+// 여러 장을 골랐을 때: 한꺼번에 옮기기·뒤집기·복제·빼기·다른 동작으로 복사
+function renderMulti(idx) {
+  const c = curClip(), box = $('#selPanel'), rs = idx.map(i => c.frames[i]);
+  const allFlip = rs.every(r => r.flip);
+  const nudge = (k) => el('input', {type: 'number', value: c.frames[S.sel] ? c.frames[S.sel][k] || 0 : 0, title: '고른 장면 모두 이 값으로',
+    onchange: (e) => { pushUndo(); const v = parseInt(e.target.value, 10) || 0; rs.forEach(r => { r[k] = v; }); changed(true); }});
+  const cpMode = el('select', {}, ...MODES.map(m => el('option', {value: m, selected: m === S.cur.mode}, MODE_NAME[m])));
+  const cpDir = el('select', {}, ...DIRS.map(d => el('option', {value: d, selected: d === S.cur.dir}, ARROW[d] + ' ' + DIR_NAME[d])));
+  const cpFlip = el('input', {type: 'checkbox'});
+  box.replaceChildren(
+    el('b', {}, `${idx.length}장 고름`), el('span', {class: 'hint'}, `(${idx.map(i => i + 1).join('·')}번)`),
+    el('label', {}, '좌우 ', nudge('dx')), el('label', {}, '위아래 ', nudge('dy')),
+    el('label', {}, el('input', {type: 'checkbox', checked: allFlip, onchange: (e) => { pushUndo(); rs.forEach(r => { r.flip = e.target.checked; }); changed(true); }}), ' 뒤집기'),
+    el('button', {class: 'small', title: '고른 장면을 한 칸 앞으로', onclick: () => moveSel(-1)}, '◀'),
+    el('button', {class: 'small', title: '고른 장면을 한 칸 뒤로', onclick: () => moveSel(1)}, '▶'),
+    el('button', {class: 'small', title: '고른 장면만 남기고 나머지를 뺀다', onclick: () => {
+      pushUndo(); c.frames = rs; setPick(rs.map((_, k) => k)); changed(true); toast(`${rs.length}장만 남김`);
+    }}, '이것만 남기기'),
+    el('button', {class: 'small', onclick: dupSel}, '복제'),
+    el('button', {class: 'small warn', onclick: delSel}, '빼기'),
+    el('button', {class: 'small', onclick: () => { setSel(S.sel); renderClip(); }}, '선택 풀기'),
+    el('span', {class: 'hint'}, '|'), cpMode, cpDir, el('label', {}, cpFlip, ' 뒤집기'),
+    el('button', {class: 'small', title: '그 동작 끝에 붙인다', onclick: () => appendTo(cpMode.value, cpDir.value, cpFlip.checked, rs)}, '끝에 붙이기'));
+}
+
+function delSel() {
+  const idx = selIdx(), c = curClip();
+  if (!idx.length) return;
+  pushUndo();
+  for (const i of [...idx].reverse()) c.frames.splice(i, 1);
+  setSel(Math.min(idx[0], c.frames.length - 1));
+  changed(true);
+  if (idx.length > 1) toast(`${idx.length}장 뺌`);
+}
+function dupSel() {
+  const idx = selIdx(), c = curClip();
+  if (!idx.length) return;
+  pushUndo();
+  const at = idx[idx.length - 1] + 1;
+  c.frames.splice(at, 0, ...idx.map(i => Object.assign({}, c.frames[i])));
+  setPick(idx.map((_, k) => at + k));
+  changed(true);
+}
+// 고른 장면을 한 칸씩 앞(-1)·뒤(+1)로 (떨어져 있으면 각각 한 칸씩)
+function moveSel(d) {
+  const idx = selIdx(), c = curClip(), f = c.frames;
+  if (!idx.length || (d < 0 ? idx[0] === 0 : idx[idx.length - 1] === f.length - 1)) return;
+  pushUndo();
+  const set = new Set(idx), order = d < 0 ? idx : [...idx].reverse();
+  for (const i of order) { const j = i + d; if (set.has(j)) continue; [f[i], f[j]] = [f[j], f[i]]; set.delete(i); set.add(j); }
+  const foc = S.sel + d;
+  setPick([...set].sort((a, b) => a - b), set.has(foc) ? foc : undefined);
+  changed(true);
+}
+// 장면 여러 장을 줄의 at 자리(옮기기 전 번호)로 한 덩어리로 옮긴다
+function moveBlock(idx, at) {
+  const c = curClip();
+  idx = idx.filter(i => i >= 0 && i < c.frames.length).sort((a, b) => a - b);
+  if (!idx.length) return;
+  pushUndo();
+  const block = idx.map(i => c.frames[i]);
+  for (const i of [...idx].reverse()) c.frames.splice(i, 1);
+  at -= idx.filter(i => i < at).length;
+  at = Math.max(0, Math.min(c.frames.length, at));
+  c.frames.splice(at, 0, ...block);
+  setPick(block.map((_, k) => at + k));
+  changed(true);
+}
+function appendTo(mode, dir, flip, rs) {
+  const dst = clipOf(mode, dir, true);
+  pushUndo();
+  dst.frames.push(...rs.map(r => Object.assign({}, r, {flip: flip ? !r.flip : r.flip, dx: flip ? -(r.dx || 0) : r.dx})));
+  changed(true);
+  toast(`${MODE_NAME[mode]} ${ARROW[dir]} 끝에 ${rs.length}장 붙임${flip ? ' (뒤집음)' : ''} — 이제 ${dst.frames.length}장`);
+}
+// 칸 모음 장면 여러 장을 at 자리에 넣는다
+function insertFrames(ids, at) {
+  ids = ids.filter(id => frames.has(id));
+  if (!ids.length) return;
+  pushUndo();
+  const c = curClip();
+  at = Math.max(0, Math.min(c.frames.length, at));
+  c.frames.splice(at, 0, ...ids.map(f => ({f, dx: 0, dy: 0, flip: false})));
+  setPick(ids.map((_, k) => at + k));
+  S.poolPick = [];
+  changed(true);
+  if (ids.length > 1) toast(`${ids.length}장 넣음`);
+}
+const insertAt = () => { const idx = selIdx(); return idx.length ? idx[idx.length - 1] + 1 : curClip().frames.length; };
+// 칸 모음에서 누르기: 그냥 = 바로 넣기, Shift = 기준 칸부터 여기까지 고르기, ⌘·Ctrl = 하나씩 고르기
+function poolClick(id, e) {
+  const all = S.sheets.flatMap(sh => sh.frames);
+  if (e.shiftKey && S.poolAnchor && all.includes(S.poolAnchor)) {
+    const a = all.indexOf(S.poolAnchor), b = all.indexOf(id);
+    S.poolPick = all.slice(Math.min(a, b), Math.max(a, b) + 1);
+    if (b < a) S.poolPick.reverse();      // 거꾸로 고르면 거꾸로 넣는다
+  } else if (e.metaKey || e.ctrlKey) {
+    S.poolPick = S.poolPick.includes(id) ? S.poolPick.filter(x => x !== id) : [...S.poolPick, id];
+    S.poolAnchor = id;
+  } else {
+    S.poolAnchor = id;
+    S.poolPick = [];
+    insertFrame(id, insertAt());
+    return;
+  }
+  renderPool();
 }
 
 function renderPool() {
@@ -955,14 +1174,22 @@ function renderPool() {
   box.innerHTML = '';
   if (!S.sheets.length) { box.append(el('p', {class: 'hint'}, '왼쪽에 그림을 넣으면 잘린 장면이 여기 나옵니다.')); return; }
   const inClip = new Set(curClip().frames.map(r => r.f));
+  const pp = S.poolPick;
+  box.append(el('div', {class: 'row poolbar'}, pp.length
+    ? [el('b', {}, `${pp.length}장 고름`),
+       el('button', {class: 'small primary', onclick: () => insertFrames(pp, insertAt())}, '고른 장면 넣기 (Enter)'),
+       el('button', {class: 'small', title: '편집 중인 동작을 고른 장면으로 바꾼다', onclick: () => { pushUndo(); curClip().frames = []; insertFrames(pp, 0); }}, '이것으로 바꾸기'),
+       el('button', {class: 'small', onclick: () => { S.poolPick = []; renderPool(); }}, '선택 풀기')]
+    : el('span', {class: 'hint'}, 'Shift 누르고 누르면 사이 칸을 모두, ⌘ 누르고 누르면 하나씩 고릅니다 — 고른 칸을 끌면 한꺼번에 들어갑니다')));
   S.sheets.forEach((sh, si) => {
     box.append(el('div', {class: 'hint'}, `${si + 1}. ${sh.name}`));
     box.append(el('div', {class: 'pool'}, ...sh.frames.map(id => {
-      const fr = frames.get(id);
-      return el('div', {class: 'pf' + (inClip.has(id) ? ' used' : ''), draggable: 'true', title: `${fr.idx + 1}번 칸 — 눌러서 넣기`,
-        onclick: () => insertFrame(id, S.sel + 1 || curClip().frames.length),
-        ondragstart: (e) => { e.dataTransfer.setData('text/plain', 'pool:' + id); e.dataTransfer.effectAllowed = 'copy'; }},
-        el('img', {src: fr.thumb, draggable: 'false'}), el('span', {}, String(fr.idx + 1)));
+      const fr = frames.get(id), k = pp.indexOf(id);
+      return el('div', {class: 'pf' + (inClip.has(id) ? ' used' : '') + (k >= 0 ? ' pick' : ''), draggable: 'true', title: `${fr.idx + 1}번 칸 — 눌러서 넣기 · Shift/⌘로 여러 장 고르기`,
+        onclick: (e) => poolClick(id, e),
+        ondragstart: (e) => { e.dataTransfer.setData('text/plain', 'pool:' + (k >= 0 ? pp : [id]).join('|')); e.dataTransfer.effectAllowed = 'copy'; }},
+        el('img', {src: fr.thumb, draggable: 'false'}), el('span', {}, String(fr.idx + 1)),
+        k >= 0 ? el('i', {}, String(k + 1)) : null);
     })));
   });
 }
@@ -987,7 +1214,7 @@ function insertFrame(id, at) {
   const c = curClip();
   at = Math.max(0, Math.min(c.frames.length, at));
   c.frames.splice(at, 0, {f: id, dx: 0, dy: 0, flip: false});
-  S.sel = at;
+  setSel(at);
   changed(true);
 }
 function delFrame(i) {
@@ -995,7 +1222,7 @@ function delFrame(i) {
   if (i < 0 || i >= c.frames.length) return;
   pushUndo();
   c.frames.splice(i, 1);
-  S.sel = Math.min(i, c.frames.length - 1);
+  setSel(Math.min(i, c.frames.length - 1));
   changed(true);
 }
 function dupFrame(i) {
@@ -1003,7 +1230,7 @@ function dupFrame(i) {
   if (i < 0 || i >= c.frames.length) return;
   pushUndo();
   c.frames.splice(i + 1, 0, Object.assign({}, c.frames[i]));
-  S.sel = i + 1;
+  setSel(i + 1);
   changed(true);
 }
 function moveFrame(from, to) {
@@ -1014,7 +1241,7 @@ function moveFrame(from, to) {
   pushUndo();
   const [r] = c.frames.splice(from, 1);
   c.frames.splice(to, 0, r);
-  S.sel = to;
+  setSel(to);
   changed(true);
 }
 function clipTool(fn, msg) {
@@ -1063,10 +1290,9 @@ function copyClip(mode, dir, flip) {
     const data = e.dataTransfer.getData('text/plain') || '';
     let at = target(e);
     if (data.startsWith('strip:')) {
-      const from = +data.slice(6);
-      if (at > from) at--;
-      moveFrame(from, at);
-    } else if (data.startsWith('pool:')) insertFrame(data.slice(5), at);
+      const idx = data.slice(6).split(',').map(Number);
+      if (idx.length === 1) { const from = idx[0]; if (at > from) at--; moveFrame(from, at); } else moveBlock(idx, at);
+    } else if (data.startsWith('pool:')) insertFrames(data.slice(5).split('|'), at);
   });
 })();
 
@@ -1128,12 +1354,13 @@ function drawActor(ctx, res, idx, cx, cy, z, guides) {
 function tick(t) {
   const dt = Math.min(0.1, Math.max(0, (t - P.last) / 1000));
   P.last = t;
+  if (G.on) { requestAnimationFrame(tick); return; }   // 게임 그림 보기 탭에서는 쉰다
   const cv = $('#pv'), dpr = window.devicePixelRatio || 1;
   const W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
   if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
   const ctx = cv.getContext('2d');
   const tg = previewTarget();
-  if (P.follow && tg.keyed && (S.cur.mode !== tg.mode || S.cur.dir !== tg.dir)) { S.cur.mode = tg.mode; S.cur.dir = tg.dir; S.sel = -1; changed(true); }
+  if (P.follow && tg.keyed && (S.cur.mode !== tg.mode || S.cur.dir !== tg.dir)) { S.cur.mode = tg.mode; S.cur.dir = tg.dir; setSel(-1); changed(true); }
   const res = resolve(tg.mode, tg.dir);
   const z = P.zoom * dpr;
   if (!P.paused) P.phase += dt / (res ? res.cycle : 1);
@@ -1289,7 +1516,7 @@ function bind() {
   $('#bRedo').onclick = redo;
   $('#bReset').onclick = async () => {
     if (!confirm('그림과 동작을 모두 비우고 새로 시작할까요? (저장한 작업 파일은 그대로입니다)')) return;
-    S.sheets = []; S.clips = {}; S.sel = -1; S.id = 'character'; frames.clear(); cellCache.clear();
+    S.sheets = []; S.clips = {}; setSel(-1); S.id = 'character'; frames.clear(); cellCache.clear();
     undoStack.length = 0; redoStack.length = 0;
     renderAll(); autosave();
   };
@@ -1360,17 +1587,21 @@ function bind() {
   document.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) b.blur(); });
   const typing = (t) => (t.tagName === 'INPUT' && !['checkbox', 'radio', 'range', 'button'].includes(t.type)) || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT';
   addEventListener('keydown', (e) => {
+    if (G.on) return;              // 게임 그림 보기 탭은 gBind가 받는다
     P.shift = e.shiftKey;
     const mod = e.metaKey || e.ctrlKey;
     if (typing(e.target)) return;
     if (mod && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
-    if (mod && e.code === 'KeyD') { e.preventDefault(); dupFrame(S.sel); return; }
+    if (mod && e.code === 'KeyD') { e.preventDefault(); dupSel(); return; }
+    if (mod && e.code === 'KeyA') { e.preventDefault(); const n = curClip().frames.length; if (n) { setPick(Array.from({length: n}, (_, k) => k)); renderClip(); } return; }
     if (mod) return;
     if (MOVE_KEYS[e.code]) { P.keys.add(e.code); e.preventDefault(); return; }
     if (e.code === 'Space') { e.preventDefault(); $('#bPause').click(); return; }
     if (e.code === 'Comma') { P.paused = true; $('#bPause').classList.add('on'); P.step = -1; return; }
     if (e.code === 'Period') { P.paused = true; $('#bPause').classList.add('on'); P.step = 1; return; }
-    if ((e.code === 'Delete' || e.code === 'Backspace') && S.sel >= 0) { e.preventDefault(); delFrame(S.sel); }
+    if ((e.code === 'Delete' || e.code === 'Backspace') && S.sel >= 0) { e.preventDefault(); delSel(); return; }
+    if (e.code === 'Enter' && S.poolPick.length) { e.preventDefault(); insertFrames(S.poolPick, insertAt()); return; }
+    if (e.code === 'Escape') { S.poolPick = []; setSel(S.sel); renderClip(); renderPool(); }
   });
   addEventListener('keyup', (e) => { P.shift = e.shiftKey; P.keys.delete(e.code); });
   addEventListener('blur', () => { P.keys.clear(); P.shift = false; });
@@ -1388,10 +1619,386 @@ async function start() {
   renderAll();
   requestAnimationFrame(tick);
 }
+// ───────────────────────── 게임 그림 보기 ─────────────────────────
+// assets/characters/<id>_dir8.png + .json을 PersonRig(scripts/actors/person_rig.gd)와 같은 규칙으로 돌린다.
+// 칸 128×112, 발끝 (64,108). 열: 0 서 있기 · 1.. 걷기 frames장 · 달리기 run_frames장 · (도는 장면) · 넘어짐 fall_col~ · 주먹 punch_col~
+const GR = {
+  CELL: [128, 112], FOOT: [64, 108],
+  CADENCE: 1.4, RUN_CADENCE: 1.2,            // PersonRig.CADENCE·RUN_CADENCE
+  HOLD: 12 * Math.PI / 180,                  // DIR8_HOLD
+  TURN_STEP: 0.07, FALL_FRAME: 0.09, PUNCH_FRAME: 0.07,
+  PUNCH_SEGS: [[1, 2, 3], [4, 5, 6], [7, 8, 9, 10]], COMBO_GAP: 0.7,   // Player.COMBO_GAP
+  SPRITE_HEIGHT: 31, SPRITE_BODY: 96, SCREEN_ZOOM: 1.1,               // 화면 키 = SPRITE_HEIGHT × size × ChaseCamera.BASE_ZOOM
+  MIRROR: [4, 3, 2, 1, 0, 7, 6, 5],
+};
+const GMODES = [['idle', '서 있기'], ['walk', '걷기'], ['run', '달리기'], ['fall', '넘어짐'], ['punch', '주먹 콤보']];
+const G = {on: false, chars: [], cur: null, mode: 'walk', dir: 1, zoom: 3, all8: false, every: false, scale: true, move: true,
+           smooth: true, speed: 1, paused: false, keys: new Set(), shift: false, last: 0, phase: 0, pos: {x: 0, y: 0},
+           shown: {}, turnAt: 0, fallAt: -1, punch: null, combo: 0, comboAt: -9, autoAt: 0, stepN: 0, clock: 0,
+           stripKey: '', stripIdx: -1};
+
+// .json의 방향 목록 → 방향마다 [그릴 행, 뒤집기] 또는 null (PersonRig._dir8_ok)
+function gOk(have) {
+  return DIRS.map((d, k) => have.includes(d) ? [k, false]
+    : (have.includes(DIRS[GR.MIRROR[k]]) && GR.MIRROR[k] !== k ? [GR.MIRROR[k], true] : null));
+}
+function gInfo(m) {
+  return {frames: m.frames || 16, ok: gOk(m.dirs || []), runFrames: m.run_frames || 0, runOk: gOk(m.run_dirs || []),
+          fallFrames: m.fall_frames || 0, fallCol: m.fall_col || 0, fallOk: gOk(m.fall_dirs || []),
+          punchFrames: m.punch_frames || 0, punchCol: m.punch_col || 0, punchOk: gOk(m.punch_dirs || [])};
+}
+const angDiff = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
+// 화면 진행 각도 → 8방향 번호 (PersonRig.dir8_pick)
+function gPick(a, prev, ok) {
+  if (prev >= 0 && ok[prev] && Math.abs(angDiff(a, prev * Math.PI / 4)) <= Math.PI / 8 + GR.HOLD) return prev;
+  let best = -1, bd = Infinity;
+  for (let k = 0; k < 8; k++) {
+    if (!ok[k]) continue;
+    const d = Math.abs(angDiff(a, k * Math.PI / 4));
+    if (d < bd - 0.001 || (Math.abs(d - bd) <= 0.001 && k === prev)) { bd = d; best = k; }
+  }
+  return best;
+}
+
+function gLoad(list, base) {
+  G.chars = list.map(c => {
+    const img = new Image();
+    img.src = c.src || `${base}${c.id}_dir8.png?v=${(window.GAME_DIR8 || {}).version || 0}`;
+    img.onload = () => gRenderList();
+    return Object.assign({}, c, {img, info: gInfo(c.meta || {})});
+  });
+  if (!G.chars.find(c => c.id === (G.cur && G.cur.id))) G.cur = G.chars[0] || null;
+  else G.cur = G.chars.find(c => c.id === G.cur.id);
+  gRenderList(); gRenderPanel();
+}
+function gLoadIndex() {
+  const d = window.GAME_DIR8;
+  if (d && d.chars) gLoad(d.chars, '../assets/characters/');
+  else gRenderList();
+}
+// 목록 스크립트를 다시 읽는다 (그림을 새로 뽑은 뒤)
+function gReload() {
+  const sc = document.createElement('script');
+  sc.src = 'motion_game_index.js?t=' + Date.now();
+  sc.onload = () => { gLoadIndex(); toast(`게임 그림 ${G.chars.length}종을 다시 읽었습니다`); sc.remove(); };
+  sc.onerror = () => { toast('motion_game_index.js를 못 읽었습니다 — python3 tools/gen_motion_index.py'); sc.remove(); };
+  document.head.append(sc);
+}
+// 목록 파일 없이 assets/characters 폴더를 직접 고른 경우
+async function gFromFolder(files) {
+  const byName = new Map([...files].map(f => [f.name, f]));
+  const list = [];
+  for (const f of files) {
+    const m = f.name.match(/^(.+)_dir8\.json$/);
+    if (!m || !byName.has(m[1] + '_dir8.png')) continue;
+    try {
+      const meta = JSON.parse(await f.text()), old = G.chars.find(c => c.id === m[1]);
+      list.push({id: m[1], name: old ? old.name : m[1], scale: old ? old.scale : 1, walk: old ? old.walk : (m[1] === 'player' ? 110 : 50),
+                 run: old ? old.run : (m[1] === 'player' ? 190 : 150), meta, src: URL.createObjectURL(byName.get(m[1] + '_dir8.png'))});
+    } catch (e) { console.warn(f.name, e); }
+  }
+  if (!list.length) return toast('그 폴더에 <id>_dir8.png·.json이 없습니다');
+  list.sort((a, b) => (a.id !== 'player') - (b.id !== 'player') || a.name.localeCompare(b.name));
+  gLoad(list, '');
+  toast(`폴더에서 ${list.length}종을 읽었습니다`);
+}
+
+function gCell(ctx, ch, col, row, flip, x, y, z, alpha) {
+  if (!ch.img.complete || !ch.img.naturalWidth) return;
+  const [w, h] = GR.CELL, [fx, fy] = GR.FOOT;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(flip ? -z : z, z);
+  if (alpha != null) ctx.globalAlpha = alpha;
+  ctx.drawImage(ch.img, col * w, row * h, w, h, -fx, -fy, w, h);
+  ctx.restore();
+}
+function gThumb(ch) {
+  const cv = mk(96, 84), x = cv.getContext('2d'), s = ch.info.ok[2] || ch.info.ok.find(Boolean);
+  x.imageSmoothingQuality = 'high';
+  if (s) gCell(x, ch, 0, s[0], s[1], 48, 82, 0.74);
+  return cv;
+}
+function gRenderList() {
+  const box = $('#gList');
+  if (!G.chars.length) {
+    box.replaceChildren(el('p', {class: 'hint'}, '게임 그림 목록이 없습니다. 터미널에서 ', el('code', {}, 'python3 tools/gen_motion_index.py'),
+      ' 를 돌리고 "다시 읽기"를 누르거나, "폴더 고르기"로 assets/characters를 고르세요.'));
+    $('#gCount').textContent = '';
+    return;
+  }
+  $('#gCount').textContent = `${G.chars.length}종`;
+  box.replaceChildren(...G.chars.map(ch => {
+    const i = ch.info, tags = [`걷기 ${i.frames}`];
+    if (i.runFrames) tags.push(`달리기 ${i.runFrames}`);
+    if (i.fallFrames) tags.push('넘어짐');
+    if (i.punchFrames) tags.push('주먹');
+    if (ch.scale !== 1) tags.push(`키 ×${ch.scale}`);
+    return el('button', {class: 'gc' + (ch === G.cur ? ' on' : ''), title: ch.id, onclick: () => { G.cur = ch; G.shown = {}; G.fallAt = -1; G.punch = null; gRenderList(); gRenderPanel(); }},
+      gThumb(ch), el('span', {}, el('b', {}, ch.name), el('small', {}, `${ch.id} · ${tags.join(' · ')}`)));
+  }));
+}
+function gRenderPanel() {
+  $('#gModes').replaceChildren(...GMODES.map(([m, t]) => el('button', {class: m === G.mode ? 'on' : '', onclick: () => {
+    G.mode = m; G.fallAt = -1; G.punch = null; G.autoAt = G.clock; gRenderPanel();
+  }}, t)));
+  const ch = G.cur, pad = $('#gPad');
+  pad.innerHTML = '';
+  for (const row of PAD) for (const d of row) {
+    if (!d) { pad.append(el('div', {class: 'mid'}, ch ? ch.name : '', el('br'), '방향')); continue; }
+    const k = DIRS.indexOf(d);
+    let sub = '';
+    if (ch) {
+      const o = gOkFor(ch, G.mode)[k];
+      sub = o ? (o[1] ? `${ARROW[DIRS[o[0]]]} 뒤집기` : '그림') : '가까운 방향';
+    }
+    pad.append(el('button', {class: (k === G.dir ? 'on ' : '') + (sub === '그림' ? '' : 'empty'), title: DIR_NAME[d],
+      onclick: () => { G.dir = k; gRenderPanel(); }}, el('b', {}, ARROW[d]), el('small', {}, sub)));
+  }
+  const m = $('#gMeta');
+  if (!ch) { m.replaceChildren(); return; }
+  const i = ch.info, names = (ok) => DIRS.map((d, k) => ok[k] ? (ok[k][1] ? `${ARROW[d]}(뒤집기)` : ARROW[d]) : `${ARROW[d]}(없음)`).join(' ');
+  m.replaceChildren(
+    el('div', {}, el('b', {}, `${ch.name} (${ch.id}_dir8.png)`)),
+    el('div', {}, `키 배율 ×${ch.scale} · 걷는 속도 ${ch.walk} · 달리는 속도 ${ch.run}`),
+    el('div', {}, `걷기 ${i.frames}장 (1~${i.frames}열): ${names(i.ok)}`),
+    el('div', {}, i.runFrames ? `달리기 ${i.runFrames}장 (${1 + i.frames}~${i.frames + i.runFrames}열): ${names(i.runOk)}` : '달리기 그림 없음 — 걷기를 빠르게 넘긴다'),
+    el('div', {}, i.fallFrames ? `넘어짐 ${i.fallFrames}장 (${i.fallCol}열~): ${names(i.fallOk)}` : '넘어짐 그림 없음 (게임은 눕힌 그림)'),
+    el('div', {}, i.punchFrames ? `주먹 콤보 ${i.punchFrames}장 (${i.punchCol}열~)` : '주먹 그림 없음'),
+    ...(ch.id !== 'player' && (i.fallFrames || i.punchFrames) ? [el('div', {}, '※ 게임에서 넘어짐·주먹 그림은 주인공만 씁니다')] : []));
+}
+function gOkFor(ch, mode) {
+  const i = ch.info;
+  if (mode === 'run' && i.runFrames) return i.runOk;
+  if (mode === 'fall' && i.fallFrames) return i.fallOk;
+  if (mode === 'punch' && i.punchFrames >= 11) return i.punchOk;
+  return i.ok;
+}
+
+function gKeyDir() {
+  let x = 0, y = 0;
+  for (const k of G.keys) { const v = MOVE_KEYS[k]; if (v) { x += v[0]; y += v[1]; } }
+  return x || y ? Math.atan2(Math.sign(y), Math.sign(x)) : null;
+}
+function gPunch() {
+  const ch = G.cur;
+  if (!ch || ch.info.punchFrames < 11) return toast(`${ch ? ch.name : ''}: 주먹 그림이 없습니다`);
+  G.combo = G.clock - G.comboAt <= GR.COMBO_GAP ? (G.combo + 1) % GR.PUNCH_SEGS.length : 0;
+  G.comboAt = G.clock;
+  G.punch = [G.combo, G.clock];
+}
+
+// 한 인물의 이번 프레임 그림: {col, row, flip, label, i, n, first}
+function gFrame(ch, act, a, key) {
+  const i = ch.info;
+  let ok = i.ok, run = false;
+  if (act === 'run' && i.runFrames) { ok = i.runOk; run = true; }
+  if (act === 'fall' && i.fallFrames) ok = i.fallOk;
+  if (act === 'punch' && i.punchFrames >= 11) ok = i.punchOk;
+  const prev = G.shown[key] ?? -1;
+  let k = gPick(a, prev, ok);
+  if (k < 0) return null;
+  // 주인공: 크게 돌면 45°씩 TURN_STEP마다 (PersonRig._dir8_turn — 도는 장면 칸은 아직 없다)
+  if (ch.id === 'player' && prev >= 0 && prev !== k && key === 'main') {
+    const steps = ((k - prev) % 8 + 8) % 8, dirn = steps <= 4 ? 1 : -1;
+    if (Math.min(steps, 8 - steps) > 1) {
+      if (G.clock - G.turnAt >= GR.TURN_STEP) { G.turnAt = G.clock; let nk = (prev + dirn + 8) % 8; if (!ok[nk]) nk = k; k = nk; }
+      else k = prev;
+    } else G.turnAt = G.clock;
+  }
+  G.shown[key] = k;
+  const row = ok[k][0], flip = ok[k][1];
+  if (act === 'fall' && i.fallFrames) {
+    const n = i.fallFrames, t = Math.max(0, G.clock - G.fallAt), f = Math.min(Math.floor(t / GR.FALL_FRAME), n - 1);
+    return {col: i.fallCol + f, row, flip, k, label: '넘어짐', i: f, n, first: i.fallCol, lie: f / Math.max(1, n - 1)};
+  }
+  if (act === 'punch' && i.punchFrames >= 11 && G.punch) {
+    const seg = GR.PUNCH_SEGS[G.punch[0]], f = Math.floor((G.clock - G.punch[1]) / GR.PUNCH_FRAME);
+    if (f >= 0 && f < seg.length) return {col: i.punchCol + seg[f], row, flip, k, label: ['잽', '스트레이트', '훅'][G.punch[0]], i: seg[f], n: i.punchFrames, first: i.punchCol};
+    return {col: i.punchCol, row, flip, k, label: '싸움 자세', i: 0, n: i.punchFrames, first: i.punchCol};
+  }
+  if (act === 'idle' || act === 'fall' || act === 'punch') return {col: 0, row, flip, k, label: '서 있기', i: 0, n: 1, first: 0};
+  const sp = act === 'run' ? ch.run : ch.walk, ph = G.phase * sp / 9;   // walk_phase += delta × 속도 / 9
+  if (run) {
+    const m = i.runFrames, f = ((Math.floor(ph * GR.RUN_CADENCE * m / (Math.PI * 2)) % m) + m) % m;
+    return {col: 1 + i.frames + f, row, flip, k, label: '달리기', i: f, n: m, first: 1 + i.frames};
+  }
+  const n = i.frames, c = act === 'run' ? GR.RUN_CADENCE : GR.CADENCE, f = ((Math.floor(ph * c * n / (Math.PI * 2)) % n) + n) % n;
+  return {col: 1 + f, row, flip, k, label: act === 'run' ? '달리기(걷기 그림)' : '걷기', i: f, n, first: 1};
+}
+
+function gDrawOne(ctx, ch, fr, x, y, z) {
+  const sz = G.scale ? ch.scale : 1, zz = z * sz;
+  // 발밑 그림자 (게임: 6.5 × 2.6 월드 단위 → 칸 픽셀로는 × 96/31)
+  const k = GR.SPRITE_BODY / GR.SPRITE_HEIGHT, lie = fr.lie || 0;
+  const rx = (6.5 + lie * 14) * k * zz, ry = (2.6 + lie * 3) * k * zz;
+  ctx.save(); ctx.translate(x, y - lie * 10 * zz); ctx.scale(rx, ry);
+  const rg = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  rg.addColorStop(0, `rgba(0,0,0,${0.32 + lie * 0.18})`); rg.addColorStop(lie > 0 ? 0.45 : 0.98, `rgba(0,0,0,${0.32 + lie * 0.18})`); rg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.imageSmoothingEnabled = G.smooth; ctx.imageSmoothingQuality = 'high';
+  gCell(ctx, ch, fr.col, fr.row, fr.flip, x, y, zz);
+}
+function gGround(ctx, W, H, step, ox, oy) {
+  ctx.fillStyle = '#3d423f'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
+  const sx = ((ox % step) + step) % step, sy = ((oy % step) + step) % step;
+  ctx.beginPath();
+  for (let x = sx; x < W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = sy; y < H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+}
+
+function gTick(t) {
+  requestAnimationFrame(gTick);
+  const dt0 = Math.min(0.1, Math.max(0, (t - G.last) / 1000));
+  G.last = t;
+  if (!G.on) return;
+  const dt = G.paused ? 0 : dt0 * G.speed;
+  G.clock += dt;
+  if (G.stepN) { const d = G.stepN * (G.fdur || 1 / 30); G.clock = Math.max(0, G.clock + d); G.phase += d; G.stepN = 0; }
+  const cv = $('#gv'), dpr = window.devicePixelRatio || 1;
+  const W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const ctx = cv.getContext('2d'), ch = G.cur;
+  // 무엇을 보여 줄지: 키를 누르면 그 방향으로 걷기·달리기, 아니면 고른 동작·방향
+  const ka = gKeyDir();
+  let act = G.mode, a = G.dir * Math.PI / 4;
+  if (ka != null) { a = ka; act = G.shift ? 'run' : 'walk'; G.fallAt = -1; }
+  if (G.punch && ch) {
+    const seg = GR.PUNCH_SEGS[G.punch[0]];
+    if ((G.clock - G.punch[1]) / GR.PUNCH_FRAME < seg.length) act = 'punch';
+    else if (G.mode !== 'punch') G.punch = null;
+  }
+  if (act === 'fall' && G.fallAt < 0) G.fallAt = G.clock;
+  if (G.mode === 'fall' && ka == null && ch && G.clock - G.fallAt > ch.info.fallFrames * GR.FALL_FRAME + 1.2) G.fallAt = G.clock;   // 다시 처음부터
+  if (G.mode === 'punch' && ka == null && ch && ch.info.punchFrames >= 11 && (!G.punch || G.clock - G.punch[1] > 0.55)) {
+    G.combo = G.punch ? (G.punch[0] + 1) % GR.PUNCH_SEGS.length : 0; G.comboAt = G.clock; G.punch = [G.combo, G.clock];
+  }
+  const moving = act === 'walk' || act === 'run';
+  if (moving) G.phase += dt;
+  const z = G.zoom * dpr;
+  const world = z * GR.SPRITE_BODY / GR.SPRITE_HEIGHT;     // 월드 1px → 화면 px (칸 픽셀 ÷ 31/96)
+  if (moving && G.move && ch) { const sp = act === 'run' ? ch.run : ch.walk; G.pos.x += Math.cos(a) * sp * dt; G.pos.y += Math.sin(a) * sp * dt; }
+  gGround(ctx, W, H, 32 * world, -G.pos.x * world, -G.pos.y * world);
+  let info = '', main = null;
+  if (!ch) {
+    ctx.fillStyle = '#ddd'; ctx.font = `${14 * dpr}px sans-serif`; ctx.textAlign = 'center';
+    ctx.fillText('게임 그림 목록이 없습니다', W / 2, H / 2); ctx.textAlign = 'left';
+  } else if (G.every) {
+    // 모든 인물을 같은 동작·방향으로 — 키·크기·발끝을 비교한다
+    const n = G.chars.length, cols = Math.ceil(Math.sqrt(n * W / H)), rows = Math.ceil(n / cols);
+    const gw = W / cols, gh = H / rows, zz = Math.min(gw / GR.CELL[0], gh / GR.CELL[1]) * 0.95;
+    G.chars.forEach((c, j) => {
+      const x = gw * (j % cols + 0.5), y = gh * ((j / cols | 0) + 0.5) + GR.CELL[1] * zz * 0.42;
+      const fr = gFrame(c, act === 'punch' && !c.info.punchFrames ? 'idle' : act, a, 'all:' + c.id);
+      if (fr) gDrawOne(ctx, c, fr, x, y, zz);
+      ctx.fillStyle = c === ch ? '#ffb347' : '#fff'; ctx.font = `${11 * dpr}px sans-serif`;
+      ctx.fillText(c.name, gw * (j % cols) + 4 * dpr, gh * (j / cols | 0) + 13 * dpr);
+    });
+    info = `모든 인물 · ${GMODES.find(m => m[0] === act)[1]} · ${G.scale ? '키 배율 적용' : '키 배율 없이'}`;
+  } else if (G.all8) {
+    const gw = W / 3, gh = H / 3, zz = Math.min(gw / GR.CELL[0], gh / GR.CELL[1]) * 0.9;
+    PAD.forEach((row, r) => row.forEach((d, c) => {
+      if (!d) return;
+      const k = DIRS.indexOf(d), fr = gFrame(ch, act, k * Math.PI / 4, 'd8:' + k);
+      if (fr) gDrawOne(ctx, ch, fr, gw * (c + 0.5), gh * (r + 0.5) + GR.CELL[1] * zz * 0.42, zz);
+      ctx.fillStyle = '#fff'; ctx.font = `${12 * dpr}px sans-serif`;
+      ctx.fillText(ARROW[d] + (fr ? (fr.k !== k ? ` (${ARROW[DIRS[fr.k]]} 씀)` : '') + (fr.flip ? ' 뒤집기' : '') : ' 없음'), gw * c + 6 * dpr, gh * r + 16 * dpr);
+    }));
+    info = `${ch.name} · 8방향 ${GMODES.find(m => m[0] === act)[1]}`;
+  } else {
+    main = gFrame(ch, act, a, 'main');
+    if (main) {
+      // 한 장 시간 (, . 로 한 장씩 넘길 때)
+      G.fdur = main.label === '넘어짐' ? GR.FALL_FRAME : act === 'punch' ? GR.PUNCH_FRAME : main.n > 1
+        ? 2 * Math.PI * 9 / ((act === 'run' ? ch.run : ch.walk) * (act === 'run' ? GR.RUN_CADENCE : GR.CADENCE) * main.n) : 1 / 30;
+      gDrawOne(ctx, ch, main, Math.round(W / 2), Math.round(H / 2 + (GR.FOOT[1] - GR.CELL[1] / 2) * z), z);
+      const shownDir = DIRS[main.k], srcDir = DIRS[main.row];
+      info = `${ch.name} · ${main.label} ${ARROW[shownDir]}` + (main.flip ? ` (${ARROW[srcDir]} 줄 뒤집기)` : '') +
+        ` · ${main.i + 1}/${main.n}장 · ${main.col}열 ${main.row + 1}행` + (G.paused ? ' · 멈춤' : '');
+    }
+  }
+  $('#gInfo').textContent = info;
+  $('#gKeys').textContent = ka != null ? '' : '방향키·WASD 걷기 / Shift 달리기 / J 주먹 / F 넘어지기 / 스페이스 멈춤';
+  gStrip(ch, main);
+}
+// 지금 쓰는 그림 줄을 칸마다 보여 주고 지금 칸을 표시한다
+function gStrip(ch, fr) {
+  const box = $('#gStrip');
+  const key = ch && fr ? `${ch.id}:${fr.first}:${fr.n}:${fr.row}:${fr.flip}:${ch.img.complete}` : '';
+  if (key !== G.stripKey) {
+    G.stripKey = key; G.stripIdx = -1;
+    if (!key) { box.replaceChildren(el('span', {class: 'hint'}, G.every || G.all8 ? '여럿을 함께 볼 때는 줄을 보이지 않습니다' : '')); $('#gStripHint').textContent = ''; return; }
+    const cols = Array.from({length: fr.n}, (_, j) => fr.first + j);
+    box.replaceChildren(...cols.map(col => {
+      const cv = mk(GR.CELL[0], GR.CELL[1]), x = cv.getContext('2d');
+      gCell(x, ch, col, fr.row, fr.flip, GR.FOOT[0], GR.FOOT[1], 1);
+      cv.dataset.col = col;
+      cv.title = `${col}열`;
+      return cv;
+    }));
+    $('#gStripHint').textContent = `— ${ch.id}_dir8.png ${fr.row + 1}행(${ARROW[DIRS[fr.row]]}) ${fr.first}~${fr.first + cols.length - 1}열` + (fr.flip ? ' · 뒤집어 씀' : '');
+  }
+  if (fr && fr.col !== G.stripIdx) {
+    G.stripIdx = fr.col;
+    box.querySelectorAll('canvas.play').forEach(c => c.classList.remove('play'));
+    const c = box.querySelector(`canvas[data-col="${fr.col}"]`);
+    c && c.classList.add('play');
+  }
+}
+
+function setView(v) {
+  G.on = v === 'game';
+  document.body.classList.toggle('game', G.on);
+  $('#tabEdit').classList.toggle('on', !G.on);
+  $('#tabGame').classList.toggle('on', G.on);
+  P.keys.clear(); G.keys.clear();
+  try { localStorage.setItem('motion-editor-view', v); } catch (e) { /* 저장소를 못 쓰는 브라우저 */ }
+  if (G.on) { if (!G.chars.length) gLoadIndex(); setTimeout(() => $('#gv').focus(), 0); }
+}
+function gBind() {
+  $('#tabEdit').onclick = () => setView('edit');
+  $('#tabGame').onclick = () => setView('game');
+  $('#gReload').onclick = gReload;
+  $('#gFolder').onclick = () => $('#gDir').click();
+  $('#gDir').onchange = (e) => { gFromFolder(e.target.files); e.target.value = ''; };
+  const setZoom = (v) => { G.zoom = v; $('#gZoom').value = v; $('#gZoomV').textContent = '×' + (+v).toFixed(2).replace(/\.?0+$/, ''); };
+  $('#gZoom').oninput = (e) => setZoom(parseFloat(e.target.value));
+  $('#gGame').onclick = () => setZoom(Math.max(0.1, GR.SPRITE_HEIGHT * GR.SCREEN_ZOOM / GR.SPRITE_BODY));
+  $('#gSpeed').oninput = (e) => { G.speed = parseFloat(e.target.value); $('#gSpeedV').textContent = '×' + G.speed; };
+  $('#gPause').onclick = () => { G.paused = !G.paused; $('#gPause').classList.toggle('on', G.paused); };
+  for (const [id, k] of [['#gAll8', 'all8'], ['#gEvery', 'every'], ['#gScale', 'scale'], ['#gMove', 'move'], ['#gSmooth', 'smooth']]) {
+    $(id).onchange = (e) => { G[k] = e.target.checked; if (k === 'all8' && G.all8) { G.every = false; $('#gEvery').checked = false; }
+                              if (k === 'every' && G.every) { G.all8 = false; $('#gAll8').checked = false; } };
+  }
+  $('#gv').addEventListener('mousedown', () => gPunch());
+  setZoom(G.zoom);
+  addEventListener('keydown', (e) => {
+    if (!G.on) return;
+    G.shift = e.shiftKey;
+    const t = e.target;
+    if ((t.tagName === 'INPUT' && !['checkbox', 'range'].includes(t.type)) || t.tagName === 'SELECT') return;
+    if (MOVE_KEYS[e.code]) { G.keys.add(e.code); e.preventDefault(); return; }
+    if (e.code === 'KeyJ' || (e.code.startsWith('Control') && !e.repeat)) { e.preventDefault(); if (!e.repeat) gPunch(); return; }
+    if (e.code === 'KeyF' && !e.repeat) { G.fallAt = G.mode === 'fall' ? -1 : G.clock; G.mode = G.mode === 'fall' ? 'idle' : 'fall'; gRenderPanel(); return; }
+    if (e.code === 'Space') { e.preventDefault(); $('#gPause').click(); return; }
+    if (e.code === 'Comma' || e.code === 'Period') { G.paused = true; $('#gPause').classList.add('on'); G.stepN = e.code === 'Comma' ? -1 : 1; }
+  });
+  addEventListener('keyup', (e) => { G.shift = e.shiftKey; G.keys.delete(e.code); });
+  addEventListener('blur', () => { G.keys.clear(); G.shift = false; });
+  let v = location.hash === '#game' ? 'game' : 'edit';
+  try { if (!location.hash) v = localStorage.getItem('motion-editor-view') || 'edit'; } catch (e) { /* 무시 */ }
+  gLoadIndex();
+  setView(v);
+  requestAnimationFrame(gTick);
+}
+
 // 시험용 (콘솔·자동 확인에서 쓴다): App.addUrl('경로.png')
-window.App = {S, frames, P, resolve, renderCell,
+window.App = {S, frames, P, resolve, renderCell, G, setView,
   async addUrl(url, name) { const b = await (await fetch(url)).blob(); await addFiles([new File([b], name || url.split('/').pop(), {type: b.type})]); }};
 start();
+gBind();
 </script>
 </body>
 </html>

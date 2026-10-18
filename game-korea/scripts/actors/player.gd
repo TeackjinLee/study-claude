@@ -95,6 +95,18 @@ func take_damage(amount: float) -> void:
 		died.emit()
 
 
+## 주먹을 한 번 지를 때 (그림만): COMBO_GAP초 안에 이어 지르면 잽 → 스트레이트 → 훅 → 다시 잽
+const COMBO_GAP := 0.7
+var _combo := -1
+var _combo_at := -100.0
+
+func punch() -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	_combo = (_combo + 1) % PersonRig.PUNCH_SEGS.size() if now - _combo_at <= COMBO_GAP else 0
+	_combo_at = now
+	set_meta(&"punch", [_combo, now])
+
+
 func is_dead() -> bool:
 	return health <= 0.0
 

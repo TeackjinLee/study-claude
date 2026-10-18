@@ -66,6 +66,8 @@ func shoot() -> bool:
 			from += dir * MUZZLE
 	arsenal.fire()
 	combat.fire(from, dir, w, true, exclude)
+	if w.melee and v == null:
+		player.punch()
 	return true
 
 

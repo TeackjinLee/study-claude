@@ -1,1 +1,1 @@
-{"dirs": ["s", "sw", "w", "nw", "n"], "frames": 24, "run_dirs": ["s", "se", "e", "ne", "n", "nw", "w", "sw"], "run_frames": 8, "turns": []}
+{"dirs": ["s", "sw", "w", "nw", "n"], "frames": 24, "run_dirs": ["s", "se", "e", "ne", "n", "nw", "w", "sw"], "run_frames": 8, "turns": [], "fall_dirs": ["s", "se", "e", "ne", "n", "nw", "w", "sw"], "fall_frames": 8, "fall_col": 33, "punch_dirs": ["s", "se", "e", "ne", "n", "nw", "w", "sw"], "punch_frames": 12, "punch_col": 41}

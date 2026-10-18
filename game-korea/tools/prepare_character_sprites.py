@@ -649,9 +649,11 @@ def process_dir8(cid: str, sources: dict, debug: bool) -> None:
 
 
 DIR8_SHEET_ROWS = ["s", "sw", "w", "nw", "n"]   ## 한 장짜리 8방향 시트의 줄 (나머지 ↘ → ↗는 게임이 좌우를 뒤집어 쓴다)
+PUNCH_H = 0.95   ## 주먹 칸 키 / 걷기 키 — 무릎을 굽힌 싸움 자세
 RUN_H_RANGE = (0.85, 0.92)   ## 달리기 키 / 걷기 키 — 머리 폭으로 맞춘 크기가 이 밖이면 끝으로 당긴다
+RUN_ROW_K = (0.85, 1.25)     ## 달리기 줄마다 키를 시트 가운데값에 맞출 때 배율 한도 (튀는 줄만 당긴다)
 NEON = {"firefighter"}   ## 형광 반사띠가 초록 기운이라 _despill로 걷지 않는다
-KEEP_TINT = {"civ_f", "merchant", "firefighter"}   ## 옷이 배경과 같은 계열인 인물 (초록 배경에 국방색 재킷·카키 바지·형광 반사띠) — 옷 안쪽의 배경 기운은 지우지 않는다
+KEEP_TINT = {"civ_f", "merchant", "firefighter", "foreigner", "traffic_cop", "soldier", "police_heli"}   ## 옷이 배경과 같은 계열인 인물 (초록 배경에 국방색 재킷·카키 바지·형광 반사띠·초록 티셔츠·형광 조끼·얼룩무늬·올리브 조끼) — 옷 안쪽의 배경 기운은 지우지 않는다
 
 
 def _sheet_rows(src: Path, frames: int) -> list:
@@ -711,9 +713,63 @@ def _head_w(cell) -> float:
     return float(np.median(ws)) if ws else 1.0
 
 
-def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | None", run_frames: int, debug: bool) -> None:
+def _place_fall(out: Image.Image, meta: dict, cid: str, src: Path, n: int, col: int) -> None:
+    """넘어짐 시트를 col열부터 붙인다. 누운 자세는 칸을 넘어 옆 칸까지 길게 그려져 있어 좌우로 넉넉히 읽고(옆 인물 조각은 버린다),
+    가로는 그림 덩어리 가운데를 칸 가운데에 맞춘다 (누우면 몸통 무게중심이 한쪽으로 쏠린다 — 몸 가운데가 노드 자리).
+    크기는 첫 칸(서 있기)의 키를 걷기 키에 맞춘다."""
+    rows = _sheet_rows(src, n)
+    cells = load_cells(src, n, _sheet_nrows(src), drop_edge=True, pad=0.06, unmix=True,
+                       keep_tint=cid in KEEP_TINT, hpad=0.3)
+    if cid in KEEP_TINT and cid not in NEON:
+        cells = {k: _despill(c) for k, c in cells.items()}
+    falls = {d: [c for c in (cells[(i, k)] for k in keep) if c] for i, d, keep, _ in rows}
+    scale = BODY_H * 0.97 / max(float(np.median([cs[0][3] for cs in falls.values() if cs])), 1.0)
+    for d, cs in falls.items():
+        r = DIR8.index(d)
+        for k in range(n):
+            img, foot, _, h = cs[k * len(cs) // n]
+            xs = np.nonzero((img[:, :, 3] > 40).any(0))[0]
+            place(out, (img, foot, (xs.min() + xs.max()) / 2.0, h), r, col + k, scale, DIR4_CELL_W)
+            w = (xs.max() - xs.min() + 1) * scale
+            if w > DIR4_CELL_W:
+                print(f"  넘어짐 {d} {k + 1}번 칸: 폭 {w:.0f}px > 칸 {DIR4_CELL_W}px (잘린다)")
+    meta.update(fall_dirs=list(falls), fall_frames=n, fall_col=col)
+    print(f"  {src.name}: 넘어짐 {n}장 ({', '.join(falls)}), 배율 {scale:.3f}")
+
+
+def _place_punch(out: Image.Image, meta: dict, cid: str, src: Path, n: int, col: int) -> None:
+    """주먹 콤보 시트를 col열부터 붙인다. 뻗은 팔이 옆 칸 경계를 넘어 그려지기도 해 좌우로 조금 더 읽고,
+    가로는 몸통 가운데(위쪽 무게중심)를 칸 가운데에 맞춘다 (뻗은 팔 쪽으로 몸이 밀리지 않게).
+    크기는 칸들의 가운데 키를 걷기 키의 PUNCH_H배로 (무릎을 굽힌 싸움 자세)."""
+    rows = _sheet_rows(src, n)
+    cells = load_cells(src, n, _sheet_nrows(src), drop_edge=True, pad=0.06, unmix=True,
+                       keep_tint=cid in KEEP_TINT, hpad=0.2)
+    if cid in KEEP_TINT and cid not in NEON:
+        cells = {k: _despill(c) for k, c in cells.items()}
+    punches = {d: [cells[(i, k)] for k in keep] for i, d, keep, _ in rows}
+    hs = [c[3] for cs in punches.values() for c in cs if c]
+    scale = BODY_H * 0.97 * PUNCH_H / max(float(np.median(hs)), 1.0)
+    for d, cs in punches.items():
+        r = DIR8.index(d)
+        for k in range(n):
+            cell = cs[k * len(cs) // n]
+            place(out, cell, r, col + k, scale, DIR4_CELL_W)
+            if cell is not None:
+                xs = np.nonzero((cell[0][:, :, 3] > 40).any(0))[0]
+                half = max(cell[2] - xs.min(), xs.max() - cell[2]) * scale
+                if half > DIR4_CELL_W / 2:
+                    print(f"  주먹 {d} {k + 1}번 칸: 몸 가운데에서 {half:.0f}px > 칸 반 {DIR4_CELL_W // 2}px (잘린다)")
+    meta.update(punch_dirs=list(punches), punch_frames=n, punch_col=col)
+    print(f"  {src.name}: 주먹 {n}장 ({', '.join(punches)}), 배율 {scale:.3f}")
+
+
+def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | None", run_frames: int, debug: bool,
+                       fall_src: "Path | None" = None, fall_frames: int = 0,
+                       punch_src: "Path | None" = None, punch_frames: int = 0) -> None:
     """한 장짜리 8방향 걷기 시트 NN_<id>_walk<N>_dir8.png (N열 × 5행: ↓ · ↙ · ← · ↖ · ↑, 줄마다 한 바퀴 N장 — 예: walk24, walk12)
     [+ 달리기 시트 NN_<id>_run<M>_dir8.png (M열, 줄 배치·줄 수가 다르면 .rows.txt — 8행이면 8방향 모두 그림대로)]
+    [+ 넘어짐 시트 NN_<id>_fall<K>_dir8.png (K열: 서 있기에서 바닥에 엎드리기까지, 마지막 칸이 누운 자세 — 달리기·도는 장면 다음 칸)]
+    [+ 주먹 콤보 시트 NN_<id>_combo<P>_dir8.png (P열: 싸움 자세 → 잽 → 스트레이트 → 훅 → 싸움 자세 — 넘어짐 다음 칸)]
     → assets/characters/<id>_dir8.png (8행 = DIR8 순서, 0열 서 있기 + 1~N열 걷기 [+ N+1~N+M열 달리기], 칸 128×112)
       + .json (dirs·frames [+ run_dirs·run_frames]). 방향별 시트(walk8·key8)가 있어도 이것으로 모두 바꾼다.
     배경(초록·마젠타)은 그림 전체에서 섞인 만큼 푼다(unmix_key) — 팔·다리 틈이 어두운 배경색으로 칠해진 압축 그림이다.
@@ -723,7 +779,7 @@ def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | N
     cells = load_cells(walk_src, frames, _sheet_nrows(walk_src), **opts)
     run_rows = _sheet_rows(run_src, run_frames) if run_src else []
     turns = [(d, t) for _, d, _, t in run_rows if t]
-    cols = 1 + frames + (run_frames if run_src else 0) + sum(len(t[1]) for _, t in turns)
+    cols = 1 + frames + (run_frames if run_src else 0) + sum(len(t[1]) for _, t in turns) + (fall_frames if fall_src else 0) + (punch_frames if punch_src else 0)
     out = Image.new("RGBA", (DIR4_CELL_W * cols, CELL_H * len(DIR8)), (0, 0, 0, 0))
     present, scales, heads = [], {}, []
     for i, d, keep, _ in walk_rows:
@@ -751,8 +807,10 @@ def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | N
         scale = min(max(scale, BODY_H * 0.97 * RUN_H_RANGE[0] / run_h), BODY_H * 0.97 * RUN_H_RANGE[1] / run_h)
         for d, run in runs.items():
             r = DIR8.index(d)
+            # 줄마다 키를 맞춘다 — 생성 그림은 ↓ 줄을 다른 줄보다 20%쯤 작게 그리곤 한다 (걷기는 줄마다 같은 키로 맞춘다)
+            row_k = min(max(run_h / max(float(np.median([c[3] for c in run])), 1.0), RUN_ROW_K[0]), RUN_ROW_K[1])
             for k in range(run_frames):
-                place(out, run[k * len(run) // run_frames], r, 1 + frames + k, scale, DIR4_CELL_W)
+                place(out, run[k * len(run) // run_frames], r, 1 + frames + k, scale * row_k, DIR4_CELL_W)
         meta.update(run_dirs=list(runs), run_frames=run_frames)
         # 도는 장면: 달리기 다음 칸에 (도는 장면이 시작하는 방향) 행으로 붙인다. 게임은 그 두 방향 사이를 오갈 때 넘긴다
         col = 1 + frames + run_frames
@@ -767,6 +825,11 @@ def process_dir8_sheet(cid: str, walk_src: Path, frames: int, run_src: "Path | N
             print(f"  도는 장면 {d}→{turn[0]} {len(clip)}장")
             col += len(clip)
         print(f"  {run_src.name}: 달리기 {run_frames}장 ({', '.join(f'{d} {len(c)}장' for d, c in runs.items())}), 배율 {scale:.3f}")
+    after_run = 1 + frames + (run_frames if run_src else 0) + sum(t["n"] for t in meta.get("turns", []))
+    if fall_src:
+        _place_fall(out, meta, cid, fall_src, fall_frames, after_run)
+    if punch_src:
+        _place_punch(out, meta, cid, punch_src, punch_frames, after_run + (fall_frames if fall_src else 0))
     DST.mkdir(parents=True, exist_ok=True)
     out.save(DST / f"{cid}_dir8.png")
     import json
@@ -802,7 +865,13 @@ def main() -> None:
             runs = [(r, int(rm[1])) for r in sorted(SRC.glob(f"{src.stem[:2]}_{m[1]}_run*_dir8.png"))
                     if (rm := re.fullmatch(rf"\d\d_{re.escape(m[1])}_run(\d+)_dir8", r.stem))]
             run_src, run_n = runs[0] if runs else (None, 0)
-            process_dir8_sheet(m[1], src, int(m[2]), run_src, run_n, debug)
+            falls = [(f, int(fm[1])) for f in sorted(SRC.glob(f"{src.stem[:2]}_{m[1]}_fall*_dir8.png"))
+                     if (fm := re.fullmatch(rf"\d\d_{re.escape(m[1])}_fall(\d+)_dir8", f.stem))]
+            fall_src, fall_n = falls[0] if falls else (None, 0)
+            combos = [(f, int(cm[1])) for f in sorted(SRC.glob(f"{src.stem[:2]}_{m[1]}_combo*_dir8.png"))
+                      if (cm := re.fullmatch(rf"\d\d_{re.escape(m[1])}_combo(\d+)_dir8", f.stem))]
+            punch_src, punch_n = combos[0] if combos else (None, 0)
+            process_dir8_sheet(m[1], src, int(m[2]), run_src, run_n, debug, fall_src, fall_n, punch_src, punch_n)
     for src in sorted(SRC.glob("[0-9][0-9]_*_walk_dir4.png")):
         cid = src.stem[3:-len("_walk_dir4")]
         if not only or cid in only:
@@ -818,6 +887,8 @@ def main() -> None:
             ok &= all(DIR8_CHECKS)
         if not ok:
             sys.exit(1)
+    from gen_motion_index import write_index   # 모션 편집기 "게임 그림" 탭 목록
+    write_index()
 
 
 if __name__ == "__main__":
