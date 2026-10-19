@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"JEEP_MG"
+display_name = "거치 기관총"
+slot = 14
+damage = 13.0
+spread = 0.05
+fire_interval = 0.09
+max_range = 560.0
+drive_by = true
+pierce = 2
+infinite = true
+pickup_ammo = 0
+max_ammo = 0
+mounted_on = Array[StringName]([&"ARMY_JEEP"])
+tracer_color = Color(1, 0.88, 0.4, 1)

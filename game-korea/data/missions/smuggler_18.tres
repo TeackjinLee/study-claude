@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://cjdcm6leupvau"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/npc/gang_gangnam.tres" id="3"]
 [ext_resource type="Resource" path="res://data/npc/assassin.tres" id="4"]
 
@@ -9,6 +9,8 @@
 script = ExtResource("2")
 kind = 3
 text = "강남 조직원과 암살자를 처리해라"
+points = null
+headings = null
 npc = ExtResource("3")
 npc_points = PackedVector2Array(-2756.4, 206, -2646.8, 206, -2537.2, 206, -2427.6, 206, -3086, 370.4)
 
@@ -16,6 +18,8 @@ npc_points = PackedVector2Array(-2756.4, 206, -2646.8, 206, -2537.2, 206, -2427.
 script = ExtResource("2")
 kind = 3
 text = "암살자를 처리해라"
+points = null
+headings = null
 npc = ExtResource("4")
 npc_points = PackedVector2Array(-1824, 206)
 
@@ -25,9 +29,9 @@ id = &"smuggler_18"
 gang = &"smuggler"
 tier = 2
 phone_set = 1
-order = 0
 title = "부두 결전"
-briefing = "강남 조직이 부두를 빼앗으러 왔다. 암살자까지 데려왔다.\n부두를 지켜."
+briefing = "강남 조직이 부두를 빼앗으러 왔다. 암살자까지 데려왔다.
+부두를 지켜."
 reward = 550000
 respect = 16
 time_limit = 220

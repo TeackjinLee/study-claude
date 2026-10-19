@@ -1,27 +1,31 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://cc7q02a1q35j4"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
-kind = 0
 text = "장부를 챙겨라"
 points = PackedVector2Array(-1056, -782)
+headings = null
 radius = 40
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 5
 text = "특공대를 따돌려라"
+points = null
+headings = null
+npc_points = null
 wanted = 4
 
 [sub_resource type="Resource" id="step_2"]
 script = ExtResource("2")
-kind = 0
 text = "강남 본부로 가져가라"
 points = PackedVector2Array(2510, 2870.4)
-radius = 50
+headings = null
+npc_points = null
 
 [resource]
 script = ExtResource("1")
@@ -31,7 +35,8 @@ tier = 2
 phone_set = 1
 order = 2
 title = "여의도 대탈출"
-briefing = "금고에서 장부를 꺼내 와. 경보가 울리면 특공대가 온다.\n살아서 본부까지 오면 네가 이 동네 실세다."
+briefing = "금고에서 장부를 꺼내 와. 경보가 울리면 특공대가 온다.
+살아서 본부까지 오면 네가 이 동네 실세다."
 reward = 250000
 respect = 16
 time_limit = 260

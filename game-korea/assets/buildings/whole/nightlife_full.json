@@ -1,0 +1,20 @@
+{
+  "id": "NIGHTLIFE",
+  "lot": "full",
+  "lot_size": [
+    520.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1406,
+    861
+  ],
+  "origin": [
+    706.84,
+    509.54
+  ],
+  "scale": 1.54424,
+  "hull_lift": 0,
+  "hull_grow": 0
+}

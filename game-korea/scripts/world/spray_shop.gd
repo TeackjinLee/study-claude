@@ -34,7 +34,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_time += delta
 	var v := director.current_vehicle
-	if v == null:
+	if v == null or v.airborne():
 		return
 	var d := v.global_position.distance_to(global_position)
 	if d > REARM:

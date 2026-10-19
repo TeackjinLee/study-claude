@@ -1,0 +1,20 @@
+{
+  "id": "MARKET",
+  "lot": "full",
+  "lot_size": [
+    520.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1674,
+    939
+  ],
+  "origin": [
+    838.09,
+    490.17
+  ],
+  "scale": 1.74324,
+  "hull_lift": 22,
+  "hull_grow": 0
+}

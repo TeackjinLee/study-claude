@@ -20,6 +20,10 @@ const SWAT_NPC: NpcType = preload("res://data/npc/swat.tres")
 const ARMY_TYPE: VehicleType = preload("res://data/vehicles/sp_army.tres")
 const SOLDIER_NPC: NpcType = preload("res://data/npc/soldier.tres")
 const HELI_NPC: NpcType = preload("res://data/npc/police_heli.tres")
+const ARMY_HELI_TYPE: VehicleType = preload("res://data/vehicles/army_heli.tres")   ## ★6: 헬기 한 대는 군 기동헬기
+const SPG_TYPE: VehicleType = preload("res://data/vehicles/army_spg.tres")           ## ★6: 자주포 (포탑을 돌려 곡사포를 쏜다)
+const JEEP_TYPE: VehicleType = preload("res://data/vehicles/army_jeep.tres")         ## ★6: 소형 전술차량 (군인 둘)
+const TANK_CANNON: WeaponType = preload("res://data/weapons/tank_cannon.tres")
 const SEED := 112
 const PATROL_COUNT := 3
 const PURSUERS: Array[int] = [0, 1, 3, 4, 5, 5, 6]   ## 별마다 추격차 수 (★4부터 그중 SWAT_VANS대가 특공대, ★6은 ARMY_TRUCKS대가 군 트럭)
@@ -28,6 +32,12 @@ const HELIS: Array[int] = [0, 0, 0, 0, 0, 1, 2]      ## 별마다 경찰 헬기 
 const ARMY_LEVEL := 6
 const ARMY_TRUCKS := 2
 const ARMY_CREW := 4
+const ARMY_SPGS := 1
+const ARMY_JEEPS := 1
+const JEEP_CREW := 2
+const SPG_RELOAD := 3.0          ## 자주포 AI는 포 연사 간격의 이 배마다 쏜다 (주인공 손보다 느리게)
+const SPG_SPREAD := 90.0         ## 자주포 AI 포탄이 주인공에게서 빗나가는 거리 (최대 px)
+const SPG_AIMED := 0.08          ## 포탑이 이만큼(rad) 안으로 돌아와야 쏜다
 const CHECKPOINT_LEVEL := 4                    ## 이 별부터 다리 끝에 검문소가 선다 (docs/01 §4)
 const CHECKPOINT_RANGE := [700.0, 4000.0]      ## 주인공에게서 이 거리 사이의 다리 끝에만 세운다
 const CHECKPOINT_ONTO := 150.0                 ## 다리 위로 이만큼 들어가서 세운다
@@ -46,9 +56,15 @@ const DEPLOY_RANGE := 200.0                    ## 도보 주인공이 이 안에
 const CAR_DEPLOY_RANGE := 170.0
 const CAR_BUST_SPEED := 40.0                   ## 주인공 차가 이보다 느리면 문을 열고 끌어낸다
 const DOOR_REACH := 26.0
-const ARREST_RANGE := 16.0
-const ARREST_TIME := 0.35                      ## 경찰 손이 이만큼 닿아 있으면 체포 (도보)
-const CAR_ARREST_TIME := 0.8                   ## 차 문을 열고 끌어내리는 데 걸리는 시간
+const BEAT_RANGE := 18.0                       ## 도보 경찰이 이만큼 붙으면 곤봉으로 때린다
+const BEAT_WINDUP := 0.3                       ## 손이 닿고 첫 매까지
+const BEAT_INTERVAL := 0.8                     ## 경찰 한 명이 다시 휘두르기까지
+const BEAT_DAMAGE := 13.0
+const BEAT_STUN := 0.4                         ## 맞으면 이만큼 못 움직인다 (그사이 경찰이 따라붙는다)
+const BUST_HEALTH := 35.0                      ## 맞아서 체력이 이 아래가 되면 쓰러져 체포된다 (매로는 죽지 않는다)
+const BUST_FALL_TIME := 1.2                    ## 쓰러지고 체포 화면까지
+const CAR_ARREST_TIME := 0.8                   ## 차 문을 열고 끌어내리는 데 걸리는 시간 (끌려 나오면 도보처럼 맞는다)
+const CAR_PULL_STUN := 0.7                     ## 차에서 끌려 나와 이만큼 못 움직인다
 const CAR_STOP_BEFORE_DEPLOY := 1.0            ## 주인공 차가 이만큼 서 있어야 경찰이 내린다
 const FOOT_GIVE_UP := 650.0                    ## 도보 경찰이 이보다 멀어지면 차로 돌아간다
 const CAR_ESCAPE_SPEED := 150.0                ## 주인공이 이보다 빨리 차로 달아나면 경찰은 차로 돌아간다
@@ -96,6 +112,7 @@ var _ram_cooldown := 0.0
 var _gunfire_cooldown := 0.0
 var _attack_cooldown := 0.0
 var _bust_pending := false
+var _bust_token := 0                           ## reset()마다 바뀐다 — 쓰러진 뒤 체포 신호가 재시작 뒤에 늦게 오지 않게
 
 
 func _ready() -> void:
@@ -135,6 +152,7 @@ func _physics_process(delta: float) -> void:
 	_update_officers()
 	_update_roadblocks(delta)
 	_update_helis()
+	_spg_fire()
 	_check_arrest(delta)
 
 
@@ -288,7 +306,7 @@ func eject_crew(v: Vehicle, pos: Vector2) -> void:
 func _crew_npc(car: Vehicle) -> NpcType:
 	if car.stats == SWAT_TYPE:
 		return SWAT_NPC
-	if car.stats == ARMY_TYPE:
+	if car.stats in [ARMY_TYPE, SPG_TYPE, JEEP_TYPE]:
 		return SOLDIER_NPC
 	return OFFICER_TYPE
 
@@ -328,6 +346,10 @@ func _upkeep() -> void:
 		var car: Vehicle = null
 		if level >= ARMY_LEVEL and army_count() < ARMY_TRUCKS:
 			car = _spawn_far(ppos, ARMY_TYPE)
+		elif level >= ARMY_LEVEL and _count_type(SPG_TYPE) < ARMY_SPGS and not Vehicle.exists(vehicles, SPG_TYPE):
+			car = _spawn_far(ppos, SPG_TYPE)
+		elif level >= ARMY_LEVEL and _count_type(JEEP_TYPE) < ARMY_JEEPS:
+			car = _spawn_far(ppos, JEEP_TYPE)
 		elif level >= SWAT_LEVEL and swat_count() < SWAT_VANS:
 			car = _spawn_far(ppos, SWAT_TYPE)
 		else:
@@ -452,11 +474,16 @@ func _drive_cars() -> void:
 
 ## 차를 세우고 경찰이 내린다 (차는 빈 차가 된다)
 func _deploy(car: Vehicle) -> void:
+	if car.stats == SPG_TYPE:
+		return   # 자주포 승무원은 내리지 않고 포를 쏜다 (_spg_fire)
 	car.has_driver = false
 	var crew: Array = crews.get(car, [])
 	var squad := car.stats == SWAT_TYPE or car.stats == ARMY_TYPE
 	var npc := _crew_npc(car)
-	for i in (SWAT_CREW if car.stats == SWAT_TYPE else ARMY_CREW) if squad else CREW[maxi(wanted.level, 1)]:
+	var count: int = (SWAT_CREW if car.stats == SWAT_TYPE else ARMY_CREW) if squad else CREW[maxi(wanted.level, 1)]
+	if car.stats == JEEP_TYPE:
+		count = JEEP_CREW
+	for i in count:
 		var door := car.door_position(i == 1)
 		if squad:   # 넷이 앞뒤 양쪽 문으로
 			door = car.door_position(i % 2 == 1) + car.motor.forward() * (14.0 if i < 2 else -14.0)
@@ -582,21 +609,53 @@ func _check_arrest(delta: float) -> void:
 		_arrest = 0.0
 		return
 	var pcar := director.current_vehicle
-	var ppos := _player_pos()
-	var caught := false
+	if pcar and pcar.airborne():
+		_arrest = maxf(_arrest - delta, 0.0)   # 떠 있는 헬기에는 손이 안 닿는다
+		return
+	if pcar:
+		# 차: 선 차 문에 경찰 손이 닿아 있으면 끌어내린다 — 그다음은 도보처럼 맞는다
+		var at_door := false
+		for o in officers:
+			if _can_grab(o) and pcar.speed() < CAR_BUST_SPEED \
+					and o.global_position.distance_to(_nearest_door(pcar, o.global_position)) < DOOR_REACH:
+				at_door = true
+		_arrest = _arrest + delta if at_door else maxf(_arrest - delta, 0.0)
+		if _arrest >= CAR_ARREST_TIME:
+			_arrest = 0.0
+			director.exit_vehicle()
+			director.player.stun(CAR_PULL_STUN)
+		return
+	_arrest = 0.0
+	# 도보: 붙은 경찰마다 BEAT_INTERVAL마다 곤봉을 휘두른다. 체력이 BUST_HEALTH 아래가 되면 쓰러져 체포
+	var player := director.player
 	for o in officers:
-		if o.duty != PoliceOfficer.Duty.CHASE or o.state == Pedestrian.State.KNOCKED or o.is_dead():
+		if not _can_grab(o) or o.global_position.distance_to(player.global_position) >= BEAT_RANGE:
+			o.beat_wait = maxf(o.beat_wait - delta, BEAT_WINDUP)   # 떨어졌다 다시 붙어도 매가 빨라지지 않게
 			continue
-		if pcar:
-			if pcar.speed() < CAR_BUST_SPEED and o.global_position.distance_to(_nearest_door(pcar, o.global_position)) < DOOR_REACH:
-				caught = true
-		elif o.global_position.distance_to(ppos) < ARREST_RANGE:
-			caught = true
-	_arrest = _arrest + delta if caught else maxf(_arrest - delta, 0.0)
-	if _arrest >= (CAR_ARREST_TIME if pcar else ARREST_TIME):
-		_arrest = 0.0
-		_bust_pending = true
-		busted.emit(FINE_PER_STAR * wanted.level)
+		o.beat_wait -= delta
+		if o.beat_wait > 0.0:
+			continue
+		o.beat_wait = BEAT_INTERVAL
+		o.swing(player.global_position)
+		player.beaten(BEAT_DAMAGE, player.global_position - o.global_position, BEAT_STUN)
+		if player.health <= BUST_HEALTH:
+			_knock_down_and_bust()
+			return
+
+
+func _can_grab(o: PoliceOfficer) -> bool:
+	return o.duty == PoliceOfficer.Duty.CHASE and o.state != Pedestrian.State.KNOCKED and not o.is_dead()
+
+
+## 맞아 쓰러진 주인공: 넘어지는 그림을 보여 준 뒤 체포 (그동안 경찰은 멈춘다)
+func _knock_down_and_bust() -> void:
+	_bust_pending = true
+	var fine := FINE_PER_STAR * wanted.level
+	var token := _bust_token
+	director.player.knock_down()
+	await get_tree().create_timer(BUST_FALL_TIME, true, true).timeout
+	if token == _bust_token and _bust_pending:
+		busted.emit(fine)
 
 
 ## 체포 후 재시작: 경찰을 모두 물리고 별을 지운다 (순찰차는 정비 때 다시 생긴다)
@@ -617,6 +676,7 @@ func reset() -> void:
 	wanted.clear()
 	_arrest = 0.0
 	_bust_pending = false
+	_bust_token += 1
 
 
 func _on_level_changed(level: int, _previous: int) -> void:
@@ -654,7 +714,7 @@ func _update_roadblocks(delta: float) -> void:
 		_place_checkpoints()
 	var pcar := director.current_vehicle
 	var normal := roadblocks.filter(func(rb: Dictionary): return not rb.checkpoint).size()
-	if wanted.level < 3 or pcar == null or normal >= MAX_ROADBLOCKS:
+	if wanted.level < 3 or pcar == null or pcar.airborne() or normal >= MAX_ROADBLOCKS:
 		return
 	_roadblock_timer -= delta
 	if _roadblock_timer > 0.0:
@@ -759,7 +819,7 @@ static func bridge_ends() -> Array:
 	return ends
 
 
-# ── ★5 경찰 헬기 ─────────────────────────────────────────
+# ── ★5 경찰 헬기 · ★6 군 기동헬기 ────────────────────────
 
 func _update_helis() -> void:
 	var level := wanted.level
@@ -769,6 +829,10 @@ func _update_helis() -> void:
 	if flying < want:
 		var h := PoliceHeli.new()
 		h.gunner = HELI_NPC
+		# ★6(군 투입)이면 한 대는 군 기동헬기 — 체력이 더 높고 경광등이 없다
+		if level >= ARMY_LEVEL and not helis.any(func(x: PoliceHeli): return x.stats == ARMY_HELI_TYPE and not x.leaving and not x.down):
+			h.stats = ARMY_HELI_TYPE
+			h.beacons = false
 		h.position = ppos + Vector2.RIGHT.rotated(rng.randf() * TAU) * HELI_SPAWN
 		add_child(h)
 		h.shot_down.connect(_on_heli_down.bind(h))
@@ -795,6 +859,29 @@ func _update_helis() -> void:
 				and h.global_position.distance_to(ppos) < PoliceHeli.SHOOT_RANGE:
 			h.reload = w.fire_interval * shoot_rng.randf_range(SHOOT_DELAY[0], SHOOT_DELAY[1])
 			combat.fire_from_air(h.global_position, ppos, w)
+
+
+## ★6 자주포: 주인공이 보이고 사거리 안이면 포탑을 돌려 겨누고, 다 돌았으면 주인공 둘레로 포탄을 떨어뜨린다
+func _spg_fire() -> void:
+	if combat == null or not seen:
+		return
+	var ppos := _player_pos()
+	for car in cars:
+		if car.stats != SPG_TYPE or not car.has_driver or car.wrecked or car.controlled:
+			continue
+		var rel := ppos - car.global_position
+		var d := rel.length()
+		if d < SPG_TYPE.cannon_min or d > SPG_TYPE.cannon_max:
+			continue
+		var want := car.motor.forward().angle_to(rel)
+		car.turret_goal = car.turret + angle_difference(car.turret, want)
+		car.aim_range = d
+		if car.gun_reload > 0.0 or absf(angle_difference(car.turret, want)) > SPG_AIMED:
+			continue
+		car.gun_reload = TANK_CANNON.fire_interval * SPG_RELOAD * shoot_rng.randf_range(SHOOT_DELAY[0], SHOOT_DELAY[1])
+		var miss := Vector2.RIGHT.rotated(shoot_rng.randf() * TAU) * shoot_rng.randf_range(0.0, SPG_SPREAD)
+		combat.fire_shell(car.muzzle(), ppos + miss, TANK_CANNON, false, car)
+		car.recoil = 1.0
 
 
 func _on_heli_down(by_player: bool, _h: PoliceHeli) -> void:

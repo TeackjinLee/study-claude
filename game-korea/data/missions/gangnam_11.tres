@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://bt3hj0io5mnoj"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/car_striker.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,24 +11,25 @@ text = "스트라이커에 타라"
 points = PackedVector2Array(-2134, -1939.2)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "강남 본부 차고에 세워라"
 points = PackedVector2Array(2784, 3200)
+headings = null
 radius = 70
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"gangnam_11"
 gang = &"gangnam"
-tier = 0
 phone_set = 1
-order = 0
 title = "증권가 서류"
-briefing = "여의도에 회장님 서류를 실은 스트라이커가 있다.\n강을 두 번 건너 본부 차고까지. 지름길은 없다."
+briefing = "여의도에 회장님 서류를 실은 스트라이커가 있다.
+강을 두 번 건너 본부 차고까지. 지름길은 없다."
 reward = 110000
-respect = 8
 time_limit = 35
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

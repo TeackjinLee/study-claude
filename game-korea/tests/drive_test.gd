@@ -15,6 +15,7 @@ func _ready() -> void:
 			var t: VehicleType = load(VEHICLE_DIR + file)
 			if t.enterable:   # 소방헬기처럼 탈 수 없는 연출용은 뺀다
 				results[t.id] = measure(t)
+				results[t.id].tracked = t.tracked
 	_print_table(results)
 	_check(results)
 	if _failures.is_empty():
@@ -89,6 +90,8 @@ func _check(results: Dictionary) -> void:
 		var r: Dictionary = results[id]
 		_expect(absf(r.top - r.max) < r.max * 0.01, "%s 최고속 %.0f ≠ 설정 %.0f" % [id, r.top, r.max])
 		_expect(r.t95 > 0.0 and r.t95 < 3.0, "%s 0→95%% %.2fs (0~3초여야 함)" % [id, r.t95])
+		if r.tracked:
+			continue   # 무한궤도(자주포)는 미끄러지지 않고 제자리에서 돈다 (tank_test)
 		_expect(r.drift_turn > r.turn, "%s 드리프트 선회 %.0f ≤ 일반 %.0f" % [id, r.drift_turn, r.turn])
 		_expect(r.drift_slip > r.slip * 1.5, "%s 드리프트 미끄러짐이 일반의 1.5배 미만" % id)
 

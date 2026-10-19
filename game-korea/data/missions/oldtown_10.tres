@@ -1,13 +1,15 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://br7m4ed8cbvpo"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/npc/gang_smuggler.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
 kind = 3
 text = "밀수단 간부를 처리해라"
+points = null
+headings = null
 npc = ExtResource("3")
 npc_points = PackedVector2Array(-1933.6, -3634, -1824, -3634, -1714.4, -3634, -1550, -3469.6)
 
@@ -18,7 +20,8 @@ gang = &"oldtown"
 tier = 2
 order = 2
 title = "캠핑장 습격"
-briefing = "밀수단 간부들이 한강 캠핑장에서 고기 굽고 있다.\n넷이다. 하나도 남기지 마."
+briefing = "밀수단 간부들이 한강 캠핑장에서 고기 굽고 있다.
+넷이다. 하나도 남기지 마."
 reward = 160000
 respect = 16
 time_limit = 200

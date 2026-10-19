@@ -263,17 +263,19 @@ func _maintain() -> void:
 func _sense(p: Pedestrian) -> void:
 	for v in vehicles:
 		var rel := p.global_position - v.global_position
-		if rel.length() > SENSE_RANGE:
+		if rel.length() > SENSE_RANGE or v.airborne():   # 머리 위를 나는 헬기는 치지도, 피하지도 않는다
 			continue
 		var speed := v.speed()
 		var local := v.to_local(p.global_position)
 		var half := v.stats.size * 0.5 + Vector2(Pedestrian.RADIUS, Pedestrian.RADIUS)
-		if speed > HIT_SPEED and absf(local.x) < half.x and absf(local.y) < half.y:
+		# 무한궤도는 느려도 밑에 든 사람을 깔아뭉갠다 (도는 중에도)
+		var crushing := v.stats.tracked and (speed > Combat.CRUSH_MOVING or absf(v.motor.steer) > 0.2)
+		if (speed > HIT_SPEED or crushing) and absf(local.x) < half.x and absf(local.y) < half.y:
 			# 이미 넘어진 사람은 다시 치지 않는다 (한 번 부딪힌 걸 매 프레임 세지 않게). 아이는 늘 피한다
 			if p.npc.protected:
 				p.dodge(v.motor.velocity.orthogonal() * (1.0 if v.to_local(p.global_position).x >= 0.0 else -1.0))
 			elif p.state != Pedestrian.State.KNOCKED:
-				damage(p, DamageModel.run_over_damage(speed), rel, v.controlled, true)
+				damage(p, p.npc.health * 2.0 if crushing else DamageModel.run_over_damage(speed), rel, v.controlled, true)
 				pedestrian_hit.emit(p, v, speed)
 			continue
 		if speed < DODGE_SPEED:

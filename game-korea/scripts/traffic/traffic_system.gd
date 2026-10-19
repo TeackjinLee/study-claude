@@ -269,7 +269,7 @@ func remove_ai(v: Vehicle) -> void:
 
 func is_clear(pos: Vector2, clearance := SPAWN_CLEARANCE) -> bool:
 	for v in vehicles:
-		if v.global_position.distance_to(pos) < clearance:
+		if not v.airborne() and v.global_position.distance_to(pos) < clearance:
 			return false
 	if player and player.global_position.distance_to(pos) < clearance:
 		return false
@@ -294,7 +294,8 @@ func scan_ahead(ai: TrafficAI) -> Dictionary:
 
 	var candidates: Array = []   # [검사점 배열, 반폭, 속도 벡터, 노드]
 	for v in vehicles:
-		if v == me or v.global_position.distance_to(me.global_position) > reach + v.stats.size.y:
+		# 떠 있는 헬기는 길을 막지 않는다
+		if v == me or v.airborne() or v.global_position.distance_to(me.global_position) > reach + v.stats.size.y:
 			continue
 		var f := v.motor.forward() * v.stats.size.y * 0.45
 		candidates.append([[v.global_position + f, v.global_position, v.global_position - f],
@@ -357,7 +358,7 @@ func lane_clear(ai: TrafficAI, offset: float, from: float, to: float) -> bool:
 	while s <= minf(to, piece.length):
 		var p := piece.point_at(s) + LaneGraph.right_of(piece.tangent_at(s)) * offset
 		for v in vehicles:
-			if v == ai.vehicle:
+			if v == ai.vehicle or v.airborne():
 				continue
 			var f := v.motor.forward() * v.stats.size.y * 0.45
 			for q in [v.global_position + f, v.global_position, v.global_position - f]:
@@ -377,7 +378,7 @@ func exit_has_room(seg: LanePiece, ai: TrafficAI) -> bool:
 	var right := LaneGraph.right_of(dir)
 	var start := seg.points[0]
 	for v in vehicles:
-		if v == ai.vehicle:
+		if v == ai.vehicle or v.airborne():
 			continue
 		var rel := v.global_position - start
 		var along := rel.dot(dir) - v.stats.size.y * 0.5

@@ -65,7 +65,8 @@ func step(throttle: float, steer_input: float, handbrake: bool, delta: float) ->
 
 	steer = move_toward(steer, clampf(steer_input, -1.0, 1.0), stats.steer_response * delta)
 	# 조향력은 전체 속도로 정한다. 옆으로 미끄러지는 중에도(전진 성분≈0) 차체는 돌아야 드리프트가 된다.
-	var authority := clampf(velocity.length() / stats.turn_speed_ref, 0.0, 1.0)
+	# 헬기는 바퀴가 없어 제자리에서도 돈다. 무한궤도도 양쪽 궤도를 반대로 돌려 제자리에서 돈다
+	var authority := 1.0 if stats.flies or stats.tracked else clampf(velocity.length() / stats.turn_speed_ref, 0.0, 1.0)
 	# 후진 중에만 조향을 뒤집는다. 스핀으로 차체가 진행 방향을 등져도 핸들 방향은 그대로다.
 	var reversing := throttle < 0.0 and fwd < -1.0 and not handbrake
 	var direction := -1.0 if reversing else 1.0

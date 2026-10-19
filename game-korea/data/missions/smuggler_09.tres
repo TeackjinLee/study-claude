@@ -1,13 +1,15 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://wkuyrefcw626"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/npc/gang_gangnam.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
 kind = 3
 text = "강남 조직원을 처리해라"
+points = null
+headings = null
 npc = ExtResource("3")
 npc_points = PackedVector2Array(2893.6, 2290, 2784, 2290, 2674.4, 2290, 2510, 1961.2)
 
@@ -18,7 +20,8 @@ gang = &"smuggler"
 tier = 2
 order = 1
 title = "금강개발 기습"
-briefing = "금강개발 정문 앞 강남 놈들 넷.\n강남 한복판이다. 끝내고 바로 빠져."
+briefing = "금강개발 정문 앞 강남 놈들 넷.
+강남 한복판이다. 끝내고 바로 빠져."
 reward = 160000
 respect = 16
 time_limit = 200

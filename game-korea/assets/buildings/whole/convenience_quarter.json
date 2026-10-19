@@ -1,0 +1,20 @@
+{
+  "id": "CONVENIENCE",
+  "lot": "quarter",
+  "lot_size": [
+    251.0,
+    251.0
+  ],
+  "seed": 7,
+  "size": [
+    1788,
+    1031
+  ],
+  "origin": [
+    893.95,
+    515.24
+  ],
+  "scale": 3.16307,
+  "hull_lift": 32,
+  "hull_grow": 10
+}

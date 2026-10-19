@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://bjphh57roeyl3"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/trk_bongo.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -12,15 +12,16 @@ points = PackedVector2Array(-2134, -5721.6, -598, -4838.4)
 headings = PackedFloat32Array(0, 0)
 vehicle = ExtResource("3")
 moving = true
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"oldtown_08"
 gang = &"oldtown"
 tier = 2
-order = 0
 title = "밀수 트럭"
-briefing = "밀수단 봉고르 두 대가 홍대를 돈다. 물건째로 날려.\n멈추지 않는다."
+briefing = "밀수단 봉고르 두 대가 홍대를 돈다. 물건째로 날려.
+멈추지 않는다."
 reward = 150000
 respect = 16
 time_limit = 180

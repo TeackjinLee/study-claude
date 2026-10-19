@@ -18,6 +18,12 @@ const WRECK_TIME := 30.0             ## 잔해는 이만큼 지나고 화면 밖
 const OFFSCREEN := 950.0
 const MAX_SCORCH := 40
 const EJECT_OFFSET := 16.0
+const SHELL_ARC := 0.32              ## 포탄 궤적 꼭대기 높이 = 날아가는 거리 × 이 값 (곡사)
+const MUZZLE_TIME := 0.35            ## 포구 불꽃·연기
+const CRUSH_DPS := 160.0             ## 무한궤도에 깔린 차가 받는 초당 피해 (몇 초면 불이 난다)
+const CRUSH_RATE := 1.5              ## 깔린 차가 납작해지는 빠르기 (1/s)
+const CRUSH_PLAYER_DPS := 400.0      ## 무한궤도 밑에 깔린 주인공(도보)이 받는 초당 피해
+const CRUSH_MOVING := 4.0            ## 이보다 빨리 움직이거나 돌 때만 깔아뭉갠다 (px/s)
 
 var vehicles: Array[Vehicle] = []    ## 도시의 모든 차 (main과 공유)
 var pedestrians: PedestrianManager
@@ -26,6 +32,7 @@ var director: Director
 var traffic: TrafficSystem
 var police: PoliceDispatcher
 var fires: Fires                     ## 없으면 불이 붙지 않는다
+const TANK_CANNON: WeaponType = preload("res://data/weapons/tank_cannon.tres")
 var rng := RandomNumberGenerator.new()
 var explosions := 0                  ## 지금까지 터진 차 수 (테스트용)
 
@@ -34,6 +41,9 @@ var _projectiles: Array[Dictionary] = []   ## 날아가는 수류탄·화염병�
 var _flames: Array = []              ## 화염방사기·물대포 불꽃 [from, dir, w, age]
 var _blasts: Array = []              ## [pos, 크기 배율, age]
 var _swings: Array = []              ## [pos, dir, age]
+var _shells: Array[Dictionary] = []  ## 곡사 포탄 {from, to, dur, t, w, by_player, shooter} — 건물 위로 날아가 겨눈 땅에 떨어진다
+var _muzzles: Array = []             ## 포구 불꽃 [pos, dir, age]
+var _under := {}                     ## 무한궤도 밑에 든 차 [무한궤도, 차] → true (그동안 둘의 충돌을 뺀다)
 var _scorch: Array[Vector2] = []
 var _decals: Node2D
 var _watched := {}                   ## 신호를 연결한 차
@@ -60,13 +70,19 @@ func _physics_process(delta: float) -> void:
 			v.exploded.connect(_on_exploded.bind(v))
 	_cleanup_wrecks(delta)
 	_fly(delta)
-	for list: Array in [_tracers, _blasts, _swings, _flames]:
+	_fly_shells(delta)
+	_crush(delta)
+	for pair: Array in _under.keys():
+		if not is_instance_valid(pair[0]) or not is_instance_valid(pair[1]):
+			_under.erase(pair)
+	for list: Array in [_tracers, _blasts, _swings, _flames, _muzzles]:
 		for e: Array in list:
 			e[-1] += delta
 	_flames = _flames.filter(func(e: Array): return e[3] < 0.25)
 	_tracers = _tracers.filter(func(e: Array): return e[3] < TRACER_TIME)
 	_blasts = _blasts.filter(func(e: Array): return e[2] < BLAST_TIME)
 	_swings = _swings.filter(func(e: Array): return e[2] < SWING_TIME)
+	_muzzles = _muzzles.filter(func(e: Array): return e[2] < MUZZLE_TIME)
 
 
 ## 그림은 화면 프레임마다 한 번 (물리 틱마다 부르면 느릴수록 한 프레임에 여러 번 그린다)
@@ -177,6 +193,84 @@ func _detonate(p: Dictionary) -> void:
 		fires.start(p.pos, w.fire_radius, p.by_player)
 		pedestrians.scare(p.pos, SCARE_RADIUS)
 		gunfire.emit(p.pos, p.by_player)
+
+
+# ── 곡사포 (자주포) ───────────────────────────────────────
+
+## 포구 from에서 땅의 to로 포탄을 쏜다. 곡사라 건물에 막히지 않고 포물선을 그리며 날아가 to에서 터진다.
+## 쏜 곳에 포구 불꽃, 둘레 사람은 겁먹고 총소리처럼 경찰이 듣는다
+func fire_shell(from: Vector2, to: Vector2, w: WeaponType, by_player: bool, shooter: Vehicle = null) -> void:
+	var dist := from.distance_to(to)
+	_shells.append({"from": from, "to": to, "dur": maxf(dist / w.projectile_speed, 0.3), "t": 0.0, "w": w,
+		"by_player": by_player, "shooter": shooter, "arc": dist * SHELL_ARC})
+	_muzzles.append([from, (to - from).normalized(), 0.0])
+	gunfire.emit(from, by_player)
+	pedestrians.scare(from, BLAST_SCARE_RADIUS)
+
+
+## 날아가는 포탄 수 (테스트용)
+func shells_in_flight() -> int:
+	return _shells.size()
+
+
+func _fly_shells(delta: float) -> void:
+	for p: Dictionary in _shells.duplicate():
+		p.t += delta
+		if p.t >= p.dur:
+			_shells.erase(p)
+			var w: WeaponType = p.w
+			explode(p.to, p.by_player, null, w.explosion_scale)
+
+
+## 포탄의 지금 위치 (땅 평면)와 높이
+static func shell_at(p: Dictionary) -> Array:
+	var k: float = clampf(p.t / p.dur, 0.0, 1.0)
+	return [(p.from as Vector2).lerp(p.to, k), 4.0 * p.arc * k * (1.0 - k)]
+
+
+# ── 무한궤도 깔아뭉개기 ───────────────────────────────────
+
+## 움직이는 무한궤도 밑에 든 차는 납작해지며 크게 다치고(곧 불이 난다), 무한궤도는 그 차 높이만큼 올라타 넘는다.
+## 무한궤도는 차와 부딪히지 않으므로(Vehicle.apply_stats) 막히지 않고 지나간다. 밑에 든 사람은 PedestrianManager가 친다
+func _crush(delta: float) -> void:
+	for t in vehicles:
+		if not t.stats.tracked or t.wrecked:
+			continue
+		var moving := t.speed() > CRUSH_MOVING or absf(t.motor.steer) > 0.2 and (t.controlled or t.has_driver)
+		var half := t.stats.size * 0.5
+		var goal := 0.0
+		t.over_z = 0
+		for v in vehicles:
+			if v == t or v.stats.tracked or v.airborne():
+				continue
+			var local := t.to_local(v.global_position)
+			var r := minf(v.stats.size.x, v.stats.size.y) * 0.5
+			var depth := minf(half.x + r - absf(local.x), half.y + v.stats.size.y * 0.5 - absf(local.y)) / r
+			var pair := [t, v]
+			if depth <= 0.0:
+				if _under.has(pair) and depth < -0.3:
+					# 다 지나갔다: 다시 부딪히게 한다
+					_under.erase(pair)
+					v.remove_collision_exception_with(t)
+				continue
+			if not _under.has(pair):
+				# 밑에 든 차가 겹침을 풀려고 무한궤도 앞으로 밀려 나가지 않게 둘의 충돌을 뺀다
+				_under[pair] = true
+				v.add_collision_exception_with(t)
+			depth = minf(depth, 1.0)
+			if moving:
+				v.crushed = move_toward(v.crushed, 1.0, CRUSH_RATE * depth * delta)
+				v.motor.velocity = v.motor.velocity.move_toward(Vector2.ZERO, 900.0 * delta)
+				if not v.wrecked:
+					damage_vehicle(v, CRUSH_DPS * depth * delta, t.controlled)
+					v.dent_at(v.global_position + (t.global_position - v.global_position).normalized() * r, CRUSH_DPS * delta)
+			goal = maxf(goal, v.stats.height * (1.0 - VehicleModel.CRUSH_FLAT * v.crushed) * minf(depth * 1.6, 1.0))
+			t.over_z = maxi(t.over_z, v.z_index + 1)   # 올라탄 차보다 위에 그린다
+		t.climb_goal = goal
+		if moving and player and player.visible and not player.is_dead():
+			var lp := t.to_local(player.global_position)
+			if absf(lp.x) < half.x + Player.RADIUS and absf(lp.y) < half.y + Player.RADIUS:
+				player.take_damage(CRUSH_PLAYER_DPS * delta)
 
 
 # ── 화염방사기 · 물대포 ───────────────────────────────────
@@ -381,6 +475,42 @@ func _draw() -> void:
 	for e: Array in _blasts:
 		_draw_blast(e[0] + IsoView.lift(IsoView.ground(e[0])), e[1], e[2])   # 다리 위 폭발은 상판 높이에서
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_cannon()
+
+
+## 곡사포: 주인공이 모는 자주포의 조준점(떨어질 곳 원 + 장전 고리), 날아가는 포탄과 떨어질 곳 경고(적 포탄은 빨강), 포구 불꽃
+func _draw_cannon() -> void:
+	var v := director.current_vehicle if director else null
+	if v and v.stats.cannon_max > 0.0 and not v.wrecked:
+		var at := v.gun_target()
+		var r := 34.0 * sqrt(TANK_CANNON.explosion_scale)
+		var ready := 1.0 - v.gun_reload / TANK_CANNON.fire_interval
+		var c := Color(1.0, 0.85, 0.3, 0.9) if ready >= 1.0 else Color(0.9, 0.9, 0.9, 0.55)
+		draw_arc(at, r, 0.0, TAU, 32, c, 2.0)
+		draw_arc(at, r * 0.45, -PI * 0.5, -PI * 0.5 + TAU * minf(ready, 1.0), 24, c, 3.0)
+		for d in [Vector2.RIGHT, Vector2.DOWN, Vector2.LEFT, Vector2.UP]:
+			draw_line(at + d * r * 0.7, at + d * r * 1.25, c, 2.0)
+	var now := Time.get_ticks_msec() / 1000.0
+	for p: Dictionary in _shells:
+		var w: WeaponType = p.w
+		var warn := Color(1.0, 0.25, 0.2, 0.55) if not p.by_player else Color(1.0, 0.85, 0.3, 0.35)
+		var left: float = 1.0 - p.t / p.dur
+		draw_arc(p.to, 30.0 * sqrt(w.explosion_scale) * (0.4 + 0.6 * left), 0.0, TAU, 28, warn, 2.0)
+		var at: Array = shell_at(p)
+		var pos: Vector2 = at[0]
+		var h: float = at[1] if IsoView.enabled else 0.0
+		var ahead: Array = shell_at({"from": p.from, "to": p.to, "t": maxf(p.t - 0.06, 0.0), "dur": p.dur, "arc": p.arc})
+		var back: Vector2 = (ahead[0] as Vector2) + IsoView.lift(ahead[1] if IsoView.enabled else 0.0)
+		var head := pos + IsoView.lift(h)
+		draw_line(back, head, Color(0.85, 0.85, 0.8, 0.45), 3.0)
+		draw_circle(head, 3.5, Color(0.25, 0.25, 0.22))
+		FireFx.circle(self, head, 7.0, Color(1.0, 0.8, 0.4, 0.35 + 0.15 * sin(now * 30.0)))
+	for e: Array in _muzzles:
+		var k: float = e[2] / MUZZLE_TIME
+		var lift := IsoView.lift(IsoView.ground(e[0]) + 22.0) if IsoView.enabled else Vector2.ZERO
+		var pos: Vector2 = e[0] + lift
+		FireFx.circle(self, pos + (e[1] as Vector2) * 8.0, 26.0 * (1.0 - k * 0.5), Color(1.0, 0.85, 0.45, 0.85 * (1.0 - k)))
+		FireFx.circle(self, pos + (e[1] as Vector2) * (14.0 + 30.0 * k), 18.0 + 22.0 * k, Color(0.55, 0.55, 0.52, 0.5 * (1.0 - k)))
 
 
 ## 폭발 (참고 그림 순서): 하얀 섬광 → 부풀며 솟는 불덩이 → 사방으로 튀는 파편·불티 → 검은 연기와 바닥에 남은 불.

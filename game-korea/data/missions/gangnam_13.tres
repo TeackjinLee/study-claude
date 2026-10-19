@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=12 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://cr45vv3mid4jl"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/car_striker.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,73 +11,80 @@ text = "스트라이커에 타라"
 points = PackedVector2Array(-2134, -1939.2)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (1/7)"
 points = PackedVector2Array(-2208, -2976)
+headings = null
 radius = 90
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_2"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (2/7)"
 points = PackedVector2Array(96, -2976)
+headings = null
 radius = 90
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_3"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (3/7)"
 points = PackedVector2Array(1632, -2976)
+headings = null
 radius = 90
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_4"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (4/7)"
 points = PackedVector2Array(1632, -672)
+headings = null
 radius = 90
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_5"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (5/7)"
 points = PackedVector2Array(1632, 96)
+headings = null
 radius = 90
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_6"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (6/7)"
 points = PackedVector2Array(3936, 96)
+headings = null
 radius = 90
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_7"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (7/7)"
 points = PackedVector2Array(3936, -2976)
+headings = null
 radius = 90
 need_vehicle = true
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"gangnam_13"
 gang = &"gangnam"
-tier = 0
 phone_set = 1
 order = 2
 title = "한강 질주"
-briefing = "새 스트라이커 길들이기, 이번엔 한강이다.\n다리 둘을 건너는 코스를 시간 안에 돌아."
+briefing = "새 스트라이커 길들이기, 이번엔 한강이다.
+다리 둘을 건너는 코스를 시간 안에 돌아."
 reward = 120000
-respect = 8
 time_limit = 45
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2"), SubResource("step_3"), SubResource("step_4"), SubResource("step_5"), SubResource("step_6"), SubResource("step_7")])

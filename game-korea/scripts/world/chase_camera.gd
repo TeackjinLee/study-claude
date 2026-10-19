@@ -10,11 +10,13 @@ const FAST_ZOOM := 0.62
 const LOOK_AHEAD := 0.35      ## 속도 × 이 값(초)만큼 앞을 본다
 const FOLLOW_SHARPNESS := 6.0
 const ZOOM_SHARPNESS := 2.5
+const VIEW_LIFT := 0.8        ## 떠 있는 헬기를 따라갈 때 화면을 높이의 이만큼 올려 헬기가 가운데 오게 한다
 
 static var current: ChaseCamera
 
 var target: Node2D
 var zoom := Vector2(BASE_ZOOM, BASE_ZOOM)
+var _view_lift := 0.0         ## 화면을 올린 높이 (2.5D 화면 px). global_position(화면 가운데 땅)은 그대로다
 
 
 func _ready() -> void:
@@ -42,6 +44,7 @@ static func current_cam() -> ChaseCamera:
 func snap() -> void:
 	global_position = target.global_position
 	zoom = Vector2(BASE_ZOOM, BASE_ZOOM)
+	_view_lift = 0.0
 	_apply()
 
 
@@ -54,6 +57,8 @@ func _physics_process(delta: float) -> void:
 	var ratio: float = target.call("zoom_ratio")
 	var z := lerpf(BASE_ZOOM, FAST_ZOOM, ratio)
 	zoom = zoom.lerp(Vector2(z, z), 1.0 - exp(-ZOOM_SHARPNESS * delta))
+	var altitude: Variant = target.get("altitude")
+	_view_lift = lerpf(_view_lift, (altitude if altitude != null else 0.0) * VIEW_LIFT, 1.0 - exp(-FOLLOW_SHARPNESS * delta))
 
 
 func _process(_delta: float) -> void:
@@ -65,7 +70,7 @@ func _apply() -> void:
 		return
 	var size := get_viewport().get_visible_rect().size
 	if IsoView.enabled:
-		get_viewport().canvas_transform = IsoView.canvas(size, global_position, zoom.x)
+		get_viewport().canvas_transform = IsoView.canvas(size, global_position + IsoView.lift(_view_lift), zoom.x)
 	else:
 		var t := Transform2D(0.0, zoom, 0.0, Vector2.ZERO)
 		t.origin = size * 0.5 - global_position * zoom

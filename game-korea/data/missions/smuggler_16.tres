@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://1jt8tgh3bkkv"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/bus_express.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -12,13 +12,16 @@ points = PackedVector2Array(2016, -2902)
 headings = PackedFloat32Array(1.5708)
 vehicle = ExtResource("3")
 driver = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "공단 창고 앞에 세워라"
 points = PackedVector2Array(-1056, 2474)
+headings = null
 radius = 90
+npc_points = null
 
 [resource]
 script = ExtResource("1")
@@ -28,7 +31,8 @@ tier = 1
 phone_set = 1
 order = 1
 title = "고속버스 털기"
-briefing = "고속버스 짐칸에 우리 물건이 실렸다.\n버스째 빼앗아 공단 창고로."
+briefing = "고속버스 짐칸에 우리 물건이 실렸다.
+버스째 빼앗아 공단 창고로."
 reward = 400000
 respect = 12
 time_limit = 80

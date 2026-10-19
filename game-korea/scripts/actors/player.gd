@@ -24,6 +24,11 @@ var hair := Color(0.05, 0.05, 0.05)
 var screen_walk := true
 ## 이 시간(초) 동안은 걸어도 겨눈 쪽을 바라본다 (마우스 조준)
 var _aim_hold := 0.0
+## 경찰에게 맞아 쓰러졌다 — 체포 화면 직전 (그림은 넘어짐, 움직이지 못한다)
+var knocked_down := false
+var _stun := 0.0                 ## 맞아서 못 움직이는 남은 시간
+var _push := Vector2.ZERO        ## 맞아서 밀려나는 속도
+var _hurt := 0.0                 ## 맞은 뒤 붉게 번쩍이는 남은 시간
 
 
 func _ready() -> void:
@@ -39,8 +44,16 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if not input_enabled:
+	if not input_enabled or knocked_down:
 		velocity = Vector2.ZERO
+		return
+	if _stun > 0.0:
+		# 맞고 비틀거린다: 입력을 받지 않고 맞은 쪽으로 조금 밀려난다
+		_stun -= delta
+		velocity = _push
+		_push = _push.move_toward(Vector2.ZERO, 500.0 * delta)
+		move_and_slide()
+		_sort()
 		return
 	var dir := Vector2(Input.get_axis("steer_left", "steer_right"), Input.get_axis("accelerate", "brake"))
 	if dir.length() > 1.0:
@@ -58,7 +71,10 @@ func _physics_process(delta: float) -> void:
 	_sort()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if _hurt > 0.0:
+		_hurt = maxf(_hurt - delta, 0.0)
+		self_modulate = Color(1.0, 0.55, 0.5) if _hurt > 0.0 else Color.WHITE
 	queue_redraw()   # 그림은 화면 프레임마다 한 번
 	_sort()
 
@@ -99,6 +115,30 @@ func take_damage(amount: float) -> void:
 		died.emit()
 
 
+## 경찰 곤봉에 맞는다: 체력이 줄고(매로는 죽지 않는다 — 1은 남는다) 잠깐 비틀거리며 밀려난다
+func beaten(amount: float, push_dir: Vector2, stun_time: float) -> void:
+	if is_dead() or knocked_down:
+		return
+	health = maxf(health - amount, 1.0)
+	_stun = maxf(_stun, stun_time)
+	_push = push_dir.normalized() * 80.0
+	_hurt = 0.18
+	queue_redraw()
+
+
+## 잠깐 못 움직인다 (차에서 끌려 나올 때)
+func stun(seconds: float) -> void:
+	_stun = maxf(_stun, seconds)
+
+
+## 맞아 쓰러진다 (체포 직전)
+func knock_down() -> void:
+	knocked_down = true
+	input_enabled = false          # 차 타기·총 쏘기도 막는다 (체포 뒤 Main._respawn이 되돌린다)
+	velocity = Vector2.ZERO
+	queue_redraw()
+
+
 ## 주먹을 한 번 지를 때 (그림만): COMBO_GAP초 안에 이어 지르면 잽 → 스트레이트 → 훅 → 다시 잽
 const COMBO_GAP := 0.7
 var _combo := -1
@@ -132,6 +172,9 @@ func heal(amount: float) -> void:
 ## 병원에서 다시 시작할 때
 func revive() -> void:
 	health = MAX_HEALTH
+	knocked_down = false
+	_stun = 0.0
+	_push = Vector2.ZERO
 	queue_redraw()
 
 
@@ -144,8 +187,9 @@ func zoom_ratio() -> float:
 
 
 func _draw() -> void:
-	if is_dead():
-		PersonDrawer.draw_blood(self, facing)
+	if is_dead() or knocked_down:
+		if is_dead():
+			PersonDrawer.draw_blood(self, facing)
 		if IsoView.enabled:
 			PersonRig.draw(self, facing, walk_phase, 0.0, shirt, pants, hair, 1.0, null, 0, null, true)
 		else:
@@ -156,6 +200,8 @@ func _draw() -> void:
 	if IsoView.enabled:
 		var gait: float = 0.0 if velocity.length_squared() < 1.0 else (2.0 if velocity.length() > WALK_SPEED + 20.0 else 1.0)
 		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, 1.0, null, 0, arsenal.current(), false)
+		if _hurt > 0.0:
+			_draw_hit_burst()
 		return
 	PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair)
 	var w := arsenal.current()
@@ -164,3 +210,15 @@ func _draw() -> void:
 		draw_set_transform(Vector2.ZERO, facing, Vector2.ONE)
 		draw_rect(Rect2(5.5, -10 - w.slot, 2.5, 8 + w.slot), Color(0.12, 0.12, 0.14))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 맞은 순간 가슴께에 하얀 충격 (곤봉) — 맞은 직후 커졌다가 사라진다
+func _draw_hit_burst() -> void:
+	var t := 1.0 - _hurt / 0.18
+	draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, PersonDrawer._ground(self)))
+	var c := Vector2(0.0, -17.0)
+	var col := Color(1.0, 0.97, 0.85, 0.9 * (1.0 - t))
+	for i in 6:
+		var d := Vector2.RIGHT.rotated(i * TAU / 6.0 + 0.3)
+		draw_line(c + d * (2.0 + 3.0 * t), c + d * (5.0 + 4.0 * t), col, 1.4)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

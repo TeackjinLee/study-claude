@@ -6,6 +6,7 @@ signal impacted(strength: float)
 signal bumped(other: Vehicle, strength: float)
 signal caught_fire                           ## 체력이 0이 됐다 — burning초 뒤 터진다
 signal exploded(by_player: bool)
+signal landing_blocked                       ## 헬기가 내려앉으려는데 밑이 막혀 있다 (건물·차·강물)
 
 const RESTITUTION := 0.35
 const COLLISION_FRICTION := 0.8
@@ -15,6 +16,20 @@ const SMOLDER_TIME := 25.0   ## 잔해에서 연기·불씨가 이만큼 난다
 const WRECK_FLAME_TIME := 7.0 ## 잔해 위 남은 불꽃이 이만큼 타다 꺼진다
 const ROT_STEP := 0.03        ## 이만큼(약 1.7도) 돌아야 모형을 다시 그린다
 const REDRAW_RANGE := 2400.0 ## 카메라에서 이보다 먼 차는 다시 그리지 않는다 (가장 멀리 줌아웃해도 화면 밖)
+const AIRBORNE_HEIGHT := 4.0  ## 헬기가 이보다 높이 떠 있으면 아무것과도 부딪히지 않는다
+const LIFTOFF := 0.35         ## 헬기는 날 높이의 이만큼 오르기 전에는 움직이지 않는다 (시동·이륙)
+const LAND_SPEED := 70.0      ## 내려앉는 동안 이보다 빨리 못 간다 (보행자를 치는 속도보다 느리게)
+const ELEV_MIN := 0.06         ## 포신을 가장 낮게 든 각 (rad, 가까이 쏠 때)
+const ELEV_MAX := 0.78         ## 가장 높이 든 각 (최대 사거리)
+const ELEV_RATE := 0.6         ## 포신이 오르내리는 빠르기 (rad/s)
+const MUZZLE_REACH := 0.72     ## 포구가 차 가운데에서 차 길이의 이만큼 앞 (포신이 차체 밖으로 나온다)
+const CLIMB_RATE := 28.0       ## 깔고 넘는 차에 올라타는 빠르기 (화면 px/s)
+const CLIMB_PITCH := 0.16      ## 올라타고 내려올 때 들고 숙이는 각 (rad)
+const ROTOR_ABOVE := 7.0       ## 주 회전날개가 동체 높이(VehicleType.height)보다 이만큼 위에 돈다 (VehicleModel의 헬기 모형들)
+const BANK_PIVOT := 12.0      ## 헬기가 기울·숙일 때 도는 축 높이 (동체 가운데)
+const BANK_RATE := 1.6        ## 기울기가 목표를 따라가는 속도 (rad/s)
+const PITCH_RATE := 0.9       ## 숙이기가 목표를 따라가는 속도 (rad/s)
+const MAP_MARGIN := 40.0      ## 헬기는 지도 가장자리에서 이만큼 안쪽까지만 난다
 
 @export var stats: VehicleType
 var controlled := false       ## 플레이어가 운전 중 (Director가 정한다)
@@ -35,6 +50,28 @@ var hit_by_player := false    ## 마지막 피해를 주인공이 줬다 (폭발
 var paint := Color.WHITE      ## 차체 색 (카센터에서 다시 칠할 수 있다)
 var beam := true              ## 2.5D에서 바닥에 전조등 빛을 그린다 (차량 도감에선 끈다)
 var ground := 0.0             ## 2.5D 땅 높이 (다리 위·경사로). 그림만 올리고 물리는 평면 그대로다
+## 헬기가 떠 있는 높이 (2.5D 화면 px). 그림에만 쓴다 — AIRBORNE_HEIGHT보다 높으면 충돌체를 끈다
+var altitude := 0.0
+var bank := 0.0               ## 옆으로 기운 각 (rad, +면 오른쪽이 내려간다). 그림에만 쓴다
+var sound: HeliSound         ## 헬기 소리 (나는 차종만)
+var pitch := 0.0              ## 앞으로 숙인 각 (rad, +면 코가 내려간다). 그림에만 쓴다
+var _last_fwd := 0.0          ## 지난 틱 전진 속도 (가속도 → 숙이기)
+var landing := false          ## 주인공이 내리려고 헬기를 내려앉히는 중 (Director가 정한다)
+var touched_down := false     ## 내리려고 내려앉았다 — Director가 주인공을 내리고 끈다
+var _ghost := false           ## 막힌 곳(건물 위)으로 떨어진 헬기 — 충돌체를 끈 채로 둔다
+## 포탑 (자주포·전술차량 기관총, VehicleType.turret_rate > 0)
+var turret := 0.0             ## 포탑 각 (rad, 차 앞 기준 — 무기는 forward().rotated(turret)로 나간다)
+var turret_goal := 0.0        ## 겨눈 각 — 포탑이 turret_rate로 따라 돈다
+var aim_range := 0.0          ## 포가 겨눈 거리 (px, cannon_min~cannon_max). 0이면 아직 안 정했다 (가운데)
+var elevation := 0.0          ## 포신을 든 각 (rad) — 멀리 쏠수록 높이 든다 (그림만)
+var recoil := 0.0             ## 쏜 뒤 포신 밀림 (1 → 0, 그림만)
+var gun_reload := 0.0         ## 다음 발까지 남은 시간
+## 무한궤도: 깔고 넘는 차 높이만큼 올라탄다 (그림만, Combat._crush가 climb_goal을 정한다)
+var climb := 0.0
+var climb_goal := 0.0
+var crushed := 0.0            ## 무한궤도에 깔려 납작해진 정도 (0~1, 그림만)
+var over_z := 0               ## 깔고 있는 차보다 위에 그린다 (Combat._crush가 정한다, 0이면 평소대로)
+var _blocked_told := false
 ## 차 category → 체력 배율 (부업 보너스: 택시·버스·오토바이 +50%). main이 정한다
 static var durability_bonus := {}
 
@@ -75,6 +112,14 @@ func apply_stats(new_stats: VehicleType) -> void:
 	var rect := RectangleShape2D.new()
 	rect.size = stats.size
 	_shape.shape = rect
+	# 무한궤도는 차에 막히지 않는다 — 깔고 넘는다 (Combat._crush). 다른 차는 여전히 무한궤도에 부딪힌다.
+	# 값이 바뀔 때만 넣는다 — 같은 값이라도 다시 넣으면 물리 서버가 몸체를 다시 등록해 충돌 순서가 바뀐다 (추격 결과가 나비효과로 바뀐다)
+	var mask := Layers.WORLD if stats.tracked else Layers.WORLD | Layers.VEHICLES
+	if collision_mask != mask:
+		collision_mask = mask
+	if stats.flies and sound == null:
+		sound = HeliSound.new()
+		add_child(sound)
 	queue_redraw()
 
 
@@ -116,14 +161,29 @@ func _physics_process(delta: float) -> void:
 		throttle_input = 0.0
 		steer_input = 0.0
 		handbrake_input = false
+	if stats.flies:
+		_fly(delta)
 	motor.step(throttle_input, steer_input, handbrake_input, delta)
+	if stats.flies:
+		_tilt(delta)
+	if stats.turret_rate > 0.0:
+		_aim(delta)
+	if stats.tracked:
+		_ride(delta)
 	if wrecked or (not controlled and not (has_driver and (ai or pursuit))):
 		motor.velocity = motor.velocity.move_toward(Vector2.ZERO, PARKED_DRAG * delta)
+	if landing:
+		motor.velocity = motor.velocity.move_toward(motor.velocity.limit_length(LAND_SPEED), stats.brake_force * delta)
 	rotation = motor.heading
 	_move(delta)
-	# 2.5D: 깊이(월드 x+y)로 그리는 순서를 정한다
-	z_index = IsoView.z_of(global_position) if IsoView.enabled else 1
-	ground = IsoView.ground(global_position)
+	if airborne():
+		_keep_on_map()
+	# 2.5D: 깊이(월드 x+y)로 그리는 순서를 정한다. 떠 있는 헬기는 건물 위에 그린다
+	if IsoView.enabled:
+		z_index = IsoView.Z_AIR if airborne() else maxi(IsoView.z_of(global_position), over_z)
+	else:
+		z_index = 20 if airborne() else 1
+	ground = IsoView.ground(global_position) + climb
 
 
 ## 다시 그릴지는 화면 프레임마다 한 번 정한다 (물리 틱마다 정하면 느려질수록 한 프레임에 여러 번 그려 더 느려진다).
@@ -147,7 +207,8 @@ func _look() -> Array:
 	# 방향은 ROT_STEP마다만 다시 그린다 — 그 사이엔 그린 모형을 노드 회전이 그대로 돌린다 (높이 방향이 1도 남짓 어긋날 뿐)
 	return [snappedf(rotation, ROT_STEP), occupied(), is_braking(), motor.forward_speed() < -5.0, wrecked, paint,
 		ai != null and ai.honking, IsoView.enabled, snappedf(ground, 0.5), _dent_rev,
-		siren and _siren_phase(), snappedf(fire_level(), 0.1)]
+		siren and _siren_phase(), snappedf(fire_level(), 0.1), snappedf(altitude, 0.5), snappedf(bank, 0.02), snappedf(pitch, 0.02),
+		snappedf(turret, ROT_STEP), snappedf(elevation, 0.03), snappedf(recoil, 0.1), snappedf(crushed, 0.1)]
 
 
 ## 매 프레임 다시 그리는 모형 (위에서 보기의 레미콘 드럼). 불·연기는 위층(_fx)이 따로 그린다
@@ -155,16 +216,183 @@ func _animated() -> bool:
 	return not IsoView.enabled and stats.category == &"mixer"
 
 
-## 위층에 그릴 불·연기가 있다 (불·연기·잔해 불씨)
+## 위층에 그릴 것이 있다 (불·연기·잔해 불씨, 도는 헬기 날개)
 func _fx_active() -> bool:
+	return _damage_fx() or _rotor_spinning()
+
+
+## 불·연기·잔해 불씨
+func _damage_fx() -> bool:
 	if burning >= 0.0 or on_fire or health < max_health() * 0.35:
 		return not wrecked or wreck_age < SMOLDER_TIME
 	return wrecked and wreck_age < SMOLDER_TIME
 
 
 func _draw_fx() -> void:
-	if _fx_active():
+	if _rotor_spinning():
+		_draw_rotor()
+	if _damage_fx():
 		_draw_damage(stats.size.x, stats.size.y)
+
+
+# ── 포탑 · 무한궤도 ───────────────────────────────────────
+
+## 포탑이 겨눈 각을 따라 돌고, 포신은 겨눈 거리만큼 든다 (가까우면 낮게, 최대 사거리면 45°)
+func _aim(delta: float) -> void:
+	turret = rotate_toward(turret, turret_goal, stats.turret_rate * delta)
+	recoil = move_toward(recoil, 0.0, delta * 2.2)
+	gun_reload = maxf(gun_reload - delta, 0.0)
+	if stats.cannon_max > 0.0:
+		var k := clampf((range_now() - stats.cannon_min) / maxf(stats.cannon_max - stats.cannon_min, 1.0), 0.0, 1.0)
+		elevation = move_toward(elevation, lerpf(ELEV_MIN, ELEV_MAX, k), ELEV_RATE * delta)
+
+
+## 도시에 한 대만 있는 차종(VehicleType.unique)이 이미 멀쩡히 있는가 (부서진 잔해는 세지 않는다)
+static func exists(list: Array[Vehicle], t: VehicleType) -> bool:
+	return t.unique and list.any(func(v: Vehicle): return is_instance_valid(v) and v.stats == t and not v.wrecked)
+
+
+## 포가 지금 겨눈 거리 (안 정했으면 사거리 가운데)
+func range_now() -> float:
+	if aim_range <= 0.0:
+		return (stats.cannon_min + stats.cannon_max) * 0.5
+	return clampf(aim_range, stats.cannon_min, stats.cannon_max)
+
+
+## 포탑 무기가 나가는 방향 (월드)
+func gun_dir() -> Vector2:
+	return motor.forward().rotated(turret)
+
+
+## 포탄이 떨어질 곳 (포탑 방향 · 겨눈 거리)
+func gun_target() -> Vector2:
+	return global_position + gun_dir() * range_now()
+
+
+## 포구 (포신 끝, 월드 평면)
+func muzzle() -> Vector2:
+	return global_position + motor.forward().rotated(turret) * stats.size.y * MUZZLE_REACH
+
+
+## 깔고 넘는 차에 올라타고 내려온다. 올라탈 때는 코를 들고 내려올 때는 숙인다 (그림만)
+func _ride(delta: float) -> void:
+	var before := climb
+	climb = move_toward(climb, climb_goal, CLIMB_RATE * delta)
+	var going := signf(motor.forward_speed()) if absf(motor.forward_speed()) > 3.0 else 0.0
+	pitch = move_toward(pitch, -clampf((climb - before) / delta / CLIMB_RATE, -1.0, 1.0) * going * CLIMB_PITCH, delta * 1.2)
+
+
+# ── 헬기 ──────────────────────────────────────────────────
+
+## 떠 있다 — 건물·차·사람과 부딪히지 않고, 교통·보행자도 피하지 않는다
+func airborne() -> bool:
+	return altitude > AIRBORNE_HEIGHT
+
+
+## 시동이 걸려 날개가 돈다 (조종 중이거나 아직 떠 있다)
+func _rotor_spinning() -> bool:
+	return stats.flies and not wrecked and (controlled or altitude > 0.0)
+
+
+## 조종하면 날 높이까지 오르고, 내려앉는 중(landing)이거나 아무도 안 타면 내려온다.
+## 땅에 닿기 직전 밑이 막혀 있으면 조종 중인 헬기는 그 높이에서 기다리고(옮기면 내려앉는다),
+## 버려진 헬기는 떨어져 부서진다. 이륙 높이(LIFTOFF)에 닿기 전에는 움직이지 않는다
+func _fly(delta: float) -> void:
+	var goal := stats.fly_height if controlled and not landing and not wrecked else 0.0
+	var next := move_toward(altitude, goal, stats.climb_rate * delta)
+	if altitude > AIRBORNE_HEIGHT and next <= AIRBORNE_HEIGHT and not can_land_here():
+		if controlled:
+			next = AIRBORNE_HEIGHT + 0.5
+			if not _blocked_told:
+				_blocked_told = true
+				landing_blocked.emit()
+		elif not wrecked:
+			_ghost = true
+			take_damage(max_health(), hit_by_player, DamageModel.CHAIN_FUSE_MIN)
+	elif next > AIRBORNE_HEIGHT + 1.0 or next <= 0.0:
+		_blocked_told = false
+	altitude = next
+	if landing and altitude <= 0.0:
+		landing = false
+		touched_down = true
+	var flying := airborne() or _ghost
+	collision_layer = 0 if flying else Layers.VEHICLES
+	collision_mask = 0 if flying else Layers.WORLD | Layers.VEHICLES
+	if altitude < stats.fly_height * LIFTOFF and not landing:
+		throttle_input = 0.0
+		steer_input = 0.0
+		handbrake_input = false
+
+
+## 빠르게 돌수록 도는 쪽으로 기울고(조향 × 속도), 속도를 올리는 동안 앞으로 숙인다(가속도 — 최고 속도에 닿으면 펴지고,
+## 브레이크·감속이면 코를 든다). 땅에서는 수평
+func _tilt(delta: float) -> void:
+	var fwd := motor.forward_speed()
+	var accel := (fwd - _last_fwd) / delta
+	_last_fwd = fwd
+	var bank_goal := 0.0
+	var pitch_goal := 0.0
+	if airborne() and not wrecked:
+		bank_goal = motor.steer * clampf(motor.velocity.length() / stats.max_speed, 0.0, 1.0) * stats.bank_angle
+		pitch_goal = clampf(accel / stats.acceleration, -1.0, 1.0) * stats.pitch_angle
+	bank = move_toward(bank, bank_goal, BANK_RATE * delta)
+	pitch = move_toward(pitch, pitch_goal, PITCH_RATE * delta)
+
+
+## 헬기가 지금 자리에 내려앉을 수 있는가: 지도 안, 열린 땅(강물·잠긴 구역 블록이 아님), 건물·차와 겹치지 않음
+func can_land_here() -> bool:
+	var pos := global_position
+	if not CityMap.world_rect().grow(-MAP_MARGIN).has_point(pos):
+		return false
+	var b := CityMap.block_at(pos)
+	if City.block_rect(b.x, b.y).has_point(pos) and not CityMap.is_open_block(b):
+		return false
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = _shape.shape
+	query.transform = global_transform
+	query.collision_mask = Layers.WORLD | Layers.VEHICLES
+	query.exclude = [get_rid()]
+	return get_world_2d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+
+## 떠 있는 헬기는 담에 막히지 않으니 지도 밖으로 못 나가게 붙잡는다
+func _keep_on_map() -> void:
+	var r := CityMap.world_rect().grow(-MAP_MARGIN)
+	var pos := global_position.clamp(r.position, r.end)
+	if pos.x != global_position.x:
+		motor.velocity.x = 0.0
+	if pos.y != global_position.y:
+		motor.velocity.y = 0.0
+	global_position = pos
+
+
+## 도는 주 회전날개: 흐린 원판과 날개 두 장 (모형의 멈춘 날개 위에 겹친다)
+func _draw_rotor() -> void:
+	draw_rotor(_fx, self)
+
+
+## 주 회전날개 높이 (화면 px)
+static func rotor_z(t: VehicleType) -> float:
+	return t.height + ROTOR_ABOVE
+
+
+## 도는 주 회전날개를 target(car 방향으로 돈 좌표계)에 그린다 — 경찰 헬기처럼 차 노드가 아닌 것도 쓴다
+static func draw_rotor(target: CanvasItem, car: Vehicle) -> void:
+	var c := Vector2(0, 0.5)
+	var reach := car.stats.size.y * 0.6
+	# 기울거나 숙이면 날개 원판도 모형과 같이 축(BANK_PIVOT)을 중심으로 돈다
+	var up := IsoView.lift_local(1.0, car.rotation) if IsoView.enabled else Vector2.ZERO
+	var center := VehicleModel.tilt(Vector3(0, 0, rotor_z(car.stats) + 0.6), BANK_PIVOT, car.bank, car.pitch)
+	var ex := VehicleModel.tilt(Vector3(1, 0, 0), 0.0, car.bank, car.pitch)
+	var ey := VehicleModel.tilt(Vector3(0, 1, 0), 0.0, car.bank, car.pitch)
+	target.draw_set_transform_matrix(Transform2D(Vector2(ex.x, ex.y) + up * ex.z, Vector2(ey.x, ey.y) + up * ey.z,
+		Vector2(center.x, center.y) + up * (center.z + car.ground + car.altitude)))
+	FireFx.circle(target, c, reach, Color(0.85, 0.88, 0.92, 0.1))
+	var a := Time.get_ticks_msec() / 1000.0 * 24.0
+	for k in 2:
+		var d := Vector2.from_angle(a + k * PI * 0.5) * reach
+		target.draw_line(c - d, c + d, Color(0.08, 0.08, 0.1, 0.5), 2.4)
+	target.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _move(delta: float) -> void:
@@ -291,7 +519,10 @@ func follow_velocity() -> Vector2:
 
 
 func zoom_ratio() -> float:
-	return clampf(speed() / stats.max_speed, 0.0, 1.0)
+	var k := clampf(speed() / stats.max_speed, 0.0, 1.0)
+	if stats.flies:
+		k = maxf(k, 0.45 * clampf(altitude / stats.fly_height, 0.0, 1.0))   # 높이 뜨면 조금 멀리 본다
+	return k
 
 
 func speed() -> float:
@@ -303,6 +534,8 @@ func is_braking() -> bool:
 
 
 func is_skidding() -> bool:
+	if stats.flies:
+		return false   # 바퀴가 없다
 	return absf(motor.lateral_speed()) > SKID_LATERAL_SPEED \
 		or (handbrake_input and speed() > 80.0) \
 		or (is_braking() and motor.forward_speed() > stats.max_speed * 0.6)
@@ -326,14 +559,14 @@ func _draw() -> void:
 		_draw_wreck(w, h)
 		return
 
-	# 헤드라이트 빛 (밤 분위기) — 사람이 타 있을 때만 켠다
-	if occupied():
+	# 헤드라이트 빛 (밤 분위기) — 사람이 타 있을 때만 켠다 (헬기는 없다)
+	if occupied() and not stats.flies:
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(left + 4, top), Vector2(-w * 1.6, top - h * 1.6),
 			Vector2(w * 1.6, top - h * 1.6), Vector2(-left - 4, top)]),
 			Color(1.0, 0.95, 0.7, 0.07))
-	# 그림자
-	draw_rect(Rect2(left + 3, top + 4, w, h), Color(0, 0, 0, 0.35))
+	# 그림자 (떠 있는 헬기는 높을수록 멀리 떨어진다)
+	draw_rect(Rect2(Vector2(left + 3, top + 4) + Vector2(1, 1).rotated(-rotation) * altitude * 0.3, Vector2(w, h)), Color(0, 0, 0, 0.35))
 	if stats.category == &"bike":
 		_draw_bike(w, h)
 		return
@@ -460,14 +693,21 @@ func _draw_iso(w: float, h: float) -> void:
 	var top := -h * 0.5
 	var left := -w * 0.5
 	var two_wheel := stats.category in [&"bike", &"bicycle"]
+	# 떠 있는 헬기: 그림자는 땅에, 모형은 떠 있는 높이에 그린다 (높을수록 그림자가 옅다)
+	if altitude > 0.5:
+		draw_set_transform(IsoView.lift_local(ground, rotation), 0.0, Vector2.ONE)
+		var fade := 1.0 - 0.6 * clampf(altitude / stats.fly_height, 0.0, 1.0)
+		FireFx.circle(self, Vector2(0, 0.5), stats.size.y * 0.6, Color(0, 0, 0, 0.22 * fade))
+		draw_rect(Rect2(left - 2, top - 2, w + 4, h + 4), Color(0, 0, 0, 0.35 * fade))
 	# 다리 위면 그 높이에서부터 그린다 (전조등 빛·그림자·모형 모두)
 	_lift(0.0)
-	if beam and occupied() and not wrecked and not two_wheel:
+	if beam and occupied() and not wrecked and not two_wheel and not stats.flies:
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(left + 4, top), Vector2(-w * 1.6, top - h * 1.6),
 			Vector2(w * 1.6, top - h * 1.6), Vector2(-left - 4, top)]),
 			Color(1.0, 0.95, 0.7, 0.07))
-	draw_rect(Rect2(left - 2, top - 2, w + 4, h + 4), Color(0, 0, 0, 0.35))
+	if altitude <= 0.5:
+		draw_rect(Rect2(left - 2, top - 2, w + 4, h + 4), Color(0, 0, 0, 0.35))
 	# 차종별 입체 모형 (VehicleModel). 터진 차는 같은 모형을 그을려 그린다
 	VehicleModel.draw(self, self)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -479,12 +719,12 @@ func _draw_iso(w: float, h: float) -> void:
 
 ## 노드가 회전해 있으므로, 높이 오프셋도 노드 좌표로 돌려 둔다
 func _lift(height: float) -> void:
-	draw_set_transform(IsoView.lift_local(height + ground, rotation), 0.0, Vector2.ONE)
+	draw_set_transform(IsoView.lift_local(height + ground + altitude, rotation), 0.0, Vector2.ONE)
 
 
 ## 화면 기준 좌표계 (회전한 노드 안에서): 차 위 글자를 세워 쓴다
 func _screen_local(height: float) -> Transform2D:
-	return Transform2D(-rotation, Vector2.ZERO) * IsoView.screen_frame(Vector2.ZERO, height + ground)
+	return Transform2D(-rotation, Vector2.ZERO) * IsoView.screen_frame(Vector2.ZERO, height + ground + altitude)
 
 
 const TRUCKS := [&"truck", &"tanker", &"garbage", &"mixer", &"fire", &"tow", &"bigtruck", &"army"]

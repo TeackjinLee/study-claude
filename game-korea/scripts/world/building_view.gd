@@ -110,12 +110,20 @@ func _shop_word(text: String, k: int) -> String:
 ## 셰이더가 밤에 화면을 어둡게 하는 CanvasModulate를 되돌려(boost) 불 켜진 곳만 밝게 남는다.
 ## 창 불빛은 UV.x = 2로 표시하고 UV.y - 2에 켜지는 차례를 담는다 — 켜진 비율(lights_on)보다 차례가 빠른 창만 보인다.
 ## 값은 DayNight가 시각에 맞춰 넣으므로 다시 그리지 않는다 (DayNight 없는 갤러리는 기본값: 다 켜짐, 보정 없음).
+## 벽면 그림(BuildingSkin)의 불빛은 UV.x를 4 당겨(−4~−3) 표시하고, 꼭짓점 색 r에 켜지는 차례를 담는다.
 const LIGHT_SHADER := """
 shader_type canvas_item;
 uniform vec3 boost = vec3(1.0);
 uniform float lights_on = 1.0;
+varying vec4 vcol;
+void vertex() {
+	vcol = COLOR;
+}
 void fragment() {
-	if (UV.x > 1.5) {
+	if (UV.x < -1.5) {
+		COLOR = texture(TEXTURE, vec2(UV.x + 4.0, UV.y));
+		COLOR.a *= 1.0 - smoothstep(lights_on - 0.04, lights_on, vcol.r);
+	} else if (UV.x > 1.5) {
 		COLOR.a *= 1.0 - smoothstep(lights_on - 0.04, lights_on, UV.y - 2.0);
 	}
 	COLOR.rgb *= boost;
@@ -188,6 +196,8 @@ static func make(parent: Node, c: City, i: int, p: BuildingModel.Piece) -> Array
 		v.part = parts[k]
 		v.roof = k == parts.size() - 1
 		v.height = p.top()
+		if p.skin or p.sprite:
+			v.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # 크게 그린 벽면 그림을 줄여 그린다 (불빛 조각도 따른다)
 		parent.add_child(v)
 		out.append(v)
 		# 불빛 조각: 같은 z(상대 0)에서 본 조각 바로 뒤에 그려지고, 흐려짐(modulate)·숨김을 따른다
@@ -214,9 +224,14 @@ func _ready() -> void:
 
 
 func _draw() -> void:
+	if piece.sprite:
+		_sprite_draw()
+		return
 	_walls(piece, part)
 	if roof:
 		_top(piece)
+		if piece.skin and not lights:
+			_skin_parapet(piece)
 
 
 # ── 벽 ────────────────────────────────────────────────────
@@ -246,6 +261,9 @@ func _face(p: BuildingModel.Piece, a: Vector2, b: Vector2, n: Vector2) -> void:
 	_s1 = (b - _fa).dot(_along)
 	_floors = maxi(1, roundi((p.h1 - p.h0) / p.floor_height))
 	_fh = (p.h1 - p.h0) / _floors
+	if p.skin:
+		_skin_wall(p, south)
+		return
 	var wall := p.wall.darkened(_shade)
 	if lights:
 		# 불빛 조각: 켜질 창과 간판만
@@ -903,7 +921,11 @@ func _top(p: BuildingModel.Piece) -> void:
 			_top(s)
 		return
 	match p.roof:
-		&"flat": _flat(p)
+		&"flat":
+			if p.skin:
+				_skin_roof(p)
+			else:
+				_flat(p)
 		&"art": _art(p)
 		&"street_canopy": StreetDecor.canopy(self, p)
 		&"gable": _gable(p)
@@ -1268,3 +1290,129 @@ static func split(r: Rect2) -> Array[Rect2]:
 		for k in n:
 			out.append(Rect2(r.position.x, r.position.y + r.size.y * k / n, r.size.x, r.size.y / n))
 	return out
+
+
+# ── 벽면 그림 (BuildingSkin) ──────────────────────────────
+
+## 벽면 그림 위에 그대로 얹는 장식 (간판·번호판 — 글자는 코드가 그린다). 나머지(필로티·발코니·실외기·가게 앞)는 그림에 있다
+const SKIN_DECOS: Array[StringName] = [&"name", &"plate", &"top_sign", &"big_sign", &"rental_image", &"vsign",
+	&"band_signs", &"number", &"office_plate"]
+
+
+## 벽 한 면을 그림으로: 층마다(맨 아래 1층 띠, 그 위 윗층 띠) 창 칸마다 그림 한 칸.
+## 긴 벽은 정면 그림, 짧은 벽은 옆벽 그림. 불빛 조각은 불빛 그림을 칸마다 켜지는 차례를 담아 그린다
+func _skin_wall(p: BuildingModel.Piece, south: bool) -> void:
+	var skin := p.skin
+	var other := p.rect.size.y if south else p.rect.size.x
+	var front := _len > other + 0.5 or (absf(_len - other) <= 0.5 and south)
+	var blk: Dictionary = skin.blocks["front" if front else "side"]
+	var n: int = blk["bays"]
+	var bays := maxi(1, roundi(_len / skin.bay_world))
+	var w := _len / bays
+	var tint := Color.WHITE.darkened(_shade * 0.75)
+	for f in _floors:
+		var band: Rect2 = blk["ground" if f == 0 else "upper"]
+		for k in bays:
+			var c := k % n
+			var uv := Rect2(band.position + Vector2(band.size.x * c / n, 0.0), Vector2(band.size.x / n, band.size.y))
+			if not lights:
+				_skin_quad(k * w, (k + 1) * w, f * _fh, (f + 1) * _fh, uv, skin.day, tint, false)
+			elif skin.lights and _lit(k, f, 11 if f == 0 else 5):
+				var key := k * 41 + f
+				var turn := BuildingModel.hash01(_p.seed + key * key * 31, key + int(_n.x) * 977) * (0.3 if f == 0 else 0.95)
+				_skin_quad(k * w, (k + 1) * w, f * _fh, (f + 1) * _fh, uv, skin.lights, Color(turn, 1.0, 1.0), true)
+	for d in p.deco:
+		if d in SKIN_DECOS and (not lights or d in LIGHT_DECOS or d in StreetDecor.LIGHT):
+			_deco(d, south)
+
+
+## 그림 한 칸을 벽 위 x0~x1(화면 왼쪽부터 벽을 따라 거리) · z0~z1에. 이 조각 구간으로 자르고 UV도 같이 자른다.
+## glow면 불빛 셰이더의 그림 모드 (UV.x − 4, 꼭짓점 색 r = 켜지는 차례)
+func _skin_quad(x0: float, x1: float, z0: float, z1: float, uv: Rect2, tex: Texture2D, color: Color, glow: bool) -> void:
+	var flip := IsoView.to_screen_dir(_along).x < 0.0     # 동쪽 벽은 벽을 따라가면 화면 왼쪽으로 간다
+	var s0 := _len - x1 if flip else x0
+	var s1 := _len - x0 if flip else x1
+	var a := maxf(s0, _s0)
+	var b := minf(s1, _s1)
+	if b - a < 0.3:
+		return
+	var ta := (a - s0) / (s1 - s0)
+	var tb := (b - s0) / (s1 - s0)
+	var ua := uv.end.x - uv.size.x * ta if flip else uv.position.x + uv.size.x * ta
+	var ub := uv.end.x - uv.size.x * tb if flip else uv.position.x + uv.size.x * tb
+	var off := -4.0 if glow else 0.0
+	draw_primitive(PackedVector2Array([_pt(a, z0), _pt(b, z0), _pt(b, z1), _pt(a, z1)]),
+		PackedColorArray([color, color, color, color]),
+		PackedVector2Array([Vector2(ua + off, uv.end.y), Vector2(ub + off, uv.end.y),
+			Vector2(ub + off, uv.position.y), Vector2(ua + off, uv.position.y)]), tex)
+
+
+## 옥상: 위에서 본 옥상 그림을 지붕 면에 편다
+func _skin_roof(p: BuildingModel.Piece) -> void:
+	var uv := p.skin.roof
+	draw_primitive(_corners(p.rect, p.h1), PackedColorArray([Color(0.86, 0.86, 0.86)]),   # 옥상은 위를 봐 벽보다 밝지만, 그림이 진해 조금 누른다
+		PackedVector2Array([uv.position, Vector2(uv.end.x, uv.position.y), uv.end, Vector2(uv.position.x, uv.end.y)]), p.skin.day)
+
+
+## 옥상 난간: 보이는 두 벽 위에 난간 띠를 세운다 (옥상·옥탑보다 나중에 — 앞 가장자리의 난간이 그 앞에 선다).
+## 지붕 조각(가장 앞)이 벽 전체 길이를 한 번에 그린다
+func _skin_parapet(p: BuildingModel.Piece) -> void:
+	var r := p.rect
+	var floors := maxi(1, roundi((p.h1 - p.h0) / p.floor_height))
+	var fh := (p.h1 - p.h0) / floors
+	for south: bool in [false, true]:
+		var n := Vector2.DOWN if south else Vector2.RIGHT
+		_p = p
+		_n = n
+		_shade = IsoView.face_shade(n)
+		_fa = Vector2(r.position.x, r.end.y) if south else Vector2(r.end.x, r.position.y)
+		_along = Vector2.RIGHT if south else Vector2.DOWN
+		_len = r.size.x if south else r.size.y
+		_s0 = 0.0
+		_s1 = _len
+		var other := r.size.y if south else r.size.x
+		var front := _len > other + 0.5 or (absf(_len - other) <= 0.5 and south)
+		var blk: Dictionary = p.skin.blocks["front" if front else "side"]
+		var band: Rect2 = blk["parapet"]
+		var nb: int = blk["bays"]
+		var bays := maxi(1, roundi(_len / p.skin.bay_world))
+		var w := _len / bays
+		var h := p.h1 - p.h0
+		var tint := Color.WHITE.darkened(_shade * 0.75)
+		for k in bays:
+			var c := k % nb
+			var uv := Rect2(band.position + Vector2(band.size.x * c / nb, 0.0), Vector2(band.size.x / nb, band.size.y))
+			_skin_quad(k * w, (k + 1) * w, h, h + fh * p.skin.parapet, uv, p.skin.day, tint, false)
+
+
+# ── 통째 그림 (BuildingSprite) ────────────────────────────
+
+## 이 조각의 윤곽만큼 통째 그림을 오려 그린다. 지붕 조각은 얹힌 덩어리(첨탑·옥탑)도 각자 윤곽대로.
+## 불빛 조각은 불빛 그림을 불빛 셰이더의 그림 모드로 (덩어리마다 켜지는 차례 하나)
+func _sprite_draw() -> void:
+	_sprite_hull(piece, part)
+	if roof:
+		_sprite_tops(piece)
+
+
+func _sprite_tops(p: BuildingModel.Piece) -> void:
+	for s: BuildingModel.Piece in p.on_top:
+		_sprite_hull(s, s.rect)
+		_sprite_tops(s)
+
+
+func _sprite_hull(p: BuildingModel.Piece, r: Rect2) -> void:
+	var sp := p.sprite
+	var tex := sp.lights if lights else sp.day
+	if tex == null:
+		return
+	var pts := BuildingSprite.outline(p, r)
+	if pts.size() < 3:
+		return
+	var uvs := PackedVector2Array()
+	for v in pts:
+		uvs.append(sp.uv(v, p.lot) + (Vector2(-4.0, 0.0) if lights else Vector2.ZERO))
+	var c := Color.WHITE
+	if lights:
+		c = Color(BuildingModel.hash01(p.seed, int(p.rect.position.x) * 7 + int(p.rect.position.y)) * 0.6, 1.0, 1.0)
+	draw_polygon(pts, PackedColorArray([c]), uvs, tex)

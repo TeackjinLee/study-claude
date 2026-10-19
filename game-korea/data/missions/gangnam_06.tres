@@ -1,13 +1,15 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://dg4vihmf73frd"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/npc/gang_oldtown.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
 kind = 3
 text = "건달파 수금책 일당을 처리해라"
+points = null
+headings = null
 npc = ExtResource("3")
 npc_points = PackedVector2Array(3497.2, 3278, 3552, 3278, 3606.8, 3278)
 
@@ -18,7 +20,8 @@ gang = &"gangnam"
 tier = 1
 order = 1
 title = "빚 독촉"
-briefing = "건달파 수금책이 우리 구역에서 돈을 걷고 있다.\n일당 셋 다 정리해. 저쪽도 총 들고 있다."
+briefing = "건달파 수금책이 우리 구역에서 돈을 걷고 있다.
+일당 셋 다 정리해. 저쪽도 총 들고 있다."
 reward = 70000
 respect = 12
 time_limit = 150

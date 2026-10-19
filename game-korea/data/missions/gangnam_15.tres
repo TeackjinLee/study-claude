@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://udsey7k7rebg"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/car_zenith_g8.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,13 +11,16 @@ text = "제니스 G8에 타라"
 points = PackedVector2Array(2474, 2016)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "여의도 주차장에 세워라 (체력 80% 이상)"
 points = PackedVector2Array(-1824, -1366)
+headings = null
 radius = 70
+npc_points = null
 min_health = 0.8
 
 [resource]
@@ -26,9 +29,9 @@ id = &"gangnam_15"
 gang = &"gangnam"
 tier = 1
 phone_set = 1
-order = 0
 title = "회장님 세차"
-briefing = "회장님 제니스를 여의도 귀빈 주차장으로.\n흠집 하나 없이. 80% 아래로 망가지면 끝이다."
+briefing = "회장님 제니스를 여의도 귀빈 주차장으로.
+흠집 하나 없이. 80% 아래로 망가지면 끝이다."
 reward = 160000
 respect = 12
 time_limit = 40

@@ -1,22 +1,25 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://bs0ystod0uc5m"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/npc/boss.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
 kind = 3
 text = "건달파 회장을 처리해라"
+points = null
+headings = null
 npc = ExtResource("3")
 npc_points = PackedVector2Array(-1056, -6926)
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
-kind = 0
 text = "여의도로 돌아와라"
 points = PackedVector2Array(-2098, -1650)
+headings = null
 radius = 60
+npc_points = null
 
 [resource]
 script = ExtResource("1")
@@ -26,7 +29,8 @@ tier = 2
 phone_set = 1
 order = 1
 title = "건달파 회장 암살"
-briefing = "건달파 회장이 변두리 단골집에서 혼자 나온다.\n총을 차고 다닌다. 끝내고 여의도로 돌아와."
+briefing = "건달파 회장이 변두리 단골집에서 혼자 나온다.
+총을 차고 다닌다. 끝내고 여의도로 돌아와."
 reward = 230000
 respect = 16
 time_limit = 200

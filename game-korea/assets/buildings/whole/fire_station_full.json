@@ -1,0 +1,20 @@
+{
+  "id": "FIRE_STATION",
+  "lot": "full",
+  "lot_size": [
+    520.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1312,
+    816
+  ],
+  "origin": [
+    655.63,
+    460.25
+  ],
+  "scale": 1.34868,
+  "hull_lift": 2,
+  "hull_grow": 0
+}

@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://dq14w6vkegmo1"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/trk_titan.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,24 +11,25 @@ text = "타이탄에 타라"
 points = PackedVector2Array(2474, -7200)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "종로 본가 차고에 세워라"
 points = PackedVector2Array(1248, -4438)
+headings = null
 radius = 80
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"oldtown_11"
 gang = &"oldtown"
-tier = 0
 phone_set = 1
-order = 0
 title = "이사 도우미"
-briefing = "형님 이삿짐이다. 타이탄 몰고 종로 본가까지.\n짐 떨어뜨리면 너도 떨어진다."
+briefing = "형님 이삿짐이다. 타이탄 몰고 종로 본가까지.
+짐 떨어뜨리면 너도 떨어진다."
 reward = 110000
-respect = 8
 time_limit = 30
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

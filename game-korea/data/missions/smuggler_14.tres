@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=10 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://dxgkfniq65rtq"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/trk_mixer.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,57 +11,62 @@ text = "레미콘에 타라"
 points = PackedVector2Array(-1366, 1132.8)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (1/5)"
 points = PackedVector2Array(-1440, 96)
+headings = null
 radius = 100
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_2"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (2/5)"
 points = PackedVector2Array(-2976, 96)
+headings = null
 radius = 100
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_3"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (3/5)"
 points = PackedVector2Array(-2976, 2400)
+headings = null
 radius = 100
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_4"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (4/5)"
 points = PackedVector2Array(-672, 2400)
+headings = null
 radius = 100
 need_vehicle = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_5"]
 script = ExtResource("2")
-kind = 0
 text = "체크포인트 (5/5)"
 points = PackedVector2Array(-672, 3936)
+headings = null
 radius = 100
 need_vehicle = true
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"smuggler_14"
 gang = &"smuggler"
-tier = 0
 phone_set = 1
 order = 3
 title = "레미콘 레이스"
-briefing = "공장장들 내기다. 레미콘으로 공단 한 바퀴.\n느리다고? 그래서 재밌는 거다."
+briefing = "공장장들 내기다. 레미콘으로 공단 한 바퀴.
+느리다고? 그래서 재밌는 거다."
 reward = 250000
-respect = 8
 time_limit = 50
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2"), SubResource("step_3"), SubResource("step_4"), SubResource("step_5")])

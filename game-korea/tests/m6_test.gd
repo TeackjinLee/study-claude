@@ -387,6 +387,8 @@ func _test_army_and_checkpoint() -> void:
 	_expect(trucks, "★6: 군 트럭이 온다")
 	_expect(soldiers >= PoliceDispatcher.ARMY_CREW, "군인 넷이 내린다 (%d)" % soldiers)
 	_expect(police.helis.size() == 2, "★6: 헬기 2대 (%d)" % police.helis.size())
+	_expect(police.helis.any(func(h: PoliceHeli): return h.stats == PoliceDispatcher.ARMY_HELI_TYPE), "★6: 헬기 한 대는 군 기동헬기")
+	_expect(police.helis.any(func(h: PoliceHeli): return h.stats == PoliceHeli.POLICE_TYPE), "★6: 경찰 헬기도 남는다")
 	await _free(main)
 
 

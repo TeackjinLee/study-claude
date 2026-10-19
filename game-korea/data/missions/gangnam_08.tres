@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://cqikqkklx3l1d"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/car_avela.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,15 +11,16 @@ text = "증거 차량을 부숴라"
 points = PackedVector2Array(938, 480, 3494.4, 2474, 4010, 3667.2)
 headings = PackedFloat32Array(0, 1.5708, 0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"gangnam_08"
 gang = &"gangnam"
 tier = 2
-order = 0
 title = "증거 인멸"
-briefing = "검찰이 차 세 대를 노린다. 블랙박스에 우리 얼굴이 찍혔어.\n셋 다 고철로 만들어."
+briefing = "검찰이 차 세 대를 노린다. 블랙박스에 우리 얼굴이 찍혔어.
+셋 다 고철로 만들어."
 reward = 120000
 respect = 16
 time_limit = 180

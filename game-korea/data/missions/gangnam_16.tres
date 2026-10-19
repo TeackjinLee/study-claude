@@ -1,13 +1,15 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://he2uqqwy5d7v"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/npc/gang_oldtown.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
 kind = 3
 text = "건달파 조직원을 처리해라"
+points = null
+headings = null
 npc = ExtResource("3")
 npc_points = PackedVector2Array(1742, -4786.4, 1742, -4896, 1742, -5005.6)
 
@@ -19,7 +21,8 @@ tier = 1
 phone_set = 1
 order = 1
 title = "종로 사무실 습격"
-briefing = "건달파 본가 옆 사무실에 놈들이 모여 있다.\n셋 다 눕혀. 저쪽도 쏜다."
+briefing = "건달파 본가 옆 사무실에 놈들이 모여 있다.
+셋 다 눕혀. 저쪽도 쏜다."
 reward = 150000
 respect = 12
 time_limit = 150

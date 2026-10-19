@@ -1,38 +1,39 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://c4omfhcnmmmuf"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
-kind = 0
 text = "배달 (1/3)"
 points = PackedVector2Array(-2592, -4622)
+headings = null
 radius = 40
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
-kind = 0
 text = "배달 (2/3)"
 points = PackedVector2Array(-562, -5664)
+headings = null
 radius = 40
+npc_points = null
 
 [sub_resource type="Resource" id="step_2"]
 script = ExtResource("2")
-kind = 0
 text = "배달 (3/3)"
 points = PackedVector2Array(-3086, -4128)
+headings = null
 radius = 40
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"smuggler_01"
 gang = &"smuggler"
-tier = 0
-order = 0
 title = "클럽 배달"
-briefing = "새로 왔다며? 홍대 클럽 셋에 물건 돌려.\n뛰어. 수상해 보이지 않게."
+briefing = "새로 왔다며? 홍대 클럽 셋에 물건 돌려.
+뛰어. 수상해 보이지 않게."
 reward = 70000
-respect = 8
 time_limit = 110
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2")])

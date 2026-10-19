@@ -47,5 +47,28 @@ extends Resource
 @export var silent := false
 ## 이동식 세이브 포인트 (캠핑카: 세워 두고 내리면 저장 메뉴)
 @export var save_point := false
+## 도시에 한 대만 있다 (자주포): 멀쩡한 같은 차종이 이미 있으면 군 출동·랜드마크 주차가 새로 만들지 않는다
+@export var unique := false
 ## 일반 교통으로 이 구역에서만 나온다 (DistrictType.id). 비우면 어디서나
 @export var districts: Array[StringName] = []
+
+@export_group("Flight")
+## 하늘을 난다 (탈 수 있는 헬기). 조종하면 떠오르고, 떠 있는 동안은 건물·차와 부딪히지 않는다
+@export var flies := false
+## 날 때 높이 (2.5D 화면 px, 줌 1). 그림에만 쓴다 — 물리는 평면 그대로다
+@export var fly_height := 150.0
+## 오르내리는 속도 (화면 px/s)
+@export var climb_rate := 70.0
+## 최고 속도로 크게 돌 때 옆으로 기우는 각 (rad). 느릴수록·덜 꺾을수록 덜 기운다. 그림에만 쓴다
+@export var bank_angle := 0.0
+## 힘껏 가속할 때 앞으로 숙이는 각 (rad). 브레이크·감속이면 그만큼 뒤로 든다. 그림에만 쓴다
+@export var pitch_angle := 0.0
+
+@export_group("Tracks")
+## 무한궤도 (자주포): 제자리에서 돈다(피벗 선회), 차를 깔아뭉개며 올라타 넘는다 — 차와 부딪혀 막히지 않는다
+@export var tracked := false
+## 포탑이 도는 빠르기 (rad/s). 0이면 포탑이 없다
+@export var turret_rate := 0.0
+## 포가 쏘는 최소·최대 거리 (px, 곡사 — 포탄은 건물 위로 날아가 겨눈 땅에 떨어진다)
+@export var cannon_min := 0.0
+@export var cannon_max := 0.0

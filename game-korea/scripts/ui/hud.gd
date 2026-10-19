@@ -7,6 +7,10 @@ const KMH_PER_PX := 0.22   ## 720px/s ≈ 160km/h
 const NOTICE_TIME := 2.0
 const HINT_FOOT := "WASD 이동   Shift 달리기   Ctrl·J 공격   Q/E 무기   F 차 타기   R 출발점으로"
 const HINT_DRIVE := "W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   Ctrl·J 드라이브바이   Q/E 무기   F 내리기   1·2·3 차종"
+const HINT_SPG := "W/S 전진·후진   A/D 제자리 돌기   마우스 포탑·사거리 (Q/E 포탑)   클릭·Ctrl·J 포격   차를 깔고 넘는다   F 내리기"
+const HINT_TURRET := "W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   마우스 기관총 (Q/E 돌리기)   클릭·Ctrl·J 사격   F 내리기"
+const HINT_FLY := "W/S 앞으로·멈춤   A/D 돌기   Space 급선회   Ctrl·J 사격   Q/E 무기   F 착륙 (빈 땅·도로 위)"
+const METERS_PER_HEIGHT := 0.4   ## 헬기 높이(화면 px) → 고도 표시(m)
 const BAR_SIZE := Vector2(180, 12)
 const GOLD := Color(1.0, 0.82, 0.3)
 const BANNER_RED := Color(1.0, 0.25, 0.25)
@@ -320,14 +324,20 @@ func _process(delta: float) -> void:
 	var v := director.current_vehicle
 	if v:
 		_info.text = "%s\n%d km/h" % [v.stats.display_name, roundi(v.speed() * KMH_PER_PX)]
-		_drift.visible = absf(v.motor.lateral_speed()) > 220.0
+		_drift.visible = absf(v.motor.lateral_speed()) > 220.0 and not v.stats.flies
+		if v.stats.flies:
+			_info.text += "  ·  고도 %d m" % roundi(v.altitude * METERS_PER_HEIGHT)
 		_prompt.visible = v.burning >= 0.0 or v.on_fire
 		_prompt.text = "불이 붙었다!  F 내려!" if v.burning >= 0.0 else "차에 불이 났다! 곧 터진다  F 내려!"
 		var job := jobs.available() if jobs else null
 		if job and not _prompt.visible:
 			_prompt.text = "B  %s 부업 시작 (최고 %d단계)" % [job.display_name, jobs.best.get(job.id, 0)]
 			_prompt.visible = true
-		_hint.text = HINT_DRIVE
+		_hint.text = HINT_FLY if v.stats.flies else HINT_SPG if v.stats.cannon_max > 0.0 \
+			else HINT_TURRET if v.stats.turret_rate > 0.0 else HINT_DRIVE
+		if v.stats.flies and not _prompt.visible:
+			_prompt.text = "착륙 중…  F 취소" if v.landing else ("F  착륙" if v.airborne() else "W  이륙")
+			_prompt.visible = true
 		return
 	_info.text = "도보"
 	_drift.visible = false

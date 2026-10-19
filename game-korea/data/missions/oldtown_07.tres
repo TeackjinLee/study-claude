@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://clhel3wad30jd"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/car_zenith_g8.tres" id="3"]
 [ext_resource type="Resource" path="res://data/npc/gang_gangnam.tres" id="4"]
 
@@ -22,7 +22,8 @@ gang = &"oldtown"
 tier = 1
 order = 2
 title = "강남 기습"
-briefing = "강남 놈들 제니스가 다리 건너 주차장에 서 있다.\n지키는 놈 둘. 차를 고철로 만들어."
+briefing = "강남 놈들 제니스가 다리 건너 주차장에 서 있다.
+지키는 놈 둘. 차를 고철로 만들어."
 reward = 120000
 respect = 12
 time_limit = 160

@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://oq3vidnqopi3"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/trk_porta.tres" id="3"]
 [ext_resource type="Resource" path="res://data/npc/gang_gangnam.tres" id="4"]
 
@@ -23,7 +23,8 @@ tier = 2
 phone_set = 1
 order = 1
 title = "강남 창고 털기"
-briefing = "강남 물류 창고 앞에 트럭 셋. 지키는 놈들도 셋.\n트럭을 다 날려."
+briefing = "강남 물류 창고 앞에 트럭 셋. 지키는 놈들도 셋.
+트럭을 다 날려."
 reward = 220000
 respect = 16
 time_limit = 200

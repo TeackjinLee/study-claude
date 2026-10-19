@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://d0sfjwtrwgyox"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/etc_truck.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,24 +11,25 @@ text = "대형 트럭에 타라"
 points = PackedVector2Array(-598, 3552)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "부두에 세워라"
 points = PackedVector2Array(-2592, 170)
+headings = null
 radius = 90
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"smuggler_11"
 gang = &"smuggler"
-tier = 0
 phone_set = 1
-order = 0
 title = "컨테이너 하역"
-briefing = "공단 끝에 컨테이너 트럭이 있다.\n부두까지 몰고 가. 크고 무겁다."
+briefing = "공단 끝에 컨테이너 트럭이 있다.
+부두까지 몰고 가. 크고 무겁다."
 reward = 250000
-respect = 8
 time_limit = 35
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

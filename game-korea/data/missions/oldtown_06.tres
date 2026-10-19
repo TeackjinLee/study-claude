@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://827p4vu2wgts"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/trk_bongo.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -12,13 +12,16 @@ points = PackedVector2Array(-2134, -4896)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
 driver = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "종로 본가 차고에 세워라 (체력 60% 이상)"
 points = PackedVector2Array(1248, -4438)
+headings = null
 radius = 70
+npc_points = null
 min_health = 0.6
 
 [resource]
@@ -28,7 +31,8 @@ gang = &"oldtown"
 tier = 1
 order = 1
 title = "봉고르 회수"
-briefing = "밀수단이 우리 봉고르를 몰고 다닌다.\n끌어내리고 본가 차고로. 너무 망가뜨리지 마."
+briefing = "밀수단이 우리 봉고르를 몰고 다닌다.
+끌어내리고 본가 차고로. 너무 망가뜨리지 마."
 reward = 110000
 respect = 12
 time_limit = 35

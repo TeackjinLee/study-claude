@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://cjol5m6c2iiqy"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/trk_porta.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,23 +11,25 @@ text = "포르타 트럭에 타라"
 points = PackedVector2Array(1706, 2073.6)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "트럭을 물류 창고에 세워라"
 points = PackedVector2Array(4320, 3984)
+headings = null
 radius = 70
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"gangnam_02"
 gang = &"gangnam"
-tier = 0
 order = 1
 title = "포르타 배달"
-briefing = "짐 실은 포르타가 2번 도로에 서 있다.\n물류 창고까지 몰고 가. 트럭 터뜨리면 끝이야."
+briefing = "짐 실은 포르타가 2번 도로에 서 있다.
+물류 창고까지 몰고 가. 트럭 터뜨리면 끝이야."
 reward = 40000
-respect = 8
 time_limit = 40
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

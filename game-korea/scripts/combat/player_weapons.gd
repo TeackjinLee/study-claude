@@ -7,6 +7,8 @@ extends Node
 ## 위에 있을 때만 그 사람을 겨눈다. 드라이브바이는 커서가 있는 옆으로, 옆 방향에서 DRIVE_BY_SPREAD 안으로.
 ## 쏘기 키(Ctrl·J)·패드로 쏘면 다시 예전 방식이다.
 ## 차량 기관총은 차 안에서만 앞으로 쏜다. 소방차를 몰면 쏘기 버튼은 늘 물대포(앞으로).
+## 포탑 달린 차(자주포·전술차량)를 몰면 포탑이 마우스 커서 쪽으로 돌고(Q·E는 포탑을 손으로 돌린다), 쏘기 버튼은 포탑 무기다.
+## 자주포는 곡사포 — 커서가 있는 땅(사거리 안으로 당긴다)에 포탄이 떨어지고, 포신은 그 거리만큼 든다. 키보드만 쓰면 마지막 거리 그대로.
 
 const MUZZLE := 10.0
 ## 커서가 사람 몸(발끝~머리, 화면 px·줌 1)에서 이만큼 안이면 그 사람을 겨눈다
@@ -26,12 +28,16 @@ var _mounted_cooldown := 0.0
 ## 마우스로 겨누는 중 (마우스를 움직이거나 누르면 켜지고, 쏘기 키·패드로 쏘면 꺼진다)
 var mouse_aim := false
 var _cross := false
-const MOUNTED: Array[WeaponType] = [preload("res://data/weapons/water_cannon.tres")]
+const MOUNTED: Array[WeaponType] = [preload("res://data/weapons/water_cannon.tres"),
+	preload("res://data/weapons/tank_cannon.tres"), preload("res://data/weapons/jeep_mg.tres")]
 
 
 func _physics_process(delta: float) -> void:
 	player.arsenal.update(delta)
 	_mounted_cooldown = maxf(_mounted_cooldown - delta, 0.0)
+	var v := director.current_vehicle
+	if v and v.stats.turret_rate > 0.0 and not v.wrecked and not player.is_dead():
+		_steer_turret(v, delta)
 	if Input.is_action_pressed("fire"):
 		if mouse_aim and director.current_vehicle == null and player.input_enabled and not player.is_dead():
 			player.face(mouse_dir(player.global_position), AIM_HOLD)   # 연사 사이에도 커서를 따라 돈다
@@ -64,6 +70,9 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	var v := director.current_vehicle
+	if v and v.stats.turret_rate > 0.0:
+		return   # 포탑 달린 차에서는 Q·E가 포탑을 돌린다 (_steer_turret)
 	if event.is_action_pressed("weapon_next"):
 		player.arsenal.cycle(1)
 	elif event.is_action_pressed("weapon_prev"):
@@ -123,12 +132,45 @@ func _mounted(v: Vehicle) -> WeaponType:
 
 
 func _fire_mounted(v: Vehicle, w: WeaponType) -> bool:
+	if v.stats.turret_rate > 0.0:
+		return _fire_turret(v, w)
 	if _mounted_cooldown > 0.0:
 		return false
 	_mounted_cooldown = w.fire_interval
 	var dir := v.motor.forward()
 	var exclude: Array[RID] = [v.get_rid()]
 	combat.fire(v.global_position + dir * (v.stats.size.y * 0.5 + 4.0), dir, w, true, exclude)
+	return true
+
+
+## 포탑을 겨눈다: 마우스면 커서 쪽(곡사포는 커서까지 거리도), 아니면 Q·E로 돌린다
+func _steer_turret(v: Vehicle, delta: float) -> void:
+	var turn := Input.get_axis("weapon_prev", "weapon_next")
+	if turn != 0.0:
+		mouse_aim = false
+		v.turret_goal = v.turret + turn * v.stats.turret_rate * delta * 1.5
+	elif mouse_aim:
+		var vp := player.get_viewport()
+		var at := vp.canvas_transform.affine_inverse() * vp.get_mouse_position() - IsoView.lift(IsoView.ground(v.global_position))
+		var rel := at - v.global_position
+		if rel.length() > 4.0:
+			v.turret_goal = v.turret + angle_difference(v.turret, v.motor.forward().angle_to(rel))
+			if v.stats.cannon_max > 0.0:
+				v.aim_range = rel.length()
+
+
+## 포탑 무기를 포탑 방향으로 쏜다. 곡사포는 겨눈 땅으로 포탄 (장전 시간 = 무기 연사 간격)
+func _fire_turret(v: Vehicle, w: WeaponType) -> bool:
+	if v.gun_reload > 0.0:
+		return false
+	v.gun_reload = w.fire_interval
+	var exclude: Array[RID] = [v.get_rid()]
+	if w.projectile == &"shell":
+		combat.fire_shell(v.muzzle(), v.gun_target(), w, true, v)
+		v.recoil = 1.0
+	else:
+		var dir := v.gun_dir()
+		combat.fire(v.global_position + dir * 8.0, dir, w, true, exclude)
 	return true
 
 

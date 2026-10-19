@@ -11,10 +11,29 @@ func _ready() -> void:
 	main.save_prefix = "user://screenshot_save_"   # 실제 세이브는 건드리지 않는다
 	for slot in range(1, SaveGame.SLOTS + 1):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SaveGame.slot_path(main.save_prefix, slot)))
+	var heli_only := "--only=heli" in OS.get_cmdline_user_args()
+	var army_only := "--only=army" in OS.get_cmdline_user_args()
+	if heli_only or army_only:
+		main.chapter = 4   # 헬기·군용 차량은 4장 부두에 있다
 	add_child(main)
+	if heli_only:
+		await _frames(30)
+		await _heli_ride_shots(main)
+		get_tree().quit()
+		return
 	if "--only=iso" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _iso_shots(main)
+		get_tree().quit()
+		return
+	if army_only:
+		await _frames(30)
+		await _army_shots(main)
+		get_tree().quit()
+		return
+	if "--only=air" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _air_shots(main)
 		get_tree().quit()
 		return
 	if "--only=m6" in OS.get_cmdline_user_args():
@@ -440,6 +459,163 @@ func _save(name: String) -> void:
 func _frames(n: int) -> void:
 	for i in n:
 		await get_tree().physics_frame
+
+
+## 군용 차량 (`-- --only=army`): 부두에 선 자주포·전술차량 → 자주포 포탑 조준(조준점) → 포격(포구 불꽃·포탄) → 차를 깔고 올라탄 모습 → 전술차량 기관총
+func _army_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	main.player.died.disconnect(main._on_died)
+	var spg: Vehicle = null
+	var jeep: Vehicle = null
+	for v: Vehicle in main.vehicles:
+		if v.stats.id == &"ARMY_SPG":
+			spg = v
+		elif v.stats.id == &"ARMY_JEEP":
+			jeep = v
+	if spg == null:
+		print("자주포가 없다")
+		return
+	cam.target = null
+	cam.global_position = spg.global_position + Vector2(-60, 60)
+	await _frames(20)
+	await _save("army_dock")
+	main.director.enter_immediately(spg)
+	main.weapons.mouse_aim = false
+	cam.target = spg
+	spg.turret_goal = -PI * 0.6
+	spg.aim_range = 700.0
+	for f in 150:
+		await _frames(1)
+		player.revive()
+	await _save("army_aim")
+	main.weapons.shoot()
+	await _frames(8)
+	await _save("army_fire")
+	for f in 120:
+		await _frames(1)
+		player.revive()
+	await _save("army_impact")
+	# 탁 트인 드리프트 연습장에서 차를 깔고 넘는다
+	var road := City.block_rect(City.PLAZA.x, City.PLAZA.y).get_center() + Vector2(0, 120)
+	main.director.exit_vehicle()
+	spg.place(road, 0.0)
+	spg.turret_goal = 0.0
+	var car := Vehicle.new()
+	car.stats = load("res://data/vehicles/car_sonato.tres")
+	main.add_child(car)
+	car.place(road + Vector2(0, -120), PI * 0.5)
+	main.vehicles.append(car)
+	main.director.enter_immediately(spg)
+	cam.snap()
+	Input.action_press("accelerate")
+	for f in 60 * 4:
+		await _frames(1)
+		player.revive()
+		if spg.climb > 8.0 and spg.global_position.y < car.global_position.y + 30.0:
+			break
+	Input.action_release("accelerate")
+	await _save("army_crush")
+	for f in 40:
+		await _frames(1)
+		player.revive()
+	await _save("army_crush_after")
+	if jeep:
+		main.director.exit_vehicle()
+		jeep.place(road + Vector2(-160, -60), PI * 0.25)
+		main.director.enter_immediately(jeep)
+		jeep.turret_goal = -PI * 0.5
+		cam.snap()
+		for f in 60:
+			await _frames(1)
+			player.revive()
+		for i in 6:
+			main.weapons.shoot()
+			await _frames(2)
+		await _save("army_jeep")
+
+
+## NPC 헬기 (입체 모형): ★5 경찰 헬기 탐조등 → ★6 군 기동헬기 → 큰불에 물을 쏟는 119 구조헬기 (`-- --only=air`)
+func _air_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	player.global_position = City.block_rect(1, 1).get_center()
+	cam.snap()
+	main.police.last_known = player.global_position
+	main.police.wanted.raise_to(5)
+	for f in 60 * 20:
+		await _frames(1)
+		main.police._arrest = 0.0
+		player.revive()
+		if not main.police.helis.is_empty() and main.police.helis[0].lit(player.global_position) \
+				and main.police.helis[0].global_position.distance_to(player.global_position) < 220.0:
+			break
+	await _save("air_police")
+	main.police.wanted.raise_to(6)
+	for f in 60 * 25:
+		await _frames(1)
+		main.police._arrest = 0.0
+		player.revive()
+		var army: Array = main.police.helis.filter(func(h: PoliceHeli): return h.stats == PoliceDispatcher.ARMY_HELI_TYPE)
+		if not army.is_empty() and army[0].global_position.distance_to(player.global_position) < 220.0:
+			break
+	await _save("air_army")
+	main.police.reset()
+	await _frames(60)
+	var spot := player.global_position + Vector2(0, 200)
+	for i in Fires.HELI_FIRES:
+		main.fires.start(spot + Vector2(i * 45.0 - 70.0, 0), 45.0, false, 30.0)
+	for f in 60 * 25:
+		await _frames(1)
+		player.revive()
+		var h: PoliceHeli = main.fires.heli
+		if h and is_instance_valid(h) and h.water:
+			cam.target = null
+			cam.global_position = h.global_position + IsoView.lift(h.altitude() * 0.5)
+			await _frames(40)
+			break
+	await _save("air_119")
+	cam.target = player
+
+
+## 4장 부두 헬기: 헬기장에 선 모습 → 떠올라 건물 위를 나는 모습(낮) → 위에서 보기
+func _heli_ride_shots(main: Node2D) -> void:
+	var heli: Vehicle = null
+	for v: Vehicle in main.vehicles:
+		if v.stats.flies:
+			heli = v
+	var player: Player = main.player
+	var cam: ChaseCamera = main.camera
+	main.sky.paused_clock = true
+	main.sky.set_hour(14.0)
+	player.global_position = heli.door_position(false) + Vector2(-30, 10)
+	cam.snap()
+	await _frames(10)
+	await _save("heli_parked")
+	main.director.enter_immediately(heli)
+	Input.action_press("accelerate")
+	await _frames(40)
+	await _save("heli_takeoff")
+	await _frames(200)
+	Input.action_press("steer_right")
+	await _frames(30)
+	Input.action_release("steer_right")
+	await _frames(30)
+	await _save("heli_flying")
+	Input.action_press("steer_left")
+	await _frames(45)
+	await _save("heli_bank_left")
+	Input.action_release("steer_left")
+	Input.action_press("steer_right")
+	await _frames(80)
+	await _save("heli_bank_right")
+	Input.action_release("steer_right")
+	await _frames(70)
+	Input.action_release("accelerate")
+	main.set_iso(false)
+	await _frames(5)
+	await _save("heli_topdown")
+	main.set_iso(true)
 
 
 ## 2.5D 화면: 도보·교차로·전경·주행·낮·헬기, 그리고 F9로 바꾼 위에서 보기 비교

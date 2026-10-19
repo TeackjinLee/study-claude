@@ -50,6 +50,11 @@ class Piece extends RefCounted:
 	var surface_detail := false
 	## 그리는 순서를 조각 가운데가 아니라 앞 모서리(남동)로 정한다 — 밑의 덩어리를 덮는 캐노피·내민 윗층
 	var z_at_end := false
+	## 벽면 그림 (BuildingSkin). 있으면 벽·창·옥상을 코드 대신 그림으로 그린다
+	var skin: BuildingSkin
+	## 통째 그림 (BuildingSprite)과 그 부지. 있으면 이 덩어리 윤곽만큼 그림을 오려 그린다
+	var sprite: BuildingSprite
+	var lot := Rect2()
 
 	func top() -> float:
 		var h := h1 + rise
@@ -92,6 +97,10 @@ static func top_color(t: BuildingType, seed: int) -> Color:
 
 static func build(r: Rect2, t: BuildingType, seed: int, height: float) -> Array[Piece]:
 	var out: Array[Piece] = []
+	# 통째 그림이 있으면 가이드를 찍은 시드로 짓는다 (나무 키 같은 무작위 모양이 그림과 맞게)
+	var sprite := BuildingSprite.of(t, r)
+	if sprite:
+		seed = sprite.seed
 	height *= t.visual_floor_scale
 	match t.style:
 		&"apt": _apt(out, r, t, seed, height)
@@ -118,7 +127,23 @@ static func build(r: Rect2, t: BuildingType, seed: int, height: float) -> Array[
 				break
 	for p in out:
 		_set_detail(p, t)
+	# 벽면 그림이 있는 종류: 몸통(평지붕, 창 있는 덩어리)에만 붙인다. 옥탑·물탱크 같은 얹힌 것은 코드 그림 그대로
+	var skin := BuildingSkin.of(t)
+	if skin:
+		for p in out:
+			if p.roof == &"flat" and p.windows != &"none":
+				p.skin = skin
+	if sprite:
+		for p in out:
+			_set_sprite(p, sprite, r)
 	return out
+
+
+static func _set_sprite(p: Piece, sprite: BuildingSprite, lot: Rect2) -> void:
+	p.sprite = sprite
+	p.lot = lot
+	for s: Piece in p.on_top:
+		_set_sprite(s, sprite, lot)
 
 
 static func _set_detail(p: Piece, t: BuildingType) -> void:
@@ -444,6 +469,15 @@ static func _tree(at: Vector2, seed: int, s: float) -> Piece:
 # ── 바닥 (청크가 그린다: 사람·차보다 늘 밑) ────────────────
 
 static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int) -> void:
+	# 통째 그림: 부지 사각형만큼 그림을 바닥에 편다 (인도는 도시가 그린다). 건물이 선 자리는 BuildingView가 덮는다
+	var sprite := BuildingSprite.of(t, r) if IsoView.enabled else null
+	if sprite:
+		var pts := PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+		var uvs := PackedVector2Array()
+		for v in pts:
+			uvs.append(sprite.uv(v, r))
+		ci.draw_primitive(pts, PackedColorArray([Color.WHITE]), uvs, sprite.day)
+		return
 	var style: StringName = t.style if t else &"special"
 	match style:
 		&"special":

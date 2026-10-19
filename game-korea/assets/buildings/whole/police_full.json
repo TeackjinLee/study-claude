@@ -1,0 +1,20 @@
+{
+  "id": "POLICE",
+  "lot": "full",
+  "lot_size": [
+    520.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1596,
+    1063
+  ],
+  "origin": [
+    797.89,
+    625.74
+  ],
+  "scale": 1.6103,
+  "hull_lift": 26,
+  "hull_grow": 4
+}

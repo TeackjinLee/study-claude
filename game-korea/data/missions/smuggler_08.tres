@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://bdv5kr8sa1lpc"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/sp_tow.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -12,11 +12,15 @@ points = PackedVector2Array(3242, -4896)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
 driver = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 5
 text = "경찰을 따돌려라"
+points = null
+headings = null
+npc_points = null
 wanted = 2
 
 [sub_resource type="Resource" id="step_2"]
@@ -24,16 +28,18 @@ script = ExtResource("2")
 kind = 2
 text = "홍대 아지트 차고에 세워라"
 points = PackedVector2Array(-1056, -4438)
+headings = null
 radius = 70
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"smuggler_08"
 gang = &"smuggler"
 tier = 2
-order = 0
 title = "견인소 털기"
-briefing = "경찰이 우리 차를 견인해 갔다. 견인차째 훔쳐.\n경찰이 쫓아온다 — 다 떼고 아지트로."
+briefing = "경찰이 우리 차를 견인해 갔다. 견인차째 훔쳐.
+경찰이 쫓아온다 — 다 떼고 아지트로."
 reward = 150000
 respect = 16
 time_limit = 220

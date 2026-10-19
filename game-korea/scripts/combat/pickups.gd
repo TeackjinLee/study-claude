@@ -76,7 +76,7 @@ func _physics_process(delta: float) -> void:
 	var v := director.current_vehicle
 	var pos := v.global_position if v else player.global_position
 	var reach := REACH_CAR if v else REACH_FOOT
-	var can_take := v != null or (player.visible and not player.is_dead())
+	var can_take := (v != null and not v.airborne()) or (v == null and player.visible and not player.is_dead())
 	var redraw := false
 	for c in crates:
 		if c.wait > 0.0:

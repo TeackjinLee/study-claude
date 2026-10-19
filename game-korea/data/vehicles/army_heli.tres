@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ARMY_HELI"
+display_name = "군 기동헬기"
+category = &"heli"
+max_speed = 440.0
+acceleration = 340.0
+reverse_speed = 0.0
+brake_force = 420.0
+coast_drag = 90.0
+turn_rate = 1.7
+turn_speed_ref = 120.0
+steer_response = 4.0
+grip = 800
+handbrake_grip = 0.3
+handbrake_decel = 300.0
+drift_turn_boost = 1.0
+mass = 3.0
+durability = 420.0
+size = Vector2(46, 104)
+height = 20.0
+body_color = Color(0.3, 0.34, 0.22, 1)
+roof_color = Color(0.2, 0.22, 0.15, 1)
+enterable = false
+flies = true
+fly_height = 135.0
+climb_rate = 70.0
+bank_angle = 0.35
+pitch_angle = 0.2

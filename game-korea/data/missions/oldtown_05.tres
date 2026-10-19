@@ -1,13 +1,15 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://dx0owsehsdevd"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/npc/gang_smuggler.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
 kind = 3
 text = "밀수단원을 처리해라"
+points = null
+headings = null
 npc = ExtResource("3")
 npc_points = PackedVector2Array(-1933.6, -4402, -1824, -4402, -1714.4, -4402)
 
@@ -16,9 +18,9 @@ script = ExtResource("1")
 id = &"oldtown_05"
 gang = &"oldtown"
 tier = 1
-order = 0
 title = "밀수단 앞잡이"
-briefing = "밀수단 놈들이 홍대에서 우리 애들을 팬다.\n셋 다 정리해."
+briefing = "밀수단 놈들이 홍대에서 우리 애들을 팬다.
+셋 다 정리해."
 reward = 110000
 respect = 12
 time_limit = 150

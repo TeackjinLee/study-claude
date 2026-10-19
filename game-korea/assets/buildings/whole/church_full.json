@@ -1,0 +1,20 @@
+{
+  "id": "CHURCH",
+  "lot": "full",
+  "lot_size": [
+    520.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1376,
+    768
+  ],
+  "origin": [
+    685.75,
+    406.62
+  ],
+  "scale": 1.40896,
+  "hull_lift": 4,
+  "hull_grow": 0
+}

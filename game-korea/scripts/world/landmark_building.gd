@@ -7,6 +7,12 @@ class_name LandmarkBuilding
 
 const STYLES := [&"landmark_tower", &"terminal", &"market", &"dock_crane", &"broadcast", &"checkpoint", &"container", &"dock_warehouse", &"barrier", &"industrial_dock"]
 const YELLOW := Color(0.88, 0.61, 0.12)
+## 부두 헬기장에 세워 두는 헬기 (4장 부두가 열려야 생긴다)
+const DOCK_HELI := "res://data/vehicles/sp_heli.tres"
+## 부두 야적장에 세워 둔 군용 차량 (선적을 기다리는 자주포·전술차량 — 4장, 탈 수 있다)
+const DOCK_SPG := "res://data/vehicles/army_spg.tres"
+const DOCK_JEEP := "res://data/vehicles/army_jeep.tres"
+const HELIPAD_RADIUS := 50.0
 const STEEL := Color("3b4144")
 const WOOD := Color("7a5536")
 ## 바닥에서 시작하지만 막지 않는 덩어리 (벽 없이 그림만)
@@ -327,7 +333,12 @@ static func _dock_frame(r: Rect2) -> Dictionary:
 	var area := r.grow(-14.0)
 	var crane_r := Rect2(area.position + Vector2(12, 12), Vector2(area.size.x * 0.56, area.size.y * 0.6))
 	var shed := Rect2(Vector2(area.position.x + area.size.x * 0.64, area.position.y + 10.0), Vector2(area.size.x * 0.36 - 6.0, area.size.y * 0.4))
-	return {"area": area, "crane": crane_r, "shed": shed}
+	# 헬기장: 창고 남쪽 빈 마당 (지게차·투광등·남쪽 컨테이너 더미·경비 초소 사이)
+	var pad := Vector2(area.position.x + area.size.x * 0.82, area.position.y + area.size.y * 0.7)
+	# 군용 차량: 창고 남쪽(지게차 동쪽)에 동쪽을 보는 자주포, 헬기장 서쪽에 전술차량
+	var spg := Vector2(area.position.x + area.size.x * 0.83, area.position.y + area.size.y * 0.53)
+	var jeep := Vector2(area.position.x + area.size.x * 0.62, area.position.y + area.size.y * 0.72)
+	return {"area": area, "crane": crane_r, "shed": shed, "pad": pad, "spg": spg, "jeep": jeep}
 
 
 static func _dock(out: Array[BuildingModel.Piece], r: Rect2, seed: int) -> void:
@@ -363,6 +374,21 @@ static func _dock(out: Array[BuildingModel.Piece], r: Rect2, seed: int) -> void:
 	# 투광등
 	for at in [area.position + Vector2(4, 4), Vector2(area.end.x - 8.0, area.position.y + area.size.y * 0.48), Vector2(area.position.x + 4.0, area.end.y - 90.0)]:
 		box(out, Rect2(at, Vector2(4, 4)), 0, 86, Color("2f3437"), &"none", &"lamp_pole")
+
+
+## 부두 헬기장 바닥: 노란 테두리 원과 흰 H (H는 화면에서 똑바로 읽히게 월드 (1,-1)·(-1,-1) 방향으로 그린다)
+static func _dock_helipad(ci: CanvasItem, c: Vector2) -> void:
+	ci.draw_circle(c, HELIPAD_RADIUS, Color("3d4043"))
+	ci.draw_arc(c, HELIPAD_RADIUS - 3.0, 0.0, TAU, 32, Color(0.95, 0.78, 0.2), 3.0)
+	ci.draw_arc(c, HELIPAD_RADIUS * 0.66, 0.0, TAU, 28, Color(0.94, 0.94, 0.9, 0.85), 2.0)
+	var right := Vector2(1, -1).normalized()
+	var up := Vector2(-1, -1).normalized()
+	var hx := HELIPAD_RADIUS * 0.2
+	var hy := HELIPAD_RADIUS * 0.36
+	for bar in [[Vector2(-hx, -hy), Vector2(-hx, hy)], [Vector2(hx, -hy), Vector2(hx, hy)], [Vector2(-hx, 0), Vector2(hx, 0)]]:
+		var a: Vector2 = bar[0]
+		var b: Vector2 = bar[1]
+		ci.draw_line(c + right * a.x + up * a.y, c + right * b.x + up * b.y, Color.WHITE, 4.0)
 
 
 static func _container(out: Array[BuildingModel.Piece], rr: Rect2, h0: float, color: Color, doors: bool, double := false) -> BuildingModel.Piece:
@@ -486,6 +512,11 @@ static func parking(r: Rect2, t: BuildingType) -> Array:
 	if t.style == &"terminal":
 		for bay: Rect2 in _terminal_frame(r).bays:
 			out.append([bay.get_center() + Vector2(0, 6), 0.0])
+	elif t.style == &"industrial_dock":
+		var f := _dock_frame(r)
+		out.append([f.pad, 0.0, DOCK_HELI])   # 4장 부두: 탈 수 있는 헬기
+		out.append([f.spg, PI * 0.5, DOCK_SPG])
+		out.append([f.jeep, 0.0, DOCK_JEEP])
 	return out
 
 
@@ -684,6 +715,7 @@ static func _dock_ground(ci: CanvasItem, r: Rect2, seed: int) -> void:
 	ci.draw_rect(cr.grow(-20.0), Color(0.95, 0.85, 0.3, 0.6), false, 2.0)
 	ci.draw_line(Vector2(area.position.x, cr.end.y + 12.0), Vector2(area.end.x, cr.end.y + 12.0), Color("e0b52a"), 3.0)
 	ci.draw_line(Vector2(area.position.x, cr.end.y + 22.0), Vector2(area.end.x, cr.end.y + 22.0), Color("e0b52a"), 3.0)
+	_dock_helipad(ci, f.pad)
 	# 둘레 안전띠와 계선주(볼라드), 폐타이어 방현재
 	_hazard(ci, Rect2(r.position.x, r.position.y, r.size.x, 6.0))
 	_hazard(ci, Rect2(r.position.x, r.position.y, 6.0, r.size.y))

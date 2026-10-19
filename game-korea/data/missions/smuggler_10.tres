@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://bfkf2bavpb1gq"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/car_zenith_g8.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -12,6 +12,7 @@ points = PackedVector2Array(1706, 480)
 headings = PackedFloat32Array(3.1416)
 vehicle = ExtResource("3")
 moving = true
+npc_points = null
 
 [resource]
 script = ExtResource("1")
@@ -20,7 +21,8 @@ gang = &"smuggler"
 tier = 2
 order = 2
 title = "다리 추격"
-briefing = "강남 회장 제니스가 다리를 건너 종로로 간다.\n강 위에서 끝내."
+briefing = "강남 회장 제니스가 다리를 건너 종로로 간다.
+강 위에서 끝내."
 reward = 160000
 respect = 16
 time_limit = 180

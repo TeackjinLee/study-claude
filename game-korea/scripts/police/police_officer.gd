@@ -6,12 +6,15 @@ extends Pedestrian
 enum Duty { CHASE, RETURN, GUARD, LEAVE }
 
 const ARRIVE := 14.0
+const SWING_TIME := 0.22         ## 곤봉 한 번 휘두르는 그림 시간
 
 var duty := Duty.CHASE
 var car: Vehicle = null          ## 타고 온 경찰차 (빼앗기면 null)
 var post := Vector2.ZERO         ## 지키는 자리 (도로 봉쇄). 차가 없으면 여기로 돌아간다
 var goal := Vector2.ZERO         ## 디스패처가 매 프레임 넣는다 (CHASE: 주인공, RETURN: 차 문)
 var reload := 0.0                ## 다음 발포까지 남은 시간 (★2부터 쏜다, PoliceDispatcher가 정한다)
+var beat_wait := 0.0             ## 다음 매까지 남은 시간 (PoliceDispatcher가 정한다)
+var _swing := -1.0               ## 곤봉을 휘두른 뒤 지난 시간 (그림, 휘두르지 않을 때 -1)
 var _waypoint := RoadNav.INVALID
 var _los := true
 var _los_timer := 0.0
@@ -19,6 +22,8 @@ var _los_timer := 0.0
 
 func _physics_process(delta: float) -> void:
 	reload -= delta
+	if _swing >= 0.0:
+		_swing = _swing + delta if _swing + delta < SWING_TIME else -1.0
 	if state == State.DODGE or state == State.KNOCKED or state == State.DEAD:
 		super._physics_process(delta)
 		return
@@ -36,6 +41,13 @@ func _physics_process(delta: float) -> void:
 		walk_phase += delta * vel.length() / 9.0
 	move_and_slide()
 	queue_redraw()
+
+
+## 붙잡은 주인공 쪽으로 곤봉을 한 번 내려친다 (그림 — 피해는 PoliceDispatcher가 준다)
+func swing(at: Vector2) -> void:
+	if at != global_position:
+		facing = Vector2.UP.angle_to(at - global_position)
+	_swing = 0.0
 
 
 func arrived() -> bool:
@@ -74,6 +86,8 @@ func resume_walking() -> void:
 
 func _draw() -> void:
 	super._draw()
+	if _swing >= 0.0 and state != State.KNOCKED and state != State.DEAD:
+		_draw_baton(_swing / SWING_TIME)
 	if state != State.KNOCKED and state != State.DEAD:
 		if IsoView.enabled:
 			# 2.5D: 모자·헬멧은 NpcType 모습(hat)대로 PersonDrawer가 그린다
@@ -82,3 +96,25 @@ func _draw() -> void:
 		draw_set_transform(Vector2.ZERO, facing, Vector2.ONE)
 		draw_rect(Rect2(-3, -5.5, 6, 2), Color(0.05, 0.06, 0.14))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 곤봉: 머리 위로 든 데서 앞으로 내려친다 (t 0 → 1). 2.5D는 화면에서, 위에서 보기는 몸 방향으로
+func _draw_baton(t: float) -> void:
+	var k := npc.body_scale
+	var a := lerpf(-1.9, 0.5, 1.0 - (1.0 - t) * (1.0 - t))     # 빠르게 내려와 끝에서 멈춘다
+	var stick := Color(0.07, 0.07, 0.09)
+	if IsoView.enabled:
+		var sd := IsoView.to_screen_dir(Vector2.UP.rotated(facing))
+		var side := 1.0 if sd.x >= 0.0 else -1.0
+		var fwd := Vector2(side, clampf(sd.y, -0.6, 0.6)).normalized()
+		var hand := (fwd * 4.0 + Vector2(0.0, -19.0)) * k
+		var tip := hand + fwd.rotated(a * side) * 11.0 * k
+		draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, PersonDrawer._ground(self)))
+		if t < 0.7:
+			draw_line(hand + (tip - hand) * 1.15, hand + fwd.rotated((a - 0.6) * side) * 12.5 * k, Color(1, 1, 1, 0.35 * (1.0 - t)), 2.0)
+		draw_line(hand, tip, stick, 2.2 * k)
+	else:
+		draw_set_transform(Vector2.ZERO, facing, Vector2.ONE)
+		var hand := Vector2(4.0, -3.0) * k
+		draw_line(hand, hand + Vector2.UP.rotated(a) * 9.0 * k, stick, 2.0 * k)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

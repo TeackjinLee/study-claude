@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://b0pml06fm6fw0"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/trk_tanker.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,19 +11,25 @@ text = "유조차에 타라"
 points = PackedVector2Array(-598, 2016)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "금강개발 차고 앞에 세워라"
 points = PackedVector2Array(2784, 3200)
+headings = null
 radius = 80
+npc_points = null
 min_health = 0.3
 
 [sub_resource type="Resource" id="step_2"]
 script = ExtResource("2")
 kind = 5
 text = "특공대를 따돌려라"
+points = null
+headings = null
+npc_points = null
 wanted = 4
 
 [resource]
@@ -34,7 +40,8 @@ tier = 2
 phone_set = 1
 order = 1
 title = "금강개발 선물"
-briefing = "유조차를 금강개발 차고 앞까지 몰고 가서 세워.\n그 다음은 네가 알아서. 특공대가 올 거다."
+briefing = "유조차를 금강개발 차고 앞까지 몰고 가서 세워.
+그 다음은 네가 알아서. 특공대가 올 거다."
 reward = 560000
 respect = 16
 time_limit = 260

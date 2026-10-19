@@ -1,0 +1,20 @@
+{
+  "id": "HOSPITAL",
+  "lot": "full",
+  "lot_size": [
+    520.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1640,
+    1050
+  ],
+  "origin": [
+    819.53,
+    601.73
+  ],
+  "scale": 1.65453,
+  "hull_lift": 24,
+  "hull_grow": 8
+}

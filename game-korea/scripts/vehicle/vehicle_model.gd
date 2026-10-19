@@ -43,6 +43,10 @@ const BEACON := Color(1.0, 0.6, 0.1)
 const AMBER := Color(1.0, 0.62, 0.18)
 const WHITE := Color(0.94, 0.94, 0.95)
 const REFLECT := Color(0.85, 0.12, 0.12)  ## 화물차 반사띠 빨강
+const POLICE_TRIM := Color(0.72, 0.9, 0.18)  ## 경찰 헬기 연두 띠
+const CAMO := Color(0.2, 0.24, 0.14)         ## 군용 얼룩무늬 짙은 녹색
+const RECOIL := 6.0                          ## 쏜 순간 포신이 뒤로 밀리는 거리 (px)
+const CRUSH_FLAT := 0.62                     ## 다 깔린 차는 높이가 이만큼 줄어든다
 
 ## 색 역할: 그릴 때 실제 색으로 바꾼다 (차 도색·브레이크·경광등에 따라)
 const BODY := &"body"        ## 차체 색 (카센터에서 바뀐다)
@@ -63,11 +67,24 @@ class Part:
 	var center := Vector3.ZERO
 	var wheel := 0                  ## 바퀴면 -1(왼쪽)/1(오른쪽)
 	var rider := false              ## 사람이 탔을 때만 그린다 (오토바이·자전거)
+	var blade := false              ## 헬기 주 회전날개 (hide_blades면 그리지 않는다)
+	var turret := 0                 ## 1: 포탑 (Vehicle.turret만큼 axis_y 축으로 돈다) · 2: 포신 (trunnion에서 들린 뒤 포탑과 같이 돈다)
+	var axis_y := 0.0               ## 포탑이 도는 축의 y
+	var trunnion := Vector2.ZERO    ## 포신이 들리는 축 (y, z)
 	var decals: Array = []          ## [PackedVector3Array, 법선, 색]
 
 
 static var _cache := {}
 static var _dent_height := 1.0   ## 지금 그리는 차의 높이 (찌그러짐: 위쪽 점일수록 덜 밀린다)
+static var _bank := 0.0          ## 지금 그리는 차가 옆으로 기운 각 (헬기 선회, Vehicle.bank)
+static var _pitch := 0.0         ## 지금 그리는 차가 앞으로 숙인 각 (헬기 가속, Vehicle.pitch)
+static var _turret := 0.0        ## 지금 그리는 차의 포탑 각 (차 앞 기준, Vehicle.turret)
+static var _elev := 0.0          ## 포신을 든 각 (Vehicle.elevation)
+static var _recoil := 0.0        ## 쏜 뒤 포신이 뒤로 밀린 거리 (px)
+static var _squash := 1.0        ## 깔려 납작해진 정도 (높이 배율, Vehicle.crushed)
+static var _cur: Part = null     ## 지금 그리는 부품 (포탑·포신이면 점을 돌린다)
+static var hide_blades := false  ## 주 회전날개를 빼고 그린다 (헬기 그림 가이드 — 날개는 코드가 따로 그린다)
+static var even_light := false   ## 옆면을 좌우 같은 밝기로 (헬기 그림 가이드 — 좌우 뒤집어 쓰는 그림이라 빛이 한쪽이면 안 된다)
 
 
 static func model(stats: VehicleType) -> Array:
@@ -86,11 +103,25 @@ static func draw(ci: CanvasItem, car: Vehicle) -> void:
 	var up := IsoView.lift_local(1.0, rot)
 	var v2 := Vector2(VIEW.x, VIEW.y).rotated(-rot)
 	var view := Vector3(v2.x, v2.y, VIEW.z)
+	# 방향 그림이 있는 헬기(VehicleSprite)는 그림으로 — 멈춘 주 날개만 모형으로 얹는다 (돌 때는 Vehicle._draw_rotor)
+	var sprite := VehicleSprite.of(car.stats) if IsoView.enabled else null
+	if sprite and sprite.draw(ci, car):
+		ci.draw_set_transform(IsoView.lift_local(car.ground + car.altitude, rot), 0.0, Vector2.ONE)
+		if not car._rotor_spinning() and not hide_blades:
+			_bank = car.bank
+			_pitch = car.pitch
+			for p: Part in parts:
+				if p.blade:
+					_draw_part(ci, p, view, up, rot, car, [])
+		return
 	var before: Array[Part] = []
 	var middle: Array[Part] = []
 	var after: Array[Part] = []
 	for p: Part in parts:
 		if p.rider and not car.occupied():
+			continue
+		# 멈춘 주 날개: 날개가 도는 동안엔 도는 원판(Vehicle.draw_rotor)만 보인다
+		if p.blade and (hide_blades or car._rotor_spinning()):
 			continue
 		if p.wheel != 0:
 			if Vector3(p.wheel, 0, 0).dot(view) > 0.0:
@@ -99,10 +130,16 @@ static func draw(ci: CanvasItem, car: Vehicle) -> void:
 				before.append(p)
 		else:
 			middle.append(p)
+	_turret = car.turret
+	_elev = car.elevation
+	_recoil = car.recoil * RECOIL
+	_squash = 1.0 - CRUSH_FLAT * car.crushed
 	middle.sort_custom(func(a: Part, b: Part) -> bool:
-		return a.layer * 100000.0 + a.center.dot(view) < b.layer * 100000.0 + b.center.dot(view))
+		return a.layer * 100000.0 + _posed(a.center, a).dot(view) < b.layer * 100000.0 + _posed(b.center, b).dot(view))
 	var dents: Array = car.dents
 	_dent_height = maxf(car.stats.height, 1.0)
+	_bank = car.bank
+	_pitch = car.pitch
 	for list in [before, middle, after]:
 		for p: Part in list:
 			# 바퀴·사람은 찌그러지지 않는다
@@ -111,13 +148,14 @@ static func draw(ci: CanvasItem, car: Vehicle) -> void:
 
 
 static func _draw_part(ci: CanvasItem, p: Part, view: Vector3, up: Vector2, rot: float, car: Vehicle, dents: Array) -> void:
+	_cur = p
 	for i in p.faces.size():
-		var n := p.normals[i]
+		var n := _rolled(_posed(p.normals[i], p, true), 0.0)
 		if n.dot(view) <= 0.03:
 			continue
 		_poly(ci, p.pts, p.faces[i], up, _shade(_color(p.colors[i], car), n, rot), dents)
 	for d: Array in p.decals:
-		var n: Vector3 = d[1]
+		var n := _rolled(_posed(d[1], p, true), 0.0)
 		if n.dot(view) <= 0.03:
 			continue
 		var pts: PackedVector3Array = d[0]
@@ -125,6 +163,7 @@ static func _draw_part(ci: CanvasItem, p: Part, view: Vector3, up: Vector2, rot:
 		for k in pts.size():
 			idx.append(k)
 		_poly(ci, pts, idx, up, _shade(_color(d[2], car), n, rot), dents)
+	_cur = null
 
 
 static func _poly(ci: CanvasItem, pts: PackedVector3Array, idx: PackedInt32Array, up: Vector2, color: Color, dents: Array = []) -> void:
@@ -145,8 +184,51 @@ static func _project(pts: PackedVector3Array, idx: PackedInt32Array, up: Vector2
 		var p := pts[idx[k]]
 		if not dents.is_empty():
 			p = _dented(p, dents)
+		if _cur and _cur.turret != 0:
+			p = _posed(p, _cur)
+		if _squash < 1.0:
+			p.z *= _squash
+		if _bank != 0.0 or _pitch != 0.0:
+			p = _rolled(p, Vehicle.BANK_PIVOT)
 		out[k] = Vector2(p.x, p.y) + up * p.z
 	return out
+
+
+## 포탑·포신 부품의 점(normal이면 방향)을 지금 포탑 각·포신 각으로 돌린다. 다른 부품은 그대로
+static func _posed(q: Vector3, part: Part, normal := false) -> Vector3:
+	if part == null or part.turret == 0:
+		return q
+	if part.turret == 2:
+		# 포신: 쏜 뒤 뒤로 밀리고(+y), 포이 축(trunnion)에서 앞(−y)이 들린다
+		var y := q.y if normal else q.y + _recoil - part.trunnion.x
+		var z := q.z if normal else q.z - part.trunnion.y
+		var c := cos(_elev)
+		var sn := sin(_elev)
+		q = Vector3(q.x, y * c + z * sn, -y * sn + z * c)
+		if not normal:
+			q += Vector3(0, part.trunnion.x, part.trunnion.y)
+	var r := Vector2(q.x, q.y - (0.0 if normal else part.axis_y)).rotated(_turret)
+	return Vector3(r.x, r.y + (0.0 if normal else part.axis_y), q.z)
+
+
+## 지금 그리는 차의 기울기(_bank)·숙이기(_pitch)로 돌린다. pivot은 축 높이 (방향 벡터면 0)
+static func _rolled(p: Vector3, pivot: float) -> Vector3:
+	if _bank == 0.0 and _pitch == 0.0:
+		return p
+	return tilt(p, pivot, _bank, _pitch)
+
+
+## 앞으로 숙이고(pitch, 좌우 축 x — +면 코(-y)가 내려간다) 옆으로 기울인다(bank, 앞뒤 축 y — +면 오른쪽이 내려간다).
+## 축은 높이 pivot에 있다
+static func tilt(p: Vector3, pivot: float, bank: float, pitch: float) -> Vector3:
+	var z := p.z - pivot
+	var cp := cos(pitch)
+	var sp := sin(pitch)
+	var y := p.y * cp - z * sp
+	z = z * cp + p.y * sp
+	var cb := cos(bank)
+	var sb := sin(bank)
+	return Vector3(p.x * cb + z * sb, y, pivot + z * cb - p.x * sb)
 
 
 ## 찌그러진 곳(Vehicle.dents) 가까운 점을 안쪽으로 밀고 위쪽 점은 조금 내린다. 가운데일수록 깊다
@@ -204,6 +286,8 @@ static func _shade(c: Color, n: Vector3, rot: float) -> Color:
 		return c.lightened(0.05)
 	var w := Vector2(n.x, n.y).rotated(rot)
 	var dark := 0.2 if w.x > w.y else 0.38
+	if even_light:
+		dark = 0.29
 	if absf(w.x - w.y) < 0.5 * w.length():
 		dark = 0.29      # 깎은 모서리 (두 면 사이 밝기)
 	if n.z > 0.25:
@@ -533,11 +617,16 @@ static func _build(s: VehicleType) -> Array:
 		"sp_fire": return _fire(w, l, h)
 		"sp_tow": return _tow(w, l, h)
 		"sp_army": return _army(w, l, h)
+		"army_spg": return _spg(w, l, h)
+		"army_jeep": return _jeep(w, l, h)
 		"bus_city", "bus_express", "bus_village": return _bus(w, l, h, id == "bus_express")
 		"sp_ambulance": return _van(w, l, h, true)
 		"sp_swat": return _van(w, l, h, false)
 		"etc_camper": return _camper(w, l, h)
-		"sp_fire_heli": return _heli(w, l, h)
+		"sp_heli": return _heli(w, l, h)
+		"police_heli": return _heli(w, l, h, {"police": true})
+		"sp_fire_heli": return _rescue_heli(w, l, h)
+		"army_heli": return _army_heli(w, l, h)
 		"etc_bike": return _bike(w, l, false)
 		"etc_bicycle": return _bike(w, l, true)
 	match s.category:
@@ -1008,6 +1097,133 @@ static func _army(w: float, l: float, h: float) -> Array:
 	return parts
 
 
+## 자주포 (K9식 곡사포 장갑차): 무한궤도(궤도 띠·보기륜·구동륜·옆 덮개) + 낮은 차체(경사진 앞판·조종수 해치·전조등·뒤 배기) +
+## 큰 포탑(앞이 좁아지는 상자·지휘관 해치·기관총·연막탄 발사기·뒤 짐 바구니, 포탑 = Vehicle.turret으로 돈다) +
+## 긴 포신(방패·배연기·포구 제퇴기, Vehicle.elevation만큼 들리고 쏘면 뒤로 밀린다). 국방색 바탕에 짙은 얼룩무늬
+static func _spg(w: float, l: float, h: float) -> Array:
+	var hw := w * 0.5
+	var hl := l * 0.5
+	var parts: Array = []
+	var u := Vector3(1, 0, 0)
+	var v := Vector3(0, 0, 1)
+	var tw := 9.0                       # 궤도 폭
+	# 무한궤도: 아래가 짧은 띠(앞뒤가 비스듬) + 보기륜 6쌍 + 앞 구동륜·뒤 유도륜 + 위 옆 덮개
+	for side: int in [-1, 1]:
+		var x0 := side * hw
+		var x1 := side * (hw - tw)
+		var xa := minf(x0, x1)
+		var xb := maxf(x0, x1)
+		var belt := hull(xa, xb, -hl + 5.0, hl - 4.0, 0.0, xa, xb, -hl, hl, 8.0, TIRE, 1)
+		for k in 14:
+			sides(belt, k / 14.0, k / 14.0 + 0.025, 0.0, 1.0, SIDEWALL)    # 궤도 마디
+		parts.append(belt)
+		for k in 6:
+			var y := lerpf(-hl * 0.7, hl * 0.66, k / 5.0)
+			parts.append(wheel(side * (hw - 0.9), y, 3.4, 0.5, side, [BODY, 0.25], 0))
+		parts.append(wheel(side * (hw - 0.9), -hl + 4.5, 3.8, 0.5, side, DARK, 6))
+		parts.append(wheel(side * (hw - 0.9), hl - 4.5, 3.6, 0.5, side, DARK, 0))
+		var skirt := box(xa - 0.3, xb + 0.3, -hl + 3.0, hl - 2.0, 7.4, 10.0, BODY, 2, 0.6)
+		decal(skirt, R if side > 0 else L, 0.2, 0.42, 0.0, 1.0, CAMO)
+		parts.append(skirt)
+	# 차체: 궤도 사이 아래 몸통 + 위 갑판 + 경사진 앞판
+	parts.append(box(-hw + tw, hw - tw, -hl + 4.0, hl - 2.0, 2.0, 10.0, [BODY, 0.2], 1))
+	var deck := box(-hw + 0.5, hw - 0.5, -hl + 12.0, hl, 10.0, 13.0, BODY, 2, 1.0)
+	top_rect(deck, -hw + 3.0, hw - 3.0, hl - 9.0, hl - 2.0, DARK)             # 뒤 배기 그릴
+	for k in 4:
+		top_rect(deck, -hw + 4.0 + k * 3.2, -hw + 5.4 + k * 3.2, hl - 8.0, hl - 3.0, [DARK, -0.15])
+	decal(deck, B, 0.1, 0.9, 0.15, 0.85, [BODY, 0.2])
+	decal(deck, B, 0.1, 0.2, 0.3, 0.7, TAIL)
+	decal(deck, B, 0.8, 0.9, 0.3, 0.7, TAIL)
+	parts.append(deck)
+	var glacis := hull(-hw + 0.5, hw - 0.5, -hl, -hl + 6.0, 6.0, -hw + 0.5, hw - 0.5, -hl + 9.0, -hl + 12.5, 13.0, BODY, 2)
+	decal(glacis, F, 0.08, 0.2, 0.1, 0.35, HEAD)                              # 전조등
+	decal(glacis, F, 0.8, 0.92, 0.1, 0.35, HEAD)
+	decal(glacis, T, 0.15, 0.4, 0.2, 0.8, CAMO)
+	decal(glacis, T, 0.6, 0.85, 0.3, 0.7, CAMO)
+	parts.append(glacis)
+	var hatch := box(-hw + 4.0, -hw + 11.0, -hl + 13.0, -hl + 19.0, 13.0, 14.0, [BODY, 0.15], 3, 1.0)
+	decal(hatch, F, 0.2, 0.8, 0.2, 0.8, GLASS)                                # 조종수 잠망경
+	parts.append(hatch)
+	# 포탑 (축 axis_y): 큰 상자, 앞이 좁아진다
+	var ay := 6.0
+	var turret := hull(-hw + 2.5, hw - 2.5, ay - 18.0, ay + 24.0, 13.0, -hw + 4.0, hw - 4.0, ay - 14.0, ay + 23.0, h, BODY, 3, 3.0)
+	decal(turret, R, 0.15, 0.4, 0.15, 0.7, CAMO)
+	decal(turret, L, 0.55, 0.85, 0.3, 0.85, CAMO)
+	decal(turret, T, 0.1, 0.45, 0.55, 0.9, CAMO)
+	decal(turret, T, 0.6, 0.9, 0.1, 0.35, CAMO)
+	decal(turret, R, 0.55, 0.75, 0.5, 0.75, [BODY, 0.2])                      # 옆 문
+	parts.append(turret)
+	var cupola := cyl(Vector3(hw - 9.0, ay - 2.0, h), Vector3(hw - 9.0, ay - 2.0, h + 2.2), 3.2, 3.0, u, Vector3(0, 1, 0), 8, [BODY, 0.1], 4)
+	parts.append(cupola)
+	parts.append(box(-hw + 6.0, -hw + 12.0, ay + 2.0, ay + 8.0, h, h + 1.0, [BODY, 0.15], 4, 1.0))   # 해치
+	parts.append(bar(Vector3(hw - 9.0, ay - 2.0, h + 3.0), Vector3(hw - 9.0, ay - 12.0, h + 3.6), 0.9, 0.9, DARK, 4))   # 기관총
+	for side: int in [-1, 1]:                                                 # 연막탄 발사기
+		parts.append(box(side * (hw - 6.0) - 2.0, side * (hw - 6.0) + 2.0, ay - 16.0, ay - 12.0, h - 5.0, h - 1.5, DARK, 3))
+	for k in 3:                                                               # 뒤 짐 바구니
+		parts.append(bar(Vector3(-hw + 4.0, ay + 24.0 + k * 1.8, h - 4.0 + k), Vector3(hw - 4.0, ay + 24.0 + k * 1.8, h - 4.0 + k), 0.6, 0.6, DARK, 3))
+	parts.append(box(-hw + 5.0, hw - 5.0, ay + 23.5, ay + 28.0, h - 6.0, h - 2.5, [ACCENT, 0.1], 3))
+	for p in parts.slice(parts.find(turret)):
+		p.turret = 1
+		p.axis_y = ay
+	# 포신 (포이 축 trunnion): 방패 + 긴 포신 + 배연기 + 포구 제퇴기
+	var ty := ay - 16.0
+	var tz := h - 4.0
+	var gun: Array = []
+	gun.append(box(-5.0, 5.0, ty - 5.0, ty + 1.0, tz - 4.5, tz + 4.5, BODY, 3, 1.4))
+	var barrel := cyl(Vector3(0, ty - 4.0, tz), Vector3(0, ty - 4.0 - l * 0.62, tz), 2.0, 1.6, u, v, 10, [BODY, 0.08], 3)
+	gun.append(barrel)
+	gun.append(cyl(Vector3(0, ty - 4.0 - l * 0.26, tz), Vector3(0, ty - 4.0 - l * 0.32, tz), 2.6, 2.6, u, v, 10, [BODY, 0.15], 3))
+	gun.append(cyl(Vector3(0, ty - l * 0.62 - 2.0, tz), Vector3(0, ty - l * 0.62 - 7.0, tz), 2.9, 2.9, u, v, 10, DARK, 3))
+	for p: Part in gun:
+		p.turret = 2
+		p.axis_y = ay
+		p.trunnion = Vector2(ty, tz)
+	parts.append_array(gun)
+	return parts
+
+
+## 군 소형 전술차량: 각진 국방색 차체(보닛·짧은 경사 앞유리·작은 옆 창·문틈) + 지붕 기관총 거치대(포탑 = Vehicle.turret으로 돈다) +
+## 앞 범퍼 가드·전조등 + 뒤 예비 타이어·짐칸 + 큰 바퀴 넷. 얼룩무늬
+static func _jeep(w: float, l: float, h: float) -> Array:
+	var hw := w * 0.5
+	var hl := l * 0.5
+	var parts: Array = []
+	var hood := hull(-hw, hw, -hl + 1.0, -hl + l * 0.32, 4.0, -hw + 1.0, hw - 1.0, -hl + 2.0, -hl + l * 0.32, h * 0.52, BODY, 1, 1.6)
+	decal(hood, F, 0.06, 0.94, 0.1, 0.45, DARK)                                # 그릴
+	decal(hood, F, 0.08, 0.24, 0.55, 0.85, HEAD)
+	decal(hood, F, 0.76, 0.92, 0.55, 0.85, HEAD)
+	decal(hood, T, 0.15, 0.55, 0.2, 0.7, CAMO)
+	parts.append(hood)
+	var cabin := hull(-hw, hw, -hl + l * 0.3, hl, 4.0, -hw + 1.5, hw - 1.5, -hl + l * 0.4, hl - 1.0, h - 2.0, BODY, 1, 1.6)
+	decal(cabin, F, 0.08, 0.92, 0.5, 0.95, GLASS)
+	sides(cabin, 0.06, 0.28, 0.55, 0.92, GLASS)
+	sides(cabin, 0.34, 0.54, 0.55, 0.92, GLASS)
+	sides(cabin, 0.31, 0.32, 0.1, 0.95, [BODY, 0.35])                          # 문틈
+	sides(cabin, 0.57, 0.58, 0.1, 0.95, [BODY, 0.35])
+	sides(cabin, 0.62, 0.9, 0.1, 0.45, CAMO)
+	decal(cabin, B, 0.1, 0.3, 0.6, 0.85, TAIL)
+	decal(cabin, B, 0.7, 0.9, 0.6, 0.85, TAIL)
+	parts.append(cabin)
+	parts.append(crown(-hw + 1.5, hw - 1.5, -hl + l * 0.4, hl - 1.0, h - 2.0, 1.6, 1.0, [BODY, 0.1], 2, 1.2))
+	parts.append(box(-hw - 0.5, hw + 0.5, -hl - 1.5, -hl + 1.0, 3.0, 6.0, DARK, 1))     # 범퍼 가드
+	var spare := cyl(Vector3(0, hl, 9.0), Vector3(0, hl + 2.4, 9.0), 4.6, 4.6, Vector3(1, 0, 0), Vector3(0, 0, 1), 12, TIRE, 2)
+	spare.colors[13] = SIDEWALL
+	parts.append(spare)
+	# 지붕 기관총 거치대 (포탑, 축 y 6)
+	var ay := l * 0.1
+	var gun: Array = []
+	gun.append(cyl(Vector3(0, ay, h - 0.4), Vector3(0, ay, h + 1.0), 5.0, 5.0, Vector3(1, 0, 0), Vector3(0, 1, 0), 10, DARK, 3))
+	gun.append(box(-3.4, 3.4, ay - 2.0, ay + 1.0, h + 1.0, h + 5.0, [BODY, 0.1], 3, 0.6))   # 방패
+	gun.append(box(-1.2, 1.2, ay - 1.0, ay + 4.0, h + 2.0, h + 3.6, DARK, 3))
+	gun.append(bar(Vector3(0, ay - 1.0, h + 3.0), Vector3(0, ay - 14.0, h + 3.2), 0.9, 0.9, DARK, 3))
+	for p: Part in gun:
+		p.turret = 1
+		p.axis_y = ay
+	parts.append_array(gun)
+	wheels(parts, hw + 0.6, [-hl + l * 0.17, hl - l * 0.18], 6.0, 2.6, [BODY, 0.2], 0)
+	return parts
+
+
 ## 버스: 긴 상자(모서리 깎음) + 검은 창 띠·기둥 + 앞문·가운데 문 + 앞 행선지 표시 + 거울 팔 + 지붕 냉방기
 static func _bus(w: float, l: float, h: float, express: bool) -> Array:
 	var hw := w * 0.5
@@ -1201,8 +1417,9 @@ static func _camper(w: float, l: float, h: float) -> Array:
 	return parts
 
 
-## 헬기: 둥근 동체(앞 유리·옆 창·흰 띠) + 꼬리 붐·수직 날개·꼬리 회전날개 + 착륙 썰매 + 주 회전날개 4장
-static func _heli(w: float, l: float, h: float) -> Array:
+## 헬기: 둥근 동체(앞 유리·옆 창·흰 띠) + 꼬리 붐·수직 날개·꼬리 회전날개 + 착륙 썰매 + 주 회전날개 4장.
+## o.police: 경찰 헬기 — 연두 띠 하나 더, 엔진 덮개 양옆 경광등(빨강·파랑), 기수 밑 탐조등
+static func _heli(w: float, l: float, h: float, o := {}) -> Array:
 	var hl := l * 0.5
 	var parts: Array = []
 	var u := Vector3(1, 0, 0)
@@ -1217,26 +1434,189 @@ static func _heli(w: float, l: float, h: float) -> Array:
 	for k in [11, 0, 4, 5]:
 		cabin.colors[k] = GLASS
 	band(cabin, 12, 0.5, 0.62, ACCENT)
+	if o.get("police", false):
+		band(cabin, 12, 0.66, 0.71, POLICE_TRIM)
 	parts.append(cabin)
 	parts.append(cyl(Vector3(0, hl * 0.12, 12.0), Vector3(0, hl * 0.3, 13.0), 7.0, 3.0, u, v, 12, BODY, 1))
 	parts.append(cyl(Vector3(0, hl * 0.3, 13.0), Vector3(0, hl * 0.95, 15.0), 2.4, 1.4, u, v, 8, BODY, 1))
 	parts.append(hull(-0.7, 0.7, hl * 0.78, hl * 0.98, 13.0, -0.6, 0.6, hl * 0.86, hl * 1.0, 24.0, BODY, 2))
 	parts.append(box(-4.5, 4.5, hl * 0.84, hl * 0.92, 14.0, 15.0, ACCENT, 2))
-	var rotor := Vector3(1.2, hl * 0.93, 21.0)
-	parts.append(bar(rotor + Vector3(0, -5.0, 0), rotor + Vector3(0, 5.0, 0), 1.0, 0.4, DARK, 3))   # 꼬리 회전날개
-	parts.append(bar(rotor + Vector3(0, 0, -5.0), rotor + Vector3(0, 0, 5.0), 1.0, 0.4, DARK, 3))
+	_tail_rotor(parts, Vector3(1.2, hl * 0.93, 21.0), 5.0)
 	for side: int in [-1, 1]:
 		parts.append(box(side * 8.0 - 0.8, side * 8.0 + 0.8, -hl * 0.65, hl * 0.25, 0.5, 1.8, DARK, 0))
 		for y in [-hl * 0.4, hl * 0.05]:
 			parts.append(bar(Vector3(side * 8.0, y, 1.6), Vector3(side * 5.0, y, 6.0), 1.0, 1.0, DARK, 0))
 	parts.append(box(-2.4, 2.4, -3.0, 4.0, 18.5, 21.0, [BODY, 0.2], 3, 1.0))         # 엔진 덮개
+	if o.get("police", false):
+		parts.append(box(-3.9, -2.4, -1.0, 2.0, 19.5, 21.2, SIREN_R, 3))            # 경광등
+		parts.append(box(2.4, 3.9, -1.0, 2.0, 19.5, 21.2, SIREN_B, 3))
+		_searchlight(parts, Vector3(0, -hl * 0.62, 3.6))
 	parts.append(cyl(Vector3(0, 0.5, 21.0), Vector3(0, 0.5, 23.0), 1.2, 1.2, u, Vector3(0, 1, 0), 6, DARK, 3))
-	var reach := l * 0.6
-	for k in 4:
-		var t := PI * 0.25 + 0.35 + k * PI * 0.5
-		var tip := Vector3(cos(t), sin(t), 0.0) * reach
-		parts.append(bar(Vector3(0, 0.5, 23.0), tip + Vector3(0, 0.5, 22.6), 2.2, 0.4, DARK, 4))
+	_main_rotor(parts, 23.0, l * 0.6, 4, 2.2)
 	return parts
+
+
+## 119 구조헬기: 큰 쌍발 동체(빨강, 흰 아래띠·노란 줄) + 둥근 유리 기수 + 옆 미닫이문·창 + 오른쪽 위 구조 윈치 +
+## 흰 엔진 덮개 둘(흡기·배기) + 굵은 꼬리 붐·꼬리날개 + 바퀴 착륙장치(기수 바퀴·옆 스폰슨) + 기수 탐조등 + 빨간 경광등 + 주 날개 4장
+static func _rescue_heli(w: float, l: float, h: float) -> Array:
+	var hl := l * 0.5
+	var parts: Array = []
+	var u := Vector3(1, 0, 0)
+	var v := Vector3(0, 0, 1)
+	var rz := h + Vehicle.ROTOR_ABOVE
+	var cy0 := -hl * 0.55
+	var cy1 := hl * 0.12
+	var cabin := box(-9.5, 9.5, cy0, cy1, 4.0, h - 1.0, BODY, 1, 3.0)
+	sides(cabin, 0.0, 1.0, 0.12, 0.26, ACCENT)                                    # 흰 아래띠
+	sides(cabin, 0.0, 1.0, 0.28, 0.32, HAZARD)                                    # 노란 줄
+	sides(cabin, 0.04, 0.3, 0.5, 0.86, GLASS)                                     # 조종석 옆 창
+	decal(cabin, R, 0.38, 0.7, 0.08, 0.9, [BODY, 0.18])                           # 오른쪽 미닫이문
+	decal(cabin, R, 0.43, 0.65, 0.5, 0.84, GLASS)
+	decal(cabin, R, 0.42, 0.44, 0.34, 0.42, CHROME)                               # 문 손잡이
+	decal(cabin, L, 0.3, 0.6, 0.5, 0.84, GLASS)                                   # 왼쪽 창
+	decal(cabin, B, 0.2, 0.8, 0.5, 0.85, [BODY, 0.25])
+	top_rect(cabin, -7.0, 7.0, cy0 + 2.0, cy0 + 9.0, GLASS)                       # 조종석 천장 유리
+	parts.append(cabin)
+	var nose := hull(-8.5, 8.5, -hl * 0.84, cy0 + 0.5, 4.0, -7.0, 7.0, -hl * 0.72, cy0 + 0.5, h - 2.0, BODY, 1, 3.0)
+	decal(nose, F, 0.05, 0.95, 0.4, 1.0, GLASS)
+	decal(nose, T, 0.0, 1.0, 0.0, 1.0, GLASS)
+	for c in [FRC, FLC]:
+		decal(nose, c, 0.0, 1.0, 0.4, 1.0, GLASS)
+	sides(nose, 0.0, 1.0, 0.45, 0.95, GLASS)
+	sides(nose, 0.0, 1.0, 0.12, 0.26, ACCENT)
+	parts.append(nose)
+	var chin := box(-6.5, 6.5, -hl * 0.94, -hl * 0.8, 4.0, 10.0, BODY, 1, 2.5)    # 기수 아래 둥근 턱
+	decal(chin, F, 0.15, 0.85, 0.1, 0.45, ACCENT)
+	parts.append(chin)
+	_searchlight(parts, Vector3(2.5, -hl * 0.86, 2.8))
+	# 뒤로 좁아지는 동체 → 꼬리 붐 → 꼬리날개
+	var aft := cyl(Vector3(0, cy1, 11.5), Vector3(0, hl * 0.42, 14.0), 8.2, 3.4, u, v, 12, BODY, 1)
+	band(aft, 12, 0.0, 1.0, BODY)
+	parts.append(aft)
+	var boom := cyl(Vector3(0, hl * 0.42, 14.0), Vector3(0, hl * 0.94, 16.0), 3.0, 1.8, u, v, 8, BODY, 1)
+	band(boom, 8, 0.3, 0.45, ACCENT)
+	parts.append(boom)
+	var fin := hull(-0.9, 0.9, hl * 0.8, hl * 0.98, 15.0, -0.7, 0.7, hl * 0.9, hl * 1.02, h + 9.0, BODY, 2)
+	sides(fin, 0.0, 1.0, 0.65, 0.85, ACCENT)
+	parts.append(fin)
+	parts.append(box(-6.5, 6.5, hl * 0.8, hl * 0.88, 15.5, 16.6, ACCENT, 2))      # 수평 안정판
+	_tail_rotor(parts, Vector3(1.6, hl * 0.95, h + 5.0), 6.0)
+	# 쌍발 엔진 덮개 (흰색)
+	var eng := box(-5.5, 5.5, -hl * 0.3, hl * 0.18, h - 1.0, h + 3.5, ACCENT, 3, 1.6)
+	top_rect(eng, -0.4, 0.4, -hl * 0.28, hl * 0.16, [ACCENT, 0.25])
+	parts.append(eng)
+	for side: int in [-1, 1]:
+		var intake := cyl(Vector3(side * 3.0, -hl * 0.32, h + 1.2), Vector3(side * 3.0, -hl * 0.26, h + 1.2), 1.4, 1.4,
+			u, v, 8, DARK, 3)
+		parts.append(intake)
+		parts.append(cyl(Vector3(side * 4.8, hl * 0.12, h + 1.6), Vector3(side * 6.2, hl * 0.22, h + 2.0), 1.2, 1.3,
+			u, v, 8, DARK, 3))                                                     # 배기구
+	parts.append(box(-1.0, 1.0, hl * 0.04, hl * 0.1, h + 3.5, h + 4.6, SIREN_R, 3))  # 경광등
+	# 구조 윈치: 오른쪽 문 위로 나온 팔과 감개
+	parts.append(bar(Vector3(9.0, -hl * 0.2, h - 2.5), Vector3(14.0, -hl * 0.2, h - 2.0), 1.4, 1.4, STEEL, 2))
+	var hoist := box(12.6, 16.0, -hl * 0.26, -hl * 0.14, h - 4.5, h - 1.5, ACCENT, 2, 0.8)
+	decal(hoist, R, 0.2, 0.8, 0.2, 0.8, HAZARD)
+	parts.append(hoist)
+	parts.append(bar(Vector3(14.3, -hl * 0.2, h - 4.5), Vector3(14.3, -hl * 0.2, h - 8.5), 0.4, 0.4, DARK, 2))
+	# 바퀴 착륙장치: 기수 바퀴 + 옆 스폰슨 바퀴
+	parts.append(bar(Vector3(0, -hl * 0.72, 4.5), Vector3(0, -hl * 0.72, 2.6), 1.0, 1.0, STEEL, 0))
+	parts.append(wheel(0.0, -hl * 0.72, 2.2, 0.9, 1, HUB, 0))
+	for side: int in [-1, 1]:
+		var sponson := box(side * 9.0 - 2.0, side * 9.0 + 2.0, -hl * 0.12, hl * 0.12, 3.0, 7.5, BODY, 1, 1.2)
+		if side > 0:
+			sponson.colors[R] = [BODY, 0.1]
+		parts.append(sponson)
+		parts.append(wheel(side * 10.0, -hl * 0.02, 2.6, 1.1, side, HUB, 0))
+	parts.append(cyl(Vector3(0, 0.5, h + 3.5), Vector3(0, 0.5, rz), 1.3, 1.3, u, Vector3(0, 1, 0), 6, DARK, 3))
+	_main_rotor(parts, rz, l * 0.6, 4, 2.8)
+	return parts
+
+
+## 군용 기동헬기: 국방색 각진 동체 + 짙은 유리 조종석 + 작은 옆 창·문틈 + 양옆 날개와 로켓 포드 + 기수 기관총 +
+## 엔진 덮개·배기 + 꼬리 붐·큰 꼬리날개(왼쪽 꼬리 회전날개) + 바퀴 착륙장치 + 주 날개 4장
+static func _army_heli(w: float, l: float, h: float) -> Array:
+	var hl := l * 0.5
+	var parts: Array = []
+	var u := Vector3(1, 0, 0)
+	var v := Vector3(0, 0, 1)
+	var rz := h + Vehicle.ROTOR_ABOVE
+	var cy0 := -hl * 0.46
+	var cy1 := hl * 0.18
+	var cabin := box(-10.0, 10.0, cy0, cy1, 3.0, h - 1.0, BODY, 1, 2.0)
+	sides(cabin, 0.06, 0.24, 0.55, 0.85, TINT)                                    # 조종석 뒤 작은 창
+	sides(cabin, 0.32, 0.4, 0.58, 0.82, TINT)
+	sides(cabin, 0.3, 0.72, 0.06, 0.92, [BODY, 0.12])                             # 큰 미닫이문
+	sides(cabin, 0.46, 0.58, 0.58, 0.82, TINT)
+	sides(cabin, 0.0, 1.0, 0.0, 0.06, ACCENT)
+	decal(cabin, B, 0.15, 0.85, 0.2, 0.8, [BODY, 0.2])
+	top_rect(cabin, -8.0, 8.0, cy0 + 2.0, cy0 + 6.0, [BODY, 0.15])
+	parts.append(cabin)
+	var cockpit := hull(-9.0, 9.0, -hl * 0.78, cy0 + 0.5, 3.0, -7.0, 7.0, -hl * 0.64, cy0 + 0.5, h - 2.0, BODY, 1, 2.0)
+	decal(cockpit, F, 0.05, 0.95, 0.42, 1.0, TINT)
+	decal(cockpit, T, 0.0, 1.0, 0.0, 1.0, TINT)
+	for c in [FRC, FLC]:
+		decal(cockpit, c, 0.0, 1.0, 0.42, 1.0, TINT)
+	sides(cockpit, 0.0, 1.0, 0.45, 0.95, TINT)
+	parts.append(cockpit)
+	parts.append(box(-6.0, 6.0, -hl * 0.9, -hl * 0.74, 3.0, 10.5, BODY, 1, 2.5))  # 기수
+	# 기수 기관총: 포탑 + 앞으로 뻗은 총열
+	parts.append(cyl(Vector3(0, -hl * 0.8, 3.2), Vector3(0, -hl * 0.8, 1.0), 2.4, 2.0, u, Vector3(0, 1, 0), 8, DARK, 0))
+	parts.append(bar(Vector3(0, -hl * 0.82, 1.4), Vector3(0, -hl * 0.98, 1.6), 0.9, 0.9, DARK, 0))
+	# 양옆 날개와 로켓 포드
+	for side: int in [-1, 1]:
+		parts.append(box(side * 10.0 - (12.0 if side < 0 else 0.0), side * 10.0 + (12.0 if side > 0 else 0.0),
+			-hl * 0.14, hl * 0.02, h - 7.0, h - 5.8, BODY, 1))
+		for x in [15.0, 20.0]:
+			parts.append(bar(Vector3(side * x, -hl * 0.06, h - 7.0), Vector3(side * x, -hl * 0.06, h - 9.0), 0.8, 0.8, DARK, 1))
+			var pod := cyl(Vector3(side * x, -hl * 0.22, h - 10.0), Vector3(side * x, hl * 0.08, h - 10.0), 1.9, 1.9,
+				u, v, 8, [BODY, 0.2], 1)
+			pod.colors[8] = DARK   # 앞 마구리 (로켓 구멍)
+			parts.append(pod)
+	# 엔진 덮개 · 배기
+	var eng := box(-6.5, 6.5, -hl * 0.3, hl * 0.24, h - 1.0, h + 4.0, [BODY, 0.08], 3, 1.5)
+	top_rect(eng, -5.0, 5.0, -hl * 0.1, hl * 0.04, ACCENT)
+	parts.append(eng)
+	for side: int in [-1, 1]:
+		parts.append(cyl(Vector3(side * 6.0, hl * 0.12, h + 1.5), Vector3(side * 8.0, hl * 0.26, h + 1.2), 1.5, 1.7,
+			u, v, 8, DARK, 3))
+	# 뒤로 좁아지는 동체 → 꼬리 붐 → 큰 꼬리날개
+	parts.append(cyl(Vector3(0, cy1, 11.0), Vector3(0, hl * 0.46, 14.0), 8.5, 3.2, u, v, 12, BODY, 1))
+	parts.append(cyl(Vector3(0, hl * 0.46, 14.0), Vector3(0, hl * 0.94, 16.0), 3.0, 2.0, u, v, 8, BODY, 1))
+	parts.append(hull(-1.0, 1.0, hl * 0.8, hl * 0.96, 15.0, -0.8, 0.8, hl * 0.92, hl * 1.04, h + 11.0, BODY, 2))
+	parts.append(box(-7.5, 7.5, hl * 0.86, hl * 0.95, 14.5, 15.6, BODY, 2))       # 수평 안정판
+	_tail_rotor(parts, Vector3(-1.8, hl * 0.97, h + 6.0), 6.5)
+	# 바퀴 착륙장치: 앞 바퀴 둘 + 꼬리 바퀴
+	for side: int in [-1, 1]:
+		parts.append(bar(Vector3(side * 9.5, -hl * 0.3, 4.0), Vector3(side * 10.5, -hl * 0.3, 2.8), 1.0, 1.0, DARK, 0))
+		parts.append(wheel(side * 10.8, -hl * 0.3, 2.8, 1.1, side, DARK, 0))
+	parts.append(bar(Vector3(0, hl * 0.86, 13.0), Vector3(0, hl * 0.86, 2.0), 0.8, 0.8, DARK, 0))
+	parts.append(wheel(0.0, hl * 0.86, 1.8, 0.7, 1, DARK, 0))
+	parts.append(cyl(Vector3(0, 0.5, h + 4.0), Vector3(0, 0.5, rz), 1.4, 1.4, u, Vector3(0, 1, 0), 6, DARK, 3))
+	_main_rotor(parts, rz, l * 0.6, 4, 3.0)
+	return parts
+
+
+## 주 회전날개 (멈춘 날개 n장, 허브는 y 0.5 — Vehicle.draw_rotor의 도는 원판과 같은 자리). blade로 표시해 그림 헬기는 빼고 그린다
+static func _main_rotor(parts: Array, z: float, reach: float, n: int, width: float) -> void:
+	for k in n:
+		var t := PI * 0.25 + 0.35 + k * TAU / n
+		var tip := Vector3(cos(t), sin(t), 0.0) * reach
+		var blade := bar(Vector3(0, 0.5, z), tip + Vector3(0, 0.5, z - 0.4), width, 0.4, DARK, 4)
+		blade.blade = true
+		parts.append(blade)
+
+
+## 꼬리 회전날개: c를 가운데로 십자 막대 둘 (길이 반경 r)
+static func _tail_rotor(parts: Array, c: Vector3, r: float) -> void:
+	parts.append(bar(c + Vector3(0, -r, 0), c + Vector3(0, r, 0), 1.0, 0.4, DARK, 3))
+	parts.append(bar(c + Vector3(0, 0, -r), c + Vector3(0, 0, r), 1.0, 0.4, DARK, 3))
+
+
+## 기수 밑 탐조등: 짧은 원통, 앞 마구리가 전조등 색 (켜면 밝다)
+static func _searchlight(parts: Array, at: Vector3) -> void:
+	var lamp := cyl(at + Vector3(0, -1.2, 0), at + Vector3(0, 1.2, 0), 1.6, 1.8, Vector3(1, 0, 0), Vector3(0, 0, 1), 8, DARK, 0)
+	lamp.colors[8] = HEAD
+	parts.append(lamp)
 
 
 ## 자전거 바퀴: 속이 비치게 가는 타이어 고리(막대 12개) + 바큇살 + 허브

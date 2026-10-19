@@ -1,27 +1,31 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://cweko0hdgbwep"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
-kind = 0
 text = "물건을 받아라"
 points = PackedVector2Array(4320, 754)
+headings = null
 radius = 40
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 5
 text = "경찰을 따돌려라"
+points = null
+headings = null
+npc_points = null
 wanted = 2
 
 [sub_resource type="Resource" id="step_2"]
 script = ExtResource("2")
-kind = 0
 text = "본부로 가져가라"
 points = PackedVector2Array(2510, 2870.4)
-radius = 50
+headings = null
+npc_points = null
 
 [resource]
 script = ExtResource("1")
@@ -30,7 +34,8 @@ gang = &"gangnam"
 tier = 2
 order = 2
 title = "검문 돌파"
-briefing = "북동쪽 끝에서 물건을 받아 와.\n누가 경찰에 찔렀다. 꼬리 떼고 와라."
+briefing = "북동쪽 끝에서 물건을 받아 와.
+누가 경찰에 찔렀다. 꼬리 떼고 와라."
 reward = 150000
 respect = 16
 time_limit = 240

@@ -1,39 +1,41 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://ccqmmnmg8inbf"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
-kind = 0
 text = "보호비 받기 (1/3)"
 points = PackedVector2Array(-2318, 2784)
+headings = null
 radius = 40
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
-kind = 0
 text = "보호비 받기 (2/3)"
 points = PackedVector2Array(-562, 2016)
+headings = null
 radius = 40
+npc_points = null
 
 [sub_resource type="Resource" id="step_2"]
 script = ExtResource("2")
-kind = 0
 text = "보호비 받기 (3/3)"
 points = PackedVector2Array(-3360, 1522)
+headings = null
 radius = 40
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"smuggler_12"
 gang = &"smuggler"
-tier = 0
 phone_set = 1
 order = 1
 title = "공단 수금"
-briefing = "공장 사장들한테 이번 달 보호비.\n세 곳."
+briefing = "공장 사장들한테 이번 달 보호비.
+세 곳."
 reward = 240000
-respect = 8
 time_limit = 110
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1"), SubResource("step_2")])

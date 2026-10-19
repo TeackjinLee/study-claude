@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://isskrkexpmhx"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/car_zenith_g8.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -12,6 +12,7 @@ points = PackedVector2Array(-1366, -1824, -2902, -1056)
 headings = PackedFloat32Array(0, 0)
 vehicle = ExtResource("3")
 moving = true
+npc_points = null
 
 [resource]
 script = ExtResource("1")
@@ -19,9 +20,9 @@ id = &"oldtown_18"
 gang = &"oldtown"
 tier = 2
 phone_set = 1
-order = 0
 title = "제니스 행렬"
-briefing = "강남 간부 둘이 제니스를 타고 여의도를 돈다.\n두 대 다 부숴."
+briefing = "강남 간부 둘이 제니스를 타고 여의도를 돈다.
+두 대 다 부숴."
 reward = 220000
 respect = 16
 time_limit = 200

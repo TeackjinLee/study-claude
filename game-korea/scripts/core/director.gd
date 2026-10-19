@@ -6,6 +6,7 @@ extends Node
 signal control_changed(target: Node2D)
 signal vehicle_stolen(vehicle: Vehicle, driver: Pedestrian)
 signal entering_started(vehicle: Vehicle)
+signal notice(text: String)          ## HUD에 띄울 안내 (헬기 착륙 등)
 
 const ENTER_RANGE := 90.0        ## 운전석 문에서 이 거리 안이면 탈 수 있다
 const ENTER_TIME := 0.25         ## 문까지 가서 타는 시간 (M1 기준: 0.3초 이내)
@@ -39,7 +40,11 @@ func _unhandled_input(event: InputEvent) -> void:
 func request_enter_exit() -> void:
 	if _entering:
 		return
-	if current_vehicle:
+	if current_vehicle and current_vehicle.airborne():
+		# 떠 있는 헬기: 바로 뛰어내리지 않고 그 자리에 내려앉는다 (한 번 더 누르면 다시 뜬다)
+		current_vehicle.landing = not current_vehicle.landing
+		notice.emit("착륙 중 — 내려앉으면 내린다 (다시 누르면 취소)" if current_vehicle.landing else "착륙 취소")
+	elif current_vehicle:
 		exit_vehicle()
 	else:
 		var v := nearest_enterable()
@@ -53,7 +58,7 @@ func nearest_enterable() -> Vehicle:
 	var best: Vehicle = null
 	var best_d := ENTER_RANGE
 	for v in vehicles:
-		if v.speed() > MAX_ENTER_SPEED or not v.usable():
+		if v.speed() > MAX_ENTER_SPEED or not v.usable() or v.airborne():
 			continue
 		var d := player.global_position.distance_to(v.door_position(false))
 		if d < best_d:
@@ -71,6 +76,9 @@ func _begin_enter(v: Vehicle) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if current_vehicle and current_vehicle.touched_down:
+		current_vehicle.touched_down = false
+		exit_vehicle()
 	if _entering == null:
 		return
 	_enter_t += delta
@@ -95,6 +103,8 @@ func enter_immediately(v: Vehicle) -> void:
 		vehicle_stolen.emit(v, driver)
 	current_vehicle = v
 	v.controlled = true
+	v.landing = false
+	v.touched_down = false
 	player.set_in_vehicle(true)
 	control_changed.emit(v)
 
@@ -105,14 +115,28 @@ func exit_vehicle() -> void:
 	if v == null:
 		return
 	v.controlled = false
+	v.landing = false
+	v.touched_down = false
 	current_vehicle = null
 	var spot := v.door_position(false)
 	if player.blocked_at(spot):
 		spot = v.door_position(true)
+	if v.airborne():
+		spot = _free_ground(v.global_position)   # 공중에서 내렸다 (사망·체포·리셋): 그 밑 빈 땅에 선다
 	player.global_position = spot
 	player.facing = v.motor.heading
 	player.set_in_vehicle(false)
 	control_changed.emit(player)
+
+
+## pos에서 가장 가까운, 사람이 설 수 있는 빈 자리 (건물 위면 둘레를 넓혀 가며 찾는다)
+func _free_ground(pos: Vector2) -> Vector2:
+	for r in range(0, 400, 24):
+		for k in maxi(1, r / 6):
+			var at := pos + Vector2.from_angle(TAU * k / maxi(1, r / 6)) * r
+			if not player.blocked_at(at):
+				return at
+	return pos
 
 
 func _process(_delta: float) -> void:

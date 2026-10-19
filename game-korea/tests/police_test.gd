@@ -188,11 +188,23 @@ func _test_foot_chase() -> void:
 	_expect(not busted[0], "달리면 도보 경찰을 따돌린다")
 	_expect(gap > 200.0, "달리는 동안 거리가 벌어진다 (%.0f)" % gap)
 	Input.action_release("sprint")
-	for f in 10 * 60:
+	var caught_at := -1.0
+	var hits := 0
+	var hp := player.health
+	for f in 20 * 60:
 		await _frames(1)
+		if caught_at < 0.0 and police.officers.any(func(o): return o.global_position.distance_to(player.global_position) < PoliceDispatcher.BEAT_RANGE):
+			caught_at = f / 60.0
+		if player.health < hp:
+			hits += 1
+			if OS.get_environment("POLICE_DEBUG") != "":
+				print("    매 t=%.2f 체력 %.0f 경찰 %d명" % [f / 60.0, player.health, police.officers.size()])
+		hp = player.health
 		if busted[0]:
+			print("  걸어서 잡힘: 손 닿음 %.1f초, 체포 %.1f초, 매 %d대, 체력 %.0f" % [caught_at, f / 60.0, hits, player.health])
 			break
 	_expect(busted[0], "걸으면 잡힌다")
+	_expect(hits >= 3 and player.knocked_down, "바로 잡히지 않고 곤봉에 몇 대 맞아 쓰러진 뒤 체포된다 (%d대)" % hits)
 	await _free(main)
 
 

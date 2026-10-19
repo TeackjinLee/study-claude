@@ -1,0 +1,20 @@
+{
+  "id": "SCHOOL",
+  "lot": "full",
+  "lot_size": [
+    520.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1678,
+    1021
+  ],
+  "origin": [
+    838.41,
+    562.65
+  ],
+  "scale": 1.69313,
+  "hull_lift": 18,
+  "hull_grow": 4
+}

@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://bd2wjylawncnv"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/trk_tanker.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -11,25 +11,27 @@ text = "유조차에 타라"
 points = PackedVector2Array(-2134, 3552)
 headings = PackedFloat32Array(0)
 vehicle = ExtResource("3")
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "부두에 세워라 (체력 50% 이상)"
 points = PackedVector2Array(-2592, 170)
+headings = null
 radius = 90
+npc_points = null
 min_health = 0.5
 
 [resource]
 script = ExtResource("1")
 id = &"smuggler_13"
 gang = &"smuggler"
-tier = 0
 phone_set = 1
 order = 2
 title = "유조차 운반"
-briefing = "기름 실은 유조차를 부두로.\n총 맞으면 동네가 날아간다."
+briefing = "기름 실은 유조차를 부두로.
+총 맞으면 동네가 날아간다."
 reward = 260000
-respect = 8
 time_limit = 30
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

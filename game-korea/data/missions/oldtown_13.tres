@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://gd7xcy55lut7"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/vehicles/bus_village.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
@@ -12,24 +12,26 @@ points = PackedVector2Array(-1824, -7510)
 headings = PackedFloat32Array(1.5708)
 vehicle = ExtResource("3")
 driver = true
+npc_points = null
 
 [sub_resource type="Resource" id="step_1"]
 script = ExtResource("2")
 kind = 2
 text = "변두리 차고에 세워라"
 points = PackedVector2Array(1248, -6742)
+headings = null
 radius = 80
+npc_points = null
 
 [resource]
 script = ExtResource("1")
 id = &"oldtown_13"
 gang = &"oldtown"
-tier = 0
 phone_set = 1
 order = 2
 title = "마을버스 납치"
-briefing = "마을버스 기사가 우리 돈을 안 갚는다.\n버스째 끌고 와."
+briefing = "마을버스 기사가 우리 돈을 안 갚는다.
+버스째 끌고 와."
 reward = 115000
-respect = 8
 time_limit = 25
 steps = Array[ExtResource("2")]([SubResource("step_0"), SubResource("step_1")])

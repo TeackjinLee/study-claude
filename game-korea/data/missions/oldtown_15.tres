@@ -1,13 +1,15 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://qm32f40p7m5h"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/npc/gang_gangnam.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
 kind = 3
 text = "강남 조직원을 처리해라"
+points = null
+headings = null
 npc = ExtResource("3")
 npc_points = PackedVector2Array(-1714.4, -782, -1824, -782, -1933.6, -782)
 
@@ -17,9 +19,9 @@ id = &"oldtown_15"
 gang = &"oldtown"
 tier = 1
 phone_set = 1
-order = 0
 title = "강남 첩자"
-briefing = "강남 조직 첩자 셋이 여의도에서 우리 장부를 노린다.\n먼저 쳐."
+briefing = "강남 조직 첩자 셋이 여의도에서 우리 장부를 노린다.
+먼저 쳐."
 reward = 160000
 respect = 12
 time_limit = 160

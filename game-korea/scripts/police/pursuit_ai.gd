@@ -129,7 +129,7 @@ func _avoid(aim: Vector2, speed: float) -> Vector2:
 	var nearest := INF
 	var shift := 0.0
 	for v in vehicles:
-		if v == vehicle or (ram and v == target_vehicle):
+		if v == vehicle or v.airborne() or (ram and v == target_vehicle):
 			continue
 		if v.global_position.distance_to(vehicle.global_position) > look + 80.0:
 			continue

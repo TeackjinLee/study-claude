@@ -136,6 +136,7 @@ var _respawning := false
 var _district: DistrictType
 var _buying: Hideout                      ## 살지 묻고 있는 은신처
 var _last_vehicle: Vehicle
+var _landmark_parked := {}                ## 랜드마크 차를 세운 자리 (Vector2i) — 장이 열릴 때 겹쳐 세우지 않게
 
 
 func _ready() -> void:
@@ -157,13 +158,7 @@ func _ready() -> void:
 	for spec: Array in PARKED:
 		vehicles.append(_spawn_parked(spec))
 	start_vehicle = vehicles[0]
-	# 랜드마크 공터에 세워 둔 차 (터미널 승강장의 고속버스 — 훔쳐 탈 수 있다)
-	for spot: Array in city.landmark_parking():
-		var bus := Vehicle.new()
-		bus.stats = load(spot[2]) if spot.size() > 2 else LANDMARK_BUS   # 소방서 소방차·주유소 택시 (StreetBuilding.parking)
-		add_child(bus)
-		bus.place(spot[0], spot[1])
-		vehicles.append(bus)
+	_spawn_landmark_parking()
 	skid_marks.vehicles = vehicles
 
 	pedestrians = PedestrianManager.new()
@@ -317,6 +312,7 @@ func _ready() -> void:
 			hud.notify("%s 끝 — %s (%d단계)" % [j.display_name, reason, n]))
 	jobs.job_mastered.connect(_on_job_mastered)
 	_update_goal()
+	director.notice.connect(hud.notify)
 	pickups.picked.connect(hud.notify)
 	spray_shop.notice.connect(hud.notify)
 	missions.mission_started.connect(_on_mission_started)
@@ -369,6 +365,25 @@ func _physics_process(delta: float) -> void:
 	_check_district()
 
 
+## 열린 구역 랜드마크 공터에 세워 둔 차 (터미널 승강장의 고속버스·소방서 소방차·주유소 택시·부두 헬기 — 훔쳐 탈 수 있다).
+## 장이 열릴 때마다 다시 불러, 아직 안 세운 자리에만 세운다
+func _spawn_landmark_parking() -> void:
+	for spot: Array in city.landmark_parking():
+		var key := Vector2i(spot[0].round())
+		if _landmark_parked.has(key):
+			continue
+		var t: VehicleType = load(spot[2]) if spot.size() > 2 else LANDMARK_BUS
+		if Vehicle.exists(vehicles, t):
+			continue   # 한 대만 있는 차종(자주포)이 이미 도시에 있다 — 그게 없어지면 다음에 세운다
+		_landmark_parked[key] = true
+		var v := Vehicle.new()
+		v.stats = t
+		add_child(v)
+		v.place(spot[0], spot[1])
+		v.landing_blocked.connect(func(): if hud: hud.notify("밑이 막혀 내려앉을 수 없다 — 빈 땅이나 도로 위로 옮긴다"))
+		vehicles.append(v)
+
+
 func _spawn_parked(spec: Array) -> Vehicle:
 	var v := Vehicle.new()
 	v.stats = VEHICLE_TYPES[spec[0]]
@@ -412,6 +427,7 @@ func set_chapter(n: int) -> void:
 	city.refresh_locks()
 	traffic.on_map_changed()
 	pedestrians.on_map_changed()
+	_spawn_landmark_parking()   # 새로 열린 구역의 랜드마크 차 (4장 부두 헬기)
 	_update_goal()
 
 

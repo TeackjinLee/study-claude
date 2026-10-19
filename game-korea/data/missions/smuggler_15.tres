@@ -1,13 +1,15 @@
-[gd_resource type="Resource" script_class="MissionType" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="MissionType" format=3 uid="uid://c2g6u22y036cp"]
 
-[ext_resource type="Script" path="res://scripts/missions/mission_type.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/missions/mission_step.gd" id="2"]
+[ext_resource type="Script" uid="uid://b6gowr023bui2" path="res://scripts/missions/mission_type.gd" id="1"]
+[ext_resource type="Script" uid="uid://db1nixo47wm61" path="res://scripts/missions/mission_step.gd" id="2"]
 [ext_resource type="Resource" path="res://data/npc/gang_gangnam.tres" id="3"]
 
 [sub_resource type="Resource" id="step_0"]
 script = ExtResource("2")
 kind = 3
 text = "강남 조직원을 처리해라"
+points = null
+headings = null
 npc = ExtResource("3")
 npc_points = PackedVector2Array(-2701.6, 3278, -1550, 3552, -1056, 4046)
 
@@ -17,9 +19,9 @@ id = &"smuggler_15"
 gang = &"smuggler"
 tier = 1
 phone_set = 1
-order = 0
 title = "공단 첩자"
-briefing = "강남 조직 첩자 셋이 공단에 숨어들었다.\n찾아서 끝내."
+briefing = "강남 조직 첩자 셋이 공단에 숨어들었다.
+찾아서 끝내."
 reward = 400000
 respect = 12
 time_limit = 160
