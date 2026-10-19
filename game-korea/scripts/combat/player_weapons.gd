@@ -9,6 +9,8 @@ extends Node
 ## 차량 기관총은 차 안에서만 앞으로 쏜다. 소방차를 몰면 쏘기 버튼은 늘 물대포(앞으로).
 ## 포탑 달린 차(자주포·전술차량)를 몰면 포탑이 마우스 커서 쪽으로 돌고(Q·E는 포탑을 손으로 돌린다), 쏘기 버튼은 포탑 무기다.
 ## 자주포는 곡사포 — 커서가 있는 땅(사거리 안으로 당긴다)에 포탄이 떨어지고, 포신은 그 거리만큼 든다. 키보드만 쓰면 마지막 거리 그대로.
+## 굴삭기는 상부가 커서 쪽으로 돌고 팔이 커서까지 뻗는다 — 쏘기 버튼은 퍼 올리기(찍은 곳의 차를 집고, 들고 있으면 놓는다).
+## 불도저는 쏘기 버튼이 블레이드 올리기·내리기다.
 
 const MUZZLE := 10.0
 ## 커서가 사람 몸(발끝~머리, 화면 px·줌 1)에서 이만큼 안이면 그 사람을 겨눈다
@@ -71,6 +73,9 @@ func _input(event: InputEvent) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var v := director.current_vehicle
+	if v and v.stats.blade and event.is_action_pressed("fire"):
+		v.blade_up = not v.blade_up
+		return
 	if v and v.stats.turret_rate > 0.0:
 		return   # 포탑 달린 차에서는 Q·E가 포탑을 돌린다 (_steer_turret)
 	if event.is_action_pressed("weapon_next"):
@@ -86,6 +91,10 @@ func shoot() -> bool:
 	var v := director.current_vehicle
 	if player.is_dead() or director.is_entering():
 		return false
+	if v and v.stats.arm_reach.y > 0.0:
+		return v.start_dig()
+	if v and v.stats.blade:
+		return false   # 블레이드는 누를 때 한 번씩 (_unhandled_input)
 	if v and _mounted(v) and not v.wrecked:
 		return _fire_mounted(v, _mounted(v))
 	if not arsenal.can_fire():
@@ -155,7 +164,7 @@ func _steer_turret(v: Vehicle, delta: float) -> void:
 		var rel := at - v.global_position
 		if rel.length() > 4.0:
 			v.turret_goal = v.turret + angle_difference(v.turret, v.motor.forward().angle_to(rel))
-			if v.stats.cannon_max > 0.0:
+			if v.stats.cannon_max > 0.0 or v.stats.arm_reach.y > 0.0:
 				v.aim_range = rel.length()
 
 

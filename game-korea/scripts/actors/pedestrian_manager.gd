@@ -269,7 +269,7 @@ func _sense(p: Pedestrian) -> void:
 		var local := v.to_local(p.global_position)
 		var half := v.stats.size * 0.5 + Vector2(Pedestrian.RADIUS, Pedestrian.RADIUS)
 		# 무한궤도는 느려도 밑에 든 사람을 깔아뭉갠다 (도는 중에도)
-		var crushing := v.stats.tracked and (speed > Combat.CRUSH_MOVING or absf(v.motor.steer) > 0.2)
+		var crushing := v.stats.crusher and (speed > Combat.CRUSH_MOVING or absf(v.motor.steer) > 0.2)
 		if (speed > HIT_SPEED or crushing) and absf(local.x) < half.x and absf(local.y) < half.y:
 			# 이미 넘어진 사람은 다시 치지 않는다 (한 번 부딪힌 걸 매 프레임 세지 않게). 아이는 늘 피한다
 			if p.npc.protected:

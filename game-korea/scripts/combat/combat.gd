@@ -23,7 +23,14 @@ const MUZZLE_TIME := 0.35            ## 포구 불꽃·연기
 const CRUSH_DPS := 160.0             ## 무한궤도에 깔린 차가 받는 초당 피해 (몇 초면 불이 난다)
 const CRUSH_RATE := 1.5              ## 깔린 차가 납작해지는 빠르기 (1/s)
 const CRUSH_PLAYER_DPS := 400.0      ## 무한궤도 밑에 깔린 주인공(도보)이 받는 초당 피해
-const CRUSH_MOVING := 4.0            ## 이보다 빨리 움직이거나 돌 때만 깔아뭉갠다 (px/s)
+const CRUSH_MOVING := 4.0
+const GRAB_RADIUS := 26.0            ## 굴삭기 버킷이 이 안의 차를 집는다 (차 반 폭을 더한다)
+const GRAB_DAMAGE := 25.0            ## 버킷에 찍혀 집힌 차가 받는 피해
+const DIG_RADIUS := 22.0             ## 버킷이 찍은 곳에서 이 안의 사람은 넘어진다
+const DIG_PERSON_DAMAGE := 40.0
+const BLADE_DPS := 70.0              ## 내린 불도저 블레이드에 밀리는 차가 받는 초당 피해
+const BLADE_PERSON_DAMAGE := 30.0    ## 블레이드에 밀린 사람 (넘어진다)
+const DUST_TIME := 1.2            ## 이보다 빨리 움직이거나 돌 때만 깔아뭉갠다 (px/s)
 
 var vehicles: Array[Vehicle] = []    ## 도시의 모든 차 (main과 공유)
 var pedestrians: PedestrianManager
@@ -43,6 +50,7 @@ var _blasts: Array = []              ## [pos, 크기 배율, age]
 var _swings: Array = []              ## [pos, dir, age]
 var _shells: Array[Dictionary] = []  ## 곡사 포탄 {from, to, dur, t, w, by_player, shooter} — 건물 위로 날아가 겨눈 땅에 떨어진다
 var _muzzles: Array = []             ## 포구 불꽃 [pos, dir, age]
+var _dusts: Array = []               ## 굴삭기가 찍은 흙먼지 [pos, age]
 var _under := {}                     ## 무한궤도 밑에 든 차 [무한궤도, 차] → true (그동안 둘의 충돌을 뺀다)
 var _scorch: Array[Vector2] = []
 var _decals: Node2D
@@ -68,14 +76,17 @@ func _physics_process(delta: float) -> void:
 			_watched[v] = true
 			v.caught_fire.connect(_on_caught_fire.bind(v))
 			v.exploded.connect(_on_exploded.bind(v))
+			if v.stats.arm_reach.y > 0.0:
+				v.dug.connect(_on_dug.bind(v))
 	_cleanup_wrecks(delta)
 	_fly(delta)
 	_fly_shells(delta)
 	_crush(delta)
+	_blades(delta)
 	for pair: Array in _under.keys():
 		if not is_instance_valid(pair[0]) or not is_instance_valid(pair[1]):
 			_under.erase(pair)
-	for list: Array in [_tracers, _blasts, _swings, _flames, _muzzles]:
+	for list: Array in [_tracers, _blasts, _swings, _flames, _muzzles, _dusts]:
 		for e: Array in list:
 			e[-1] += delta
 	_flames = _flames.filter(func(e: Array): return e[3] < 0.25)
@@ -83,6 +94,7 @@ func _physics_process(delta: float) -> void:
 	_blasts = _blasts.filter(func(e: Array): return e[2] < BLAST_TIME)
 	_swings = _swings.filter(func(e: Array): return e[2] < SWING_TIME)
 	_muzzles = _muzzles.filter(func(e: Array): return e[2] < MUZZLE_TIME)
+	_dusts = _dusts.filter(func(e: Array): return e[1] < DUST_TIME)
 
 
 ## 그림은 화면 프레임마다 한 번 (물리 틱마다 부르면 느릴수록 한 프레임에 여러 번 그린다)
@@ -234,7 +246,7 @@ static func shell_at(p: Dictionary) -> Array:
 ## 무한궤도는 차와 부딪히지 않으므로(Vehicle.apply_stats) 막히지 않고 지나간다. 밑에 든 사람은 PedestrianManager가 친다
 func _crush(delta: float) -> void:
 	for t in vehicles:
-		if not t.stats.tracked or t.wrecked:
+		if not t.stats.crusher or t.wrecked:
 			continue
 		var moving := t.speed() > CRUSH_MOVING or absf(t.motor.steer) > 0.2 and (t.controlled or t.has_driver)
 		var half := t.stats.size * 0.5
@@ -271,6 +283,74 @@ func _crush(delta: float) -> void:
 			var lp := t.to_local(player.global_position)
 			if absf(lp.x) < half.x + Player.RADIUS and absf(lp.y) < half.y + Player.RADIUS:
 				player.take_damage(CRUSH_PLAYER_DPS * delta)
+
+
+# ── 중장비 (굴삭기 · 불도저) ──────────────────────────────
+
+## 굴삭기 버킷이 땅을 찍었다: 들고 있던 차가 있으면 그 자리에 놓고, 없으면 찍은 곳의 차를 집는다(탄 사람은 내린다).
+## 찍힌 곳의 사람은 넘어지고 흙먼지가 인다
+func _on_dug(at: Vector2, ex: Vehicle) -> void:
+	_dusts.append([at, 0.0])
+	for p: Pedestrian in pedestrians.peds.duplicate():
+		if not p.is_dead() and p.global_position.distance_to(at) < DIG_RADIUS + Pedestrian.RADIUS:
+			pedestrians.damage(p, DIG_PERSON_DAMAGE, p.global_position - at, ex.controlled, true)
+	if ex.carried:
+		ex.release()
+		return
+	var best: Vehicle = null
+	var best_d := INF
+	for v in vehicles:
+		if v == ex or v.stats.tracked or v.airborne() or v.carried_by or v == director.current_vehicle:
+			continue
+		var d := v.global_position.distance_to(at) - minf(v.stats.size.x, v.stats.size.y) * 0.5
+		if d < GRAB_RADIUS and d < best_d:
+			best_d = d
+			best = v
+	if best == null:
+		return
+	damage_vehicle(best, GRAB_DAMAGE, ex.controlled)
+	best.dent_at(at, GRAB_DAMAGE)
+	if best.has_driver:
+		_bail_out(best)
+	if traffic:
+		traffic.remove_ai(best)
+	best.pursuit = null
+	best.pick_up_by(ex)
+
+
+## 굴삭기가 집은 차의 운전자는 뛰어내린다 (경찰은 내려서 쫓아온다)
+func _bail_out(v: Vehicle) -> void:
+	v.has_driver = false
+	var door := v.door_position(false)
+	var outward := (door - v.global_position).normalized()
+	if police and police.owns(v):
+		police.eject_crew(v, door + outward * EJECT_OFFSET)
+	else:
+		pedestrians.spawn_fleeing(door + outward * EJECT_OFFSET, outward, v.stats.driver_npc)
+
+
+## 내린 불도저 블레이드: 앞으로 밀고 가는 동안 블레이드 앞의 차는 다치며 밀려 가고, 사람은 밀려 넘어진다
+func _blades(delta: float) -> void:
+	for d in vehicles:
+		if not d.stats.blade or d.wrecked or d.blade_up or d.motor.forward_speed() < CRUSH_MOVING:
+			continue
+		var half := d.stats.size * 0.5
+		for v in vehicles:
+			if v == d or v.airborne():
+				continue
+			var local := d.to_local(v.global_position)
+			var r := minf(v.stats.size.x, v.stats.size.y) * 0.5
+			if absf(local.x) < half.x + r and local.y < -half.y * 0.6 and local.y > -half.y - r - 6.0:
+				damage_vehicle(v, BLADE_DPS * delta, d.controlled)
+				# 옆으로 선 차는 바퀴 접지가 미끄러짐을 지워 버리므로, 불도저가 나아간 만큼 직접 밀어 옮긴다 (벽에는 막힌다)
+				v.move_and_collide(d.motor.forward() * d.motor.forward_speed() * delta * 1.08)
+				v.motor.velocity = v.motor.velocity.lerp(d.motor.velocity, minf(6.0 * delta, 1.0))
+		for p: Pedestrian in pedestrians.peds.duplicate():
+			if p.is_dead() or p.state == Pedestrian.State.KNOCKED:
+				continue
+			var lp := d.to_local(p.global_position)
+			if absf(lp.x) < half.x + 4.0 and lp.y < -half.y * 0.6 and lp.y > -half.y - 10.0:
+				pedestrians.damage(p, BLADE_PERSON_DAMAGE, d.motor.forward(), d.controlled, true)
 
 
 # ── 화염방사기 · 물대포 ───────────────────────────────────
@@ -490,6 +570,18 @@ func _draw_cannon() -> void:
 		draw_arc(at, r * 0.45, -PI * 0.5, -PI * 0.5 + TAU * minf(ready, 1.0), 24, c, 3.0)
 		for d in [Vector2.RIGHT, Vector2.DOWN, Vector2.LEFT, Vector2.UP]:
 			draw_line(at + d * r * 0.7, at + d * r * 1.25, c, 2.0)
+	if v and v.stats.arm_reach.y > 0.0 and not v.wrecked:
+		var at := v.bucket_ground()
+		var c := Color(1.0, 0.8, 0.25, 0.85) if v.carried == null else Color(0.5, 0.9, 1.0, 0.85)
+		draw_arc(at, GRAB_RADIUS, 0.0, TAU, 24, c, 2.0)
+		draw_line(at + Vector2(-8, 0), at + Vector2(8, 0), c, 2.0)
+		draw_line(at + Vector2(0, -8), at + Vector2(0, 8), c, 2.0)
+	for e: Array in _dusts:
+		var k: float = e[1] / DUST_TIME
+		for i in 5:
+			var off := Vector2.RIGHT.rotated(i * TAU / 5.0 + 0.4) * (8.0 + 26.0 * k)
+			var up := IsoView.lift(4.0 + 22.0 * k) if IsoView.enabled else Vector2.ZERO
+			FireFx.circle(self, e[0] + off + up, 10.0 + 14.0 * k, Color(0.55, 0.45, 0.32, 0.55 * (1.0 - k)))
 	var now := Time.get_ticks_msec() / 1000.0
 	for p: Dictionary in _shells:
 		var w: WeaponType = p.w

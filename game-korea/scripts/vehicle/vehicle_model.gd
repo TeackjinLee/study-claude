@@ -71,6 +71,9 @@ class Part:
 	var turret := 0                 ## 1: 포탑 (Vehicle.turret만큼 axis_y 축으로 돈다) · 2: 포신 (trunnion에서 들린 뒤 포탑과 같이 돈다)
 	var axis_y := 0.0               ## 포탑이 도는 축의 y
 	var trunnion := Vector2.ZERO    ## 포신이 들리는 축 (y, z)
+	## 관절 사슬 (굴삭기 붐·암·버킷, 불도저 블레이드): 안쪽 관절부터 [축 y, 축 z, 각 번호] — 각은 Vehicle.joints의 x·y·z.
+	## 각 관절에서 앞(−y)이 그 각만큼 들리고, 포탑 부품이면 그 뒤 포탑 각으로 돈다
+	var joints: Array[Vector3] = []
 	var decals: Array = []          ## [PackedVector3Array, 법선, 색]
 
 
@@ -82,6 +85,7 @@ static var _turret := 0.0        ## 지금 그리는 차의 포탑 각 (차 앞 
 static var _elev := 0.0          ## 포신을 든 각 (Vehicle.elevation)
 static var _recoil := 0.0        ## 쏜 뒤 포신이 뒤로 밀린 거리 (px)
 static var _squash := 1.0        ## 깔려 납작해진 정도 (높이 배율, Vehicle.crushed)
+static var _jangles := Vector3.ZERO   ## 관절 각 (Vehicle.joints)
 static var _cur: Part = null     ## 지금 그리는 부품 (포탑·포신이면 점을 돌린다)
 static var hide_blades := false  ## 주 회전날개를 빼고 그린다 (헬기 그림 가이드 — 날개는 코드가 따로 그린다)
 static var even_light := false   ## 옆면을 좌우 같은 밝기로 (헬기 그림 가이드 — 좌우 뒤집어 쓰는 그림이라 빛이 한쪽이면 안 된다)
@@ -134,6 +138,7 @@ static func draw(ci: CanvasItem, car: Vehicle) -> void:
 	_elev = car.elevation
 	_recoil = car.recoil * RECOIL
 	_squash = 1.0 - CRUSH_FLAT * car.crushed
+	_jangles = car.joints
 	middle.sort_custom(func(a: Part, b: Part) -> bool:
 		return a.layer * 100000.0 + _posed(a.center, a).dot(view) < b.layer * 100000.0 + _posed(b.center, b).dot(view))
 	var dents: Array = car.dents
@@ -184,7 +189,7 @@ static func _project(pts: PackedVector3Array, idx: PackedInt32Array, up: Vector2
 		var p := pts[idx[k]]
 		if not dents.is_empty():
 			p = _dented(p, dents)
-		if _cur and _cur.turret != 0:
+		if _cur and (_cur.turret != 0 or not _cur.joints.is_empty()):
 			p = _posed(p, _cur)
 		if _squash < 1.0:
 			p.z *= _squash
@@ -196,7 +201,18 @@ static func _project(pts: PackedVector3Array, idx: PackedInt32Array, up: Vector2
 
 ## 포탑·포신 부품의 점(normal이면 방향)을 지금 포탑 각·포신 각으로 돌린다. 다른 부품은 그대로
 static func _posed(q: Vector3, part: Part, normal := false) -> Vector3:
-	if part == null or part.turret == 0:
+	if part == null or (part.turret == 0 and part.joints.is_empty()):
+		return q
+	for j: Vector3 in part.joints:
+		var a: float = _jangles[int(j.z)]
+		var y := q.y if normal else q.y - j.x
+		var z := q.z if normal else q.z - j.y
+		var c := cos(a)
+		var sn := sin(a)
+		q = Vector3(q.x, y * c + z * sn, -y * sn + z * c)
+		if not normal:
+			q += Vector3(0, j.x, j.y)
+	if part.turret == 0:
 		return q
 	if part.turret == 2:
 		# 포신: 쏜 뒤 뒤로 밀리고(+y), 포이 축(trunnion)에서 앞(−y)이 들린다
@@ -619,6 +635,8 @@ static func _build(s: VehicleType) -> Array:
 		"sp_army": return _army(w, l, h)
 		"army_spg": return _spg(w, l, h)
 		"army_jeep": return _jeep(w, l, h)
+		"heavy_excavator": return _excavator(w, l, h)
+		"heavy_dozer": return _dozer(w, l, h)
 		"bus_city", "bus_express", "bus_village": return _bus(w, l, h, id == "bus_express")
 		"sp_ambulance": return _van(w, l, h, true)
 		"sp_swat": return _van(w, l, h, false)
@@ -1107,24 +1125,7 @@ static func _spg(w: float, l: float, h: float) -> Array:
 	var u := Vector3(1, 0, 0)
 	var v := Vector3(0, 0, 1)
 	var tw := 9.0                       # 궤도 폭
-	# 무한궤도: 아래가 짧은 띠(앞뒤가 비스듬) + 보기륜 6쌍 + 앞 구동륜·뒤 유도륜 + 위 옆 덮개
-	for side: int in [-1, 1]:
-		var x0 := side * hw
-		var x1 := side * (hw - tw)
-		var xa := minf(x0, x1)
-		var xb := maxf(x0, x1)
-		var belt := hull(xa, xb, -hl + 5.0, hl - 4.0, 0.0, xa, xb, -hl, hl, 8.0, TIRE, 1)
-		for k in 14:
-			sides(belt, k / 14.0, k / 14.0 + 0.025, 0.0, 1.0, SIDEWALL)    # 궤도 마디
-		parts.append(belt)
-		for k in 6:
-			var y := lerpf(-hl * 0.7, hl * 0.66, k / 5.0)
-			parts.append(wheel(side * (hw - 0.9), y, 3.4, 0.5, side, [BODY, 0.25], 0))
-		parts.append(wheel(side * (hw - 0.9), -hl + 4.5, 3.8, 0.5, side, DARK, 6))
-		parts.append(wheel(side * (hw - 0.9), hl - 4.5, 3.6, 0.5, side, DARK, 0))
-		var skirt := box(xa - 0.3, xb + 0.3, -hl + 3.0, hl - 2.0, 7.4, 10.0, BODY, 2, 0.6)
-		decal(skirt, R if side > 0 else L, 0.2, 0.42, 0.0, 1.0, CAMO)
-		parts.append(skirt)
+	_tracks(parts, hw, hl, tw, 8.0, 6)
 	# 차체: 궤도 사이 아래 몸통 + 위 갑판 + 경사진 앞판
 	parts.append(box(-hw + tw, hw - tw, -hl + 4.0, hl - 2.0, 2.0, 10.0, [BODY, 0.2], 1))
 	var deck := box(-hw + 0.5, hw - 0.5, -hl + 12.0, hl, 10.0, 13.0, BODY, 2, 1.0)
@@ -1179,6 +1180,152 @@ static func _spg(w: float, l: float, h: float) -> Array:
 		p.axis_y = ay
 		p.trunnion = Vector2(ty, tz)
 	parts.append_array(gun)
+	return parts
+
+
+## 무한궤도 한 쌍: 아래가 짧은 띠(앞뒤 비스듬, 마디) + 보기륜 n쌍 + 앞 구동륜·뒤 유도륜 + 위 옆 덮개(얼룩 한 점). 궤도 폭 tw, 띠 높이 bh
+static func _tracks(parts: Array, hw: float, hl: float, tw: float, bh: float, n: int, skirt := true) -> void:
+	for side: int in [-1, 1]:
+		var xa := minf(side * hw, side * (hw - tw))
+		var xb := maxf(side * hw, side * (hw - tw))
+		var belt := hull(xa, xb, -hl + 5.0, hl - 4.0, 0.0, xa, xb, -hl, hl, bh, TIRE, 1)
+		for k in 14:
+			sides(belt, k / 14.0, k / 14.0 + 0.025, 0.0, 1.0, SIDEWALL)    # 궤도 마디
+		parts.append(belt)
+		for k in n:
+			var y := lerpf(-hl * 0.7, hl * 0.66, k / float(n - 1))
+			parts.append(wheel(side * (hw - 0.9), y, bh * 0.42, 0.5, side, [BODY, 0.25], 0))
+		parts.append(wheel(side * (hw - 0.9), -hl + 4.5, bh * 0.48, 0.5, side, DARK, 6))
+		parts.append(wheel(side * (hw - 0.9), hl - 4.5, bh * 0.45, 0.5, side, DARK, 0))
+		if skirt:
+			var sk := box(xa - 0.3, xb + 0.3, -hl + 3.0, hl - 2.0, bh - 0.6, bh + 2.0, BODY, 2, 0.6)
+			decal(sk, R if side > 0 else L, 0.2, 0.42, 0.0, 1.0, CAMO)
+			parts.append(sk)
+
+
+## 굴삭기: 무한궤도(검은 궤도 프레임) + 가운데 선회 받침 + 상부(포탑 = Vehicle.turret으로 돈다: 유리 운전실·엔진 덮개·
+## 뒤 평형추·난간) + 붐·암·버킷(관절 = Vehicle.joints 붐·암·버킷 각, 유압 실린더 포함). 노란 차체, 짙은 회색 프레임
+static func _excavator(w: float, l: float, h: float) -> Array:
+	var hw := w * 0.5
+	var hl := l * 0.5
+	var parts: Array = []
+	_tracks(parts, hw, hl, 10.0, 8.0, 5, false)
+	for side: int in [-1, 1]:                                                  # 궤도 프레임 (짙은 회색)
+		var fx := side * (hw - 10.0)
+		parts.append(box(fx - 1.0, fx + 1.0, -hl + 6.0, hl - 6.0, 3.0, 7.5, ACCENT, 1))
+	parts.append(box(-hw + 10.0, hw - 10.0, -hl * 0.4, hl * 0.4, 3.0, 8.5, ACCENT, 1))
+	parts.append(cyl(Vector3(0, 0, 8.5), Vector3(0, 0, 10.5), 12.0, 12.0, Vector3(1, 0, 0), Vector3(0, 1, 0), 12, DARK, 2))   # 선회 받침
+	var ay := 0.0
+	var house: Array = []
+	var deck := box(-hw + 1.0, hw - 1.0, -hl * 0.55, hl * 0.95, 10.5, 15.0, BODY, 2, 2.0)
+	sides(deck, 0.0, 1.0, 0.0, 0.18, [BODY, 0.3])
+	house.append(deck)
+	var cab := hull(-hw + 2.0, -hw + 15.0, -hl * 0.6, -hl * 0.08, 15.0, -hw + 2.5, -hw + 14.5, -hl * 0.52, -hl * 0.12, h + 4.0, BODY, 3, 1.2)
+	decal(cab, F, 0.06, 0.94, 0.12, 0.92, GLASS)
+	decal(cab, L, 0.08, 0.92, 0.3, 0.9, GLASS)
+	decal(cab, R, 0.1, 0.55, 0.35, 0.9, GLASS)
+	decal(cab, R, 0.62, 0.9, 0.12, 0.9, [BODY, 0.2])                           # 문
+	decal_uv(cab, F, [Vector2(0.15, 0.4), Vector2(0.3, 0.4), Vector2(0.5, 0.85), Vector2(0.35, 0.85)], GLINT)
+	house.append(cab)
+	var engine := box(-hw + 16.0, hw - 1.5, -hl * 0.1, hl * 0.62, 15.0, h - 2.0, BODY, 3, 1.4)
+	for k in 5:
+		top_rect(engine, -hw + 19.0 + k * 3.6, -hw + 20.6 + k * 3.6, hl * 0.12, hl * 0.48, [BODY, 0.35])   # 환기구
+	house.append(engine)
+	var weight := hull(-hw + 1.0, hw - 1.0, hl * 0.62, hl * 0.98, 10.5, -hw + 2.0, hw - 2.0, hl * 0.62, hl * 0.94, h - 2.0, ACCENT, 3, 3.0)
+	sides(weight, 0.0, 1.0, 0.75, 0.85, HAZARD)
+	decal(weight, B, 0.1, 0.9, 0.75, 0.85, HAZARD)
+	house.append(weight)
+	house.append(cyl(Vector3(hw - 5.0, hl * 0.3, h - 2.0), Vector3(hw - 5.0, hl * 0.3, h + 4.0), 1.0, 1.0,
+		Vector3(1, 0, 0), Vector3(0, 1, 0), 6, DARK, 4))                         # 배기관
+	house.append(box(-hw + 2.0, -hw + 15.0, -hl * 0.52, -hl * 0.12, h + 4.0, h + 4.8, [BODY, 0.1], 4, 0.6))   # 운전실 지붕
+	house.append(box(-hw + 15.5, -hw + 17.5, -hl * 0.62, -hl * 0.3, 15.0, 19.0, ACCENT, 3))   # 붐 받침
+	for p: Part in house:
+		p.turret = 1
+		p.axis_y = ay
+	parts.append_array(house)
+	# 팔: 붐(뿌리 = ExcavatorArm.PIVOT) → 암 → 버킷. 쉬는 자세(각 0)에서는 모두 앞으로 수평
+	var py := ay + ExcavatorArm.PIVOT_Y
+	var pz := ExcavatorArm.PIVOT_Z
+	var by := py - ExcavatorArm.BOOM
+	var sy := by - ExcavatorArm.STICK
+	var bx := -hw + 21.0        # 붐은 운전실 오른쪽 옆 (실제 굴삭기처럼 가운데보다 조금 옆)
+	var boom_j: Array[Vector3] = [Vector3(py, pz, 0)]
+	var stick_j: Array[Vector3] = [Vector3(by, pz, 1), Vector3(py, pz, 0)]
+	var bucket_j: Array[Vector3] = [Vector3(sy, pz, 2), Vector3(by, pz, 1), Vector3(py, pz, 0)]
+	var arm: Array = []
+	var boom := hull(bx - 2.6, bx + 2.6, by - 1.0, py + 2.0, pz - 3.5, bx - 2.2, bx + 2.2, by - 1.0, py + 1.0, pz + 3.5, BODY, 3, 1.0)
+	boom.joints = boom_j
+	arm.append(boom)
+	var hump := box(bx - 2.4, bx + 2.4, py - ExcavatorArm.BOOM * 0.62, py - ExcavatorArm.BOOM * 0.32, pz + 3.0, pz + 6.0, BODY, 3, 1.0)
+	hump.joints = boom_j
+	arm.append(hump)
+	var ram := bar(Vector3(bx, py - 2.0, pz - 6.0), Vector3(bx, py - ExcavatorArm.BOOM * 0.55, pz - 2.0), 1.4, 1.4, CHROME, 3)   # 붐 실린더
+	ram.joints = boom_j
+	arm.append(ram)
+	var stick := hull(bx - 2.0, bx + 2.0, sy - 0.5, by + 2.0, pz - 2.8, bx - 1.7, bx + 1.7, sy, by + 1.5, pz + 2.6, BODY, 3, 0.8)
+	stick.joints = stick_j
+	arm.append(stick)
+	var sram := bar(Vector3(bx, by + 4.0, pz + 4.5), Vector3(bx, by - ExcavatorArm.STICK * 0.7, pz + 2.6), 1.1, 1.1, CHROME, 3)   # 암 실린더
+	sram.joints = stick_j
+	arm.append(sram)
+	# 버킷: 쉬는 자세에서 앞으로 뻗은 국자 (뒤판 + 바닥 + 이빨)
+	var bucket := hull(bx - 4.0, bx + 4.0, sy - 9.0, sy + 1.0, pz - 3.0, bx - 4.0, bx + 4.0, sy - 6.0, sy + 1.0, pz + 3.0, ACCENT, 3, 0.8)
+	bucket.joints = bucket_j
+	arm.append(bucket)
+	for k in 4:
+		var tx := bx - 3.0 + k * 2.0
+		var tooth := box(tx - 0.6, tx + 0.6, sy - 11.0, sy - 9.0, pz - 2.6, pz - 1.4, STEEL, 3)
+		tooth.joints = bucket_j
+		arm.append(tooth)
+	for p: Part in arm:
+		p.turret = 1
+		p.axis_y = ay
+	parts.append_array(arm)
+	return parts
+
+
+## 불도저: 무한궤도 + 엔진 덮개(앞)·운전실(뒤, 보호틀·유리) + 앞 블레이드(관절 = Vehicle.joints.x만큼 들린다, 밀대·실린더) + 뒤 리퍼.
+## 노란 차체
+static func _dozer(w: float, l: float, h: float) -> Array:
+	var hw := w * 0.5
+	var hl := l * 0.5
+	var parts: Array = []
+	var bl := hl * 0.62               # 몸통 반 길이 (블레이드는 그 앞)
+	_tracks(parts, hw, bl, 10.0, 8.5, 5, false)
+	parts.append(box(-hw + 10.0, hw - 10.0, -bl + 4.0, bl - 2.0, 3.0, 10.0, ACCENT, 1))
+	var hood := hull(-hw + 9.0, hw - 9.0, -bl + 1.0, -bl * 0.05, 9.0, -hw + 10.5, hw - 10.5, -bl + 3.0, -bl * 0.05, h - 7.0, BODY, 2, 1.6)
+	decal(hood, F, 0.1, 0.9, 0.15, 0.7, DARK)                                   # 그릴
+	for k in 4:
+		top_rect(hood, -hw + 13.0 + k * 3.4, -hw + 14.6 + k * 3.4, -bl * 0.75, -bl * 0.25, [BODY, 0.35])
+	parts.append(hood)
+	parts.append(cyl(Vector3(hw - 13.0, -bl * 0.4, h - 7.0), Vector3(hw - 13.0, -bl * 0.4, h - 1.0), 1.0, 1.0,
+		Vector3(1, 0, 0), Vector3(0, 1, 0), 6, DARK, 3))                         # 배기관
+	var deck := box(-hw + 1.0, hw - 1.0, -bl * 0.08, bl - 1.0, 9.0, 12.0, BODY, 2, 1.0)
+	parts.append(deck)
+	var cab := hull(-hw + 6.0, hw - 6.0, -bl * 0.02, bl * 0.7, 12.0, -hw + 7.0, hw - 7.0, bl * 0.05, bl * 0.65, h, BODY, 3, 1.2)
+	decal(cab, F, 0.08, 0.92, 0.2, 0.95, GLASS)
+	sides(cab, 0.1, 0.9, 0.3, 0.92, GLASS)
+	decal(cab, B, 0.15, 0.85, 0.3, 0.9, GLASS)
+	parts.append(cab)
+	parts.append(box(-hw + 6.0, hw - 6.0, -bl * 0.02, bl * 0.7, h, h + 1.0, ACCENT, 4, 0.6))   # 보호틀 지붕
+	# 블레이드 (관절 축: 몸통 앞 아래, 각 0 = 땅에 내린 자세, +면 들린다)
+	var jy := -bl + 2.0
+	var jz := 4.0
+	var bj: Array[Vector3] = [Vector3(jy, jz, 0)]
+	var blade_parts: Array = []
+	var bladep := hull(-hw - 3.0, hw + 3.0, -hl, -hl + 4.0, 0.5, -hw - 3.0, hw + 3.0, -hl + 1.5, -hl + 6.0, 15.0, BODY, 2, 0.6)
+	decal(bladep, F, 0.0, 1.0, 0.0, 0.1, STEEL)                                 # 날
+	decal(bladep, F, 0.05, 0.95, 0.85, 0.95, [BODY, 0.25])
+	blade_parts.append(bladep)
+	for side: int in [-1, 1]:
+		blade_parts.append(bar(Vector3(side * (hw - 2.0), -hl + 4.0, 4.0), Vector3(side * (hw - 2.0), jy + 6.0, 4.0), 2.0, 2.0, ACCENT, 1))   # 밀대
+		blade_parts.append(bar(Vector3(side * (hw - 12.0), -hl + 5.0, 11.0), Vector3(side * (hw - 12.0), -bl + 6.0, h - 9.0), 1.3, 1.3, CHROME, 2))   # 실린더
+	for p: Part in blade_parts:
+		p.joints = bj
+	parts.append_array(blade_parts)
+	# 뒤 리퍼
+	parts.append(box(-4.0, 4.0, bl - 1.0, bl + 4.0, 4.0, 9.0, ACCENT, 1))
+	parts.append(bar(Vector3(0, bl + 4.0, 8.0), Vector3(0, bl + 7.0, 0.5), 1.6, 1.6, STEEL, 1))
 	return parts
 
 

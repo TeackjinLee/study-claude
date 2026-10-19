@@ -445,7 +445,39 @@ func landmark_parking() -> Array:
 		var idx: int = landmark_indices[key]
 		if CityMap.is_open_block(_owners[idx]):
 			out.append_array(LandmarkBuilding.parking(buildings[idx], looks[idx]))
+	var site := work_site()
+	if not site.is_empty():
+		out.append_array(site.spots)
 	return out
+
+
+## 4장 외곽 공단 도로 공사 현장: 세로 도로 WORK_ROAD의 동쪽(북행) 바깥 차선을 라바콘으로 막고 굴삭기·불도저를 세운다.
+## 안쪽 차선은 열려 있어 차가 비켜 지나간다 (교통 AI는 서 있는 차를 추월한다). 그 구역이 닫혀 있으면 빈 사전
+const WORK_ROAD := Vector2i(-4, 2)          ## (세로 도로 번호, 구간)
+const WORK_EXCAVATOR := "res://data/vehicles/heavy_excavator.tres"
+const WORK_DOZER := "res://data/vehicles/heavy_dozer.tres"
+
+
+static func work_site() -> Dictionary:
+	var block := Vector2i(WORK_ROAD.x, WORK_ROAD.y)
+	if not CityMap.is_open_block(block):
+		return {}
+	var at := func(t: float) -> Vector2: return curb_vertical(WORK_ROAD.x, WORK_ROAD.y, t)
+	var lane_x: float = at.call(0.5).x - 32.0               # 막은 차선의 안쪽 경계 (라바콘 줄)
+	var cones: Array[Vector2] = []
+	var t := 0.16
+	while t <= 0.86:
+		cones.append(Vector2(lane_x, at.call(t).y))
+		t += 0.07
+	for k in 3:                                              # 남쪽(차가 오는 쪽) 끝은 비스듬히 차선을 좁힌다
+		cones.append(Vector2(lane_x + 14.0 * (k + 1), at.call(0.86).y + 30.0 * (k + 1)))
+	var road_edge := road_center(WORK_ROAD.x) + ROAD * 0.5
+	return {
+		"spots": [[at.call(0.34), 0.0, WORK_EXCAVATOR], [at.call(0.66), 0.0, WORK_DOZER]],
+		"cones": cones,
+		"sign": Vector2(lane_x + 8.0, at.call(0.86).y + 130.0),
+		"pile": Vector2(road_edge + SIDEWALK * 0.5 + 8.0, at.call(0.48).y),
+	}
 
 
 static func _rect_distance(r: Rect2, p: Vector2) -> float:

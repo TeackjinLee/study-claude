@@ -65,10 +65,18 @@ extends Resource
 @export var pitch_angle := 0.0
 
 @export_group("Tracks")
-## 무한궤도 (자주포): 제자리에서 돈다(피벗 선회), 차를 깔아뭉개며 올라타 넘는다 — 차와 부딪혀 막히지 않는다
+## 무한궤도 (자주포·굴삭기·불도저): 제자리에서 돈다(피벗 선회)
 @export var tracked := false
+## 차를 깔아뭉개며 올라타 넘는다 — 차와 부딪혀 막히지 않는다 (자주포)
+@export var crusher := false
 ## 포탑이 도는 빠르기 (rad/s). 0이면 포탑이 없다
 @export var turret_rate := 0.0
 ## 포가 쏘는 최소·최대 거리 (px, 곡사 — 포탄은 건물 위로 날아가 겨눈 땅에 떨어진다)
 @export var cannon_min := 0.0
 @export var cannon_max := 0.0
+
+@export_group("Heavy")
+## 굴삭기 팔이 닿는 거리 (최소, 최대 px — 상부 회전축에서 버킷까지). (0, 0)이면 팔이 없다
+@export var arm_reach := Vector2.ZERO
+## 불도저 블레이드: 내리면 앞의 차를 밀어붙이며 다치게 하고 사람을 밀쳐 낸다
+@export var blade := false

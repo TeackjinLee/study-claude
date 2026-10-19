@@ -13,7 +13,8 @@ func _ready() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SaveGame.slot_path(main.save_prefix, slot)))
 	var heli_only := "--only=heli" in OS.get_cmdline_user_args()
 	var army_only := "--only=army" in OS.get_cmdline_user_args()
-	if heli_only or army_only:
+	var heavy_only := "--only=heavy" in OS.get_cmdline_user_args()
+	if heli_only or army_only or heavy_only:
 		main.chapter = 4   # 헬기·군용 차량은 4장 부두에 있다
 	add_child(main)
 	if heli_only:
@@ -24,6 +25,11 @@ func _ready() -> void:
 	if "--only=iso" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _iso_shots(main)
+		get_tree().quit()
+		return
+	if heavy_only:
+		await _frames(30)
+		await _heavy_shots(main)
 		get_tree().quit()
 		return
 	if army_only:
@@ -481,6 +487,7 @@ func _army_shots(main: Node2D) -> void:
 	await _frames(20)
 	await _save("army_dock")
 	main.director.enter_immediately(spg)
+	main.weapons.set_process_input(false)   # 창 모드에서 마우스 위치가 조준을 덮어쓰지 않게
 	main.weapons.mouse_aim = false
 	cam.target = spg
 	spg.turret_goal = -PI * 0.6
@@ -533,6 +540,77 @@ func _army_shots(main: Node2D) -> void:
 			main.weapons.shoot()
 			await _frames(2)
 		await _save("army_jeep")
+
+
+## 중장비 (`-- --only=heavy`, 4장): 공단 도로 공사 현장 → 굴삭기가 차를 찍어 든다 → 든 채 상부를 돌린다 → 놓는다 → 불도저가 블레이드로 민다
+func _heavy_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	main.player.died.disconnect(main._on_died)
+	var digger: Vehicle = null
+	var dozer: Vehicle = null
+	for v: Vehicle in main.vehicles:
+		if v.stats.id == &"HEAVY_EXCAVATOR":
+			digger = v
+		elif v.stats.id == &"HEAVY_DOZER":
+			dozer = v
+	if digger == null or dozer == null:
+		print("중장비가 없다")
+		return
+	cam.target = null
+	cam.global_position = (digger.global_position + dozer.global_position) * 0.5
+	await _frames(20)
+	await _save("heavy_site")
+	# 탁 트인 곳에서 작동 (공사 현장 옆 도로는 건물에 가린다)
+	var lot := City.block_rect(City.PLAZA.x, City.PLAZA.y).get_center()
+	digger.place(lot, 0.0)
+	main.director.enter_immediately(digger)
+	main.weapons.set_process_input(false)   # 창 모드에서 마우스 위치가 조준을 덮어쓰지 않게
+	main.weapons.mouse_aim = false
+	cam.target = digger
+	cam.snap()
+	digger.aim_range = 72.0
+	for f in 50:
+		await _frames(1)
+	var car := Vehicle.new()
+	car.stats = load("res://data/vehicles/car_rumi.tres")
+	main.add_child(car)
+	car.place(digger.bucket_ground(), PI * 0.5)
+	main.vehicles.append(car)
+	await _frames(5)
+	await _save("heavy_reach")
+	main.weapons.shoot()
+	await _frames(int(60 * ExcavatorArm.DIG_TIME * 0.5))
+	await _save("heavy_dig")
+	for f in 40:
+		await _frames(1)
+	await _save("heavy_lift")
+	digger.turret_goal = PI * 0.6
+	digger.aim_range = 84.0
+	for f in 110:
+		await _frames(1)
+		player.revive()
+	await _save("heavy_carry")
+	main.weapons.shoot()
+	for f in 70:
+		await _frames(1)
+	await _save("heavy_drop")
+	main.director.exit_vehicle()
+	dozer.place(lot + Vector2(-260, 160), 0.0)
+	var victim := Vehicle.new()
+	victim.stats = load("res://data/vehicles/car_avela.tres")
+	main.add_child(victim)
+	victim.place(lot + Vector2(-260, 85), PI * 0.5)
+	main.vehicles.append(victim)
+	main.director.enter_immediately(dozer)
+	cam.target = dozer
+	cam.snap()
+	Input.action_press("accelerate")
+	for f in 100:
+		await _frames(1)
+		player.revive()
+	Input.action_release("accelerate")
+	await _save("heavy_dozer")
 
 
 ## NPC 헬기 (입체 모형): ★5 경찰 헬기 탐조등 → ★6 군 기동헬기 → 큰불에 물을 쏟는 119 구조헬기 (`-- --only=air`)

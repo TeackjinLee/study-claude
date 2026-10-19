@@ -110,6 +110,7 @@ var traffic: TrafficSystem
 var skid_marks: SkidMarks
 var vehicles: Array[Vehicle] = []
 var start_vehicle: Vehicle
+var work_zone: WorkZone       ## 도로 공사 현장 장식 (그 구역이 열리면 생긴다)
 var player: Player
 var pedestrians: PedestrianManager
 var director: Director
@@ -368,6 +369,10 @@ func _physics_process(delta: float) -> void:
 ## 열린 구역 랜드마크 공터에 세워 둔 차 (터미널 승강장의 고속버스·소방서 소방차·주유소 택시·부두 헬기 — 훔쳐 탈 수 있다).
 ## 장이 열릴 때마다 다시 불러, 아직 안 세운 자리에만 세운다
 func _spawn_landmark_parking() -> void:
+	if work_zone == null:
+		var site := City.work_site()
+		if not site.is_empty():
+			work_zone = WorkZone.build(self, site)   # 4장 외곽 공단 도로 공사 현장 (굴삭기·불도저는 아래 주차로 선다)
 	for spot: Array in city.landmark_parking():
 		var key := Vector2i(spot[0].round())
 		if _landmark_parked.has(key):

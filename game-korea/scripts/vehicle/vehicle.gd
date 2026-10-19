@@ -7,6 +7,7 @@ signal bumped(other: Vehicle, strength: float)
 signal caught_fire                           ## 체력이 0이 됐다 — burning초 뒤 터진다
 signal exploded(by_player: bool)
 signal landing_blocked                       ## 헬기가 내려앉으려는데 밑이 막혀 있다 (건물·차·강물)
+signal dug(at: Vector2)                      ## 굴삭기 버킷이 땅을 찍었다 (Combat이 차 집기·내려놓기·피해를 맡는다)
 
 const RESTITUTION := 0.35
 const COLLISION_FRICTION := 0.8
@@ -23,6 +24,11 @@ const ELEV_MIN := 0.06         ## 포신을 가장 낮게 든 각 (rad, 가까�
 const ELEV_MAX := 0.78         ## 가장 높이 든 각 (최대 사거리)
 const ELEV_RATE := 0.6         ## 포신이 오르내리는 빠르기 (rad/s)
 const MUZZLE_REACH := 0.72     ## 포구가 차 가운데에서 차 길이의 이만큼 앞 (포신이 차체 밖으로 나온다)
+const ARM_RATE := 2.4          ## 굴삭기 붐·암이 겨눈 자세를 따라가는 빠르기 (rad/s)
+const BLADE_UP := 0.32         ## 불도저 블레이드를 든 각 (rad)
+const BLADE_RATE := 0.8        ## 블레이드가 오르내리는 빠르기 (rad/s)
+const DROP_GRAVITY := 900.0    ## 굴삭기가 놓은 차가 떨어지는 가속 (화면 px/s²)
+const DROP_DAMAGE := 0.12      ## 떨어진 차가 받는 피해: 떨어진 속도(px/s) × 이 값
 const CLIMB_RATE := 28.0       ## 깔고 넘는 차에 올라타는 빠르기 (화면 px/s)
 const CLIMB_PITCH := 0.16      ## 올라타고 내려올 때 들고 숙이는 각 (rad)
 const ROTOR_ABOVE := 7.0       ## 주 회전날개가 동체 높이(VehicleType.height)보다 이만큼 위에 돈다 (VehicleModel의 헬기 모형들)
@@ -71,6 +77,13 @@ var climb := 0.0
 var climb_goal := 0.0
 var crushed := 0.0            ## 무한궤도에 깔려 납작해진 정도 (0~1, 그림만)
 var over_z := 0               ## 깔고 있는 차보다 위에 그린다 (Combat._crush가 정한다, 0이면 평소대로)
+## 중장비 (굴삭기 팔 VehicleType.arm_reach, 불도저 VehicleType.blade)
+var joints := Vector3.ZERO    ## 관절 각: 굴삭기 붐·암·버킷, 불도저는 x = 블레이드 든 각 (그림 — VehicleModel 관절 부품)
+var dig := -1.0               ## 퍼 올리는 중이면 지난 시간 (0 → ExcavatorArm.DIG_TIME), 아니면 −1
+var carried: Vehicle = null   ## 굴삭기가 버킷으로 들고 있는 차
+var carried_by: Vehicle = null ## 이 차를 들고 있는 굴삭기
+var blade_up := false         ## 불도저 블레이드를 들었다 (내리면 앞의 차·사람을 밀어붙인다)
+var _fall_v := -1.0           ## 굴삭기가 내려놓은 차가 떨어지는 속도 (음수면 떨어지는 중이 아니다)
 var _blocked_told := false
 ## 차 category → 체력 배율 (부업 보너스: 택시·버스·오토바이 +50%). main이 정한다
 static var durability_bonus := {}
@@ -114,7 +127,10 @@ func apply_stats(new_stats: VehicleType) -> void:
 	_shape.shape = rect
 	# 무한궤도는 차에 막히지 않는다 — 깔고 넘는다 (Combat._crush). 다른 차는 여전히 무한궤도에 부딪힌다.
 	# 값이 바뀔 때만 넣는다 — 같은 값이라도 다시 넣으면 물리 서버가 몸체를 다시 등록해 충돌 순서가 바뀐다 (추격 결과가 나비효과로 바뀐다)
-	var mask := Layers.WORLD if stats.tracked else Layers.WORLD | Layers.VEHICLES
+	if stats.arm_reach.y > 0.0:   # 굴삭기 팔은 접은 자세로 시작한다
+		var fold := ExcavatorArm.solve(stats.arm_reach.x, ExcavatorArm.CARRY_Z + 8.0)
+		joints = Vector3(fold.x, fold.y, ExcavatorArm.bucket_angle(0.0, false))
+	var mask := Layers.WORLD if stats.crusher else Layers.WORLD | Layers.VEHICLES
 	if collision_mask != mask:
 		collision_mask = mask
 	if stats.flies and sound == null:
@@ -132,6 +148,8 @@ func place(pos: Vector2, heading: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _carried_step(delta):
+		return
 	if burning >= 0.0:
 		burning -= delta
 		if burning <= 0.0:
@@ -168,8 +186,12 @@ func _physics_process(delta: float) -> void:
 		_tilt(delta)
 	if stats.turret_rate > 0.0:
 		_aim(delta)
-	if stats.tracked:
+	if stats.crusher:
 		_ride(delta)
+	if stats.arm_reach.y > 0.0:
+		_operate(delta)
+	if stats.blade:
+		joints.x = move_toward(joints.x, BLADE_UP if blade_up else 0.0, BLADE_RATE * delta)
 	if wrecked or (not controlled and not (has_driver and (ai or pursuit))):
 		motor.velocity = motor.velocity.move_toward(Vector2.ZERO, PARKED_DRAG * delta)
 	if landing:
@@ -208,7 +230,8 @@ func _look() -> Array:
 	return [snappedf(rotation, ROT_STEP), occupied(), is_braking(), motor.forward_speed() < -5.0, wrecked, paint,
 		ai != null and ai.honking, IsoView.enabled, snappedf(ground, 0.5), _dent_rev,
 		siren and _siren_phase(), snappedf(fire_level(), 0.1), snappedf(altitude, 0.5), snappedf(bank, 0.02), snappedf(pitch, 0.02),
-		snappedf(turret, ROT_STEP), snappedf(elevation, 0.03), snappedf(recoil, 0.1), snappedf(crushed, 0.1)]
+		snappedf(turret, ROT_STEP), snappedf(elevation, 0.03), snappedf(recoil, 0.1), snappedf(crushed, 0.1),
+		snappedf(joints.x, 0.02), snappedf(joints.y, 0.02), snappedf(joints.z, 0.04)]
 
 
 ## 매 프레임 다시 그리는 모형 (위에서 보기의 레미콘 드럼). 불·연기는 위층(_fx)이 따로 그린다
@@ -280,6 +303,105 @@ func _ride(delta: float) -> void:
 	climb = move_toward(climb, climb_goal, CLIMB_RATE * delta)
 	var going := signf(motor.forward_speed()) if absf(motor.forward_speed()) > 3.0 else 0.0
 	pitch = move_toward(pitch, -clampf((climb - before) / delta / CLIMB_RATE, -1.0, 1.0) * going * CLIMB_PITCH, delta * 1.2)
+
+
+# ── 중장비 ────────────────────────────────────────────────
+
+## 굴삭기: 팔 끝(버킷)을 겨눈 거리에 두고, 퍼 올리는 중이면 내려찍었다가 들어 올린다. 내려찍는 순간 dug를 낸다.
+## 들고 있는 차는 버킷을 따라간다. 아무도 안 몰면 팔을 접는다
+func _operate(delta: float) -> void:
+	var reach := arm_reach_now()
+	var digging := dig >= 0.0
+	var t := dig / ExcavatorArm.DIG_TIME if digging else 0.0
+	var z := ExcavatorArm.dig_height(t) if digging else ExcavatorArm.CARRY_Z + (0.0 if controlled or carried else 8.0)
+	var goal := ExcavatorArm.solve(reach, z)
+	var rate := ARM_RATE * (4.0 if digging else 1.0)
+	joints.x = move_toward(joints.x, goal.x, rate * delta)
+	joints.y = move_toward(joints.y, goal.y, rate * delta)
+	joints.z = move_toward(joints.z, ExcavatorArm.bucket_angle(t, digging) if not carried else -1.9, rate * delta)
+	if digging:
+		var before := dig
+		dig += delta
+		if before < ExcavatorArm.DIG_TIME * 0.5 and dig >= ExcavatorArm.DIG_TIME * 0.5:
+			dug.emit(bucket_ground())
+		if dig >= ExcavatorArm.DIG_TIME:
+			dig = -1.0
+	if carried:
+		if not is_instance_valid(carried) or wrecked:
+			release()
+			return
+		var tip := ExcavatorArm.tip(Vector2(joints.x, joints.y))
+		carried.global_position = global_position + gun_dir() * tip.x
+		carried.altitude = maxf(tip.y - carried.stats.height * 0.6, 0.5)
+		carried.rotation = rotation + turret + PI * 0.5   # 버킷에 가로로 걸린다
+		carried.motor.heading = carried.rotation
+		carried.motor.velocity = Vector2.ZERO
+
+
+## 굴삭기 팔이 겨눈 거리 (arm_reach 안으로 당긴다. 안 정했으면 가장 가까이)
+func arm_reach_now() -> float:
+	if aim_range <= 0.0:
+		return stats.arm_reach.x
+	return clampf(aim_range, stats.arm_reach.x, stats.arm_reach.y)
+
+
+## 버킷이 내려찍는 땅 (상부 방향 · 팔 거리)
+func bucket_ground() -> Vector2:
+	return global_position + gun_dir() * arm_reach_now()
+
+
+## 한 번 퍼 올린다 (퍼 올리는 중이면 false)
+func start_dig() -> bool:
+	if dig >= 0.0 or wrecked:
+		return false
+	dig = 0.0
+	return true
+
+
+## 들고 있는 차를 놓는다 — 그 자리에서 떨어진다 (Vehicle._carried_step)
+func release() -> void:
+	if carried and is_instance_valid(carried):
+		carried.carried_by = null
+		carried._fall_v = 0.0
+	carried = null
+
+
+## 굴삭기가 집었다: 충돌을 끄고 버킷을 따라간다 (탄 사람은 Combat이 미리 내린다)
+func pick_up_by(excavator: Vehicle) -> void:
+	carried_by = excavator
+	excavator.carried = self
+	_set_collision(0, 0)
+
+
+## 들려 있거나 떨어지는 중이면 그것만 하고 true (보통 물리는 건너뛴다). 땅에 닿으면 떨어진 속도만큼 다치고 충돌을 되살린다
+func _carried_step(delta: float) -> bool:
+	if carried_by:
+		if not is_instance_valid(carried_by):
+			carried_by = null
+		else:
+			z_index = IsoView.Z_AIR if IsoView.enabled else 20
+			return true
+	if stats.flies or altitude <= 0.0 or _fall_v < 0.0:
+		return false
+	_fall_v += DROP_GRAVITY * delta
+	altitude -= _fall_v * delta
+	if altitude > 0.0:
+		return true
+	altitude = 0.0
+	take_damage(_fall_v * DROP_DAMAGE, hit_by_player)
+	dent_at(global_position + Vector2(0, stats.size.y * 0.5).rotated(rotation), _fall_v * DROP_DAMAGE)
+	impacted.emit(_fall_v)
+	_fall_v = -1.0
+	_set_collision(Layers.VEHICLES, Layers.WORLD if stats.crusher else Layers.WORLD | Layers.VEHICLES)
+	return false
+
+
+## 충돌 층·마스크를 값이 바뀔 때만 넣는다 (같은 값을 다시 넣으면 물리 서버가 몸체를 다시 등록해 충돌 순서가 바뀐다)
+func _set_collision(layer: int, mask: int) -> void:
+	if collision_layer != layer:
+		collision_layer = layer
+	if collision_mask != mask:
+		collision_mask = mask
 
 
 # ── 헬기 ──────────────────────────────────────────────────

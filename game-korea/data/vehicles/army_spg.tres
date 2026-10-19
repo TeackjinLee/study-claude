@@ -29,6 +29,7 @@ body_color = Color(0.33, 0.37, 0.24, 1)
 roof_color = Color(0.25, 0.28, 0.18, 1)
 explosion_scale = 1.8
 tracked = true
+crusher = true
 unique = true
 turret_rate = 0.9
 cannon_min = 220.0

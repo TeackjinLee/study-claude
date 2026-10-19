@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"HEAVY_EXCAVATOR"
+display_name = "굴삭기 (포크레인)"
+category = &"army"
+max_speed = 150.0
+acceleration = 110.0
+reverse_speed = 110.0
+brake_force = 420.0
+coast_drag = 260.0
+turn_rate = 0.9
+turn_speed_ref = 1.0
+steer_response = 3.0
+grip = 3000.0
+handbrake_grip = 1.0
+handbrake_decel = 420.0
+drift_turn_boost = 1.0
+mass = 9.0
+durability = 650.0
+size = Vector2(44, 64)
+height = 22.0
+body_color = Color(0.95, 0.72, 0.12, 1)
+roof_color = Color(0.22, 0.22, 0.24, 1)
+explosion_scale = 1.4
+tracked = true
+turret_rate = 1.3
+arm_reach = Vector2(56, 84)
