@@ -126,6 +126,7 @@ func _physics_process(delta: float) -> void:
 	var pcar := director.current_vehicle
 	var ppos := director.controlled_target().global_position
 	var space := get_viewport().world_2d.direct_space_state
+	var in_air := pcar != null and pcar.airborne()   # 떠 있는 헬기는 건물 너머로도 보인다
 	for m: GangMember in members.duplicate():
 		if not is_instance_valid(m) or m.is_dead():
 			members.erase(m)
@@ -137,22 +138,24 @@ func _physics_process(delta: float) -> void:
 		if m.fighting:
 			m.fighting = d < GIVE_UP
 		else:
-			m.fighting = d < SIGHT and _clear(space, m.global_position, ppos)
+			m.fighting = d < SIGHT and (in_air or _clear(space, m.global_position, ppos))
 		if not m.fighting:
 			continue
 		m.goal = ppos
 		# 경찰과 같은 규칙: 빨리 달아나는 차는 못 맞힌다
 		if pcar == null or pcar.speed() < PoliceDispatcher.CAR_ESCAPE_SPEED:
-			_shoot(m, space, ppos)
+			_shoot(m, space, ppos, in_air)
 
 
-func _shoot(m: GangMember, space: PhysicsDirectSpaceState2D, target: Vector2) -> void:
+func _shoot(m: GangMember, space: PhysicsDirectSpaceState2D, target: Vector2, in_air := false) -> void:
 	var w := m.npc.weapon
 	if combat == null or w == null or m.reload > 0.0 or m.state != Pedestrian.State.WALK:
 		return
+	if in_air and w.melee:
+		return      # 하늘의 헬기는 주먹·칼이 안 닿는다
 	var pos := m.global_position
 	var reach := w.max_range + Player.RADIUS if w.melee else SHOOT_RANGE
-	if pos.distance_to(target) > reach or not _clear(space, pos, target):
+	if pos.distance_to(target) > reach or not (in_air or _clear(space, pos, target)):
 		return
 	m.reload = w.fire_interval * shoot_rng.randf_range(SHOOT_DELAY[0], SHOOT_DELAY[1])
 	var dir := (target - pos).normalized()
@@ -162,7 +165,7 @@ func _shoot(m: GangMember, space: PhysicsDirectSpaceState2D, target: Vector2) ->
 		# 공격 한 번의 사본에만 적용한다 — 플레이어와 다른 NPC의 무기는 그대로다.
 		w = w.duplicate() as WeaponType
 		w.damage *= m.npc.melee_multiplier()
-	combat.fire(pos if w.melee else pos + dir * 10.0, dir, w, false, exclude)
+	combat.fire(pos if w.melee else pos + dir * 10.0, dir, w, false, exclude, 0.0, m.level)
 
 
 func _clear(space: PhysicsDirectSpaceState2D, from: Vector2, to: Vector2) -> bool:

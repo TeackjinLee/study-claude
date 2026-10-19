@@ -63,6 +63,8 @@ extends Resource
 @export var bank_angle := 0.0
 ## 힘껏 가속할 때 앞으로 숙이는 각 (rad). 브레이크·감속이면 그만큼 뒤로 든다. 그림에만 쓴다
 @export var pitch_angle := 0.0
+## 땅에서 쏜 총알이 날 높이까지 뜬 헬기에 주는 피해 배율 (아래에서 위로 쏘니 약하다). 낮게 뜰수록 1에 가깝다
+@export var ground_fire_damage := 1.0
 
 @export_group("Tracks")
 ## 무한궤도 (자주포·굴삭기·불도저): 제자리에서 돈다(피벗 선회)

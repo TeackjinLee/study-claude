@@ -8,7 +8,7 @@ const TURN_PENALTY := 120.0           ## 꺾는 경로에 붙이는 작은 벌�
                                       ## 이게 없으면 교차로 바로 앞에서 직진·회전이 뒤집힌다
 const CACHE_LIMIT := 64
 
-static var _cache := {}               ## 교차로 → { 교차로: 거기까지 도로 칸 수 }
+static var _cache := {}               ## 길찾기 상태(_key) → { 상태: 거기까지 도로 칸 수 }
 
 
 static func clear_cache() -> void:
@@ -60,58 +60,104 @@ static func road_ends(pos: Vector2) -> Array[Vector2i]:
 	return best
 
 
-## 교차로 cell에서 target까지 도로로 가는 거리 (못 가면 INF)
-static func cost_to(cell: Vector2i, target: Vector2) -> float:
+## pos에서 가장 가까운 도로 구간의 양 끝 길찾기 상태 (고가차도 층 level: 1이면 고가 구간만, 0이면 고가 구간을 빼고, -1이면 아무거나).
+## 넘는 교차로 끝은 그 구간의 축으로 지난다
+static func _end_keys(pos: Vector2, level: int) -> Array[Vector3i]:
+	var fx := (pos.x - City.road_center(0)) / City.PITCH
+	var fy := (pos.y - City.road_center(0)) / City.PITCH
+	var base := Vector2i(floori(fx), floori(fy))
+	for pass_level in [level, -1]:
+		var best: Array[Vector3i] = []
+		var best_d := INF
+		for dj in range(-1, 3):
+			for di in range(-1, 3):
+				var c := base + Vector2i(di, dj)
+				for d in [1, 2]:
+					if not LaneGraph.connected(c, d):
+						continue
+					if pass_level >= 0 and CityMap.over_strip(c, d) != (pass_level == 1):
+						continue
+					var a := LaneGraph.center(c)
+					var b := LaneGraph.center(c + CityMap.STEPS[d])
+					var dist := Geometry2D.get_closest_point_to_segment(pos, a, b).distance_to(pos)
+					if dist < best_d:
+						best_d = dist
+						best = [_key(c, d % 2), _key(c + CityMap.STEPS[d], d % 2)]
+		if not best.is_empty():
+			return best
+	return [_key(base, -1), _key(base, -1)]
+
+
+## 길찾기 상태: 보통 교차로는 (x, y, -1), 고가차도가 넘는 교차로는 (x, y, 지나는 축) — 넘는 교차로는 직진만 되므로
+## 위(고가 축)와 밑(다른 축)이 다른 자리다. 축은 진행 방향 d의 d % 2 (0 세로·1 가로)
+static func _key(c: Vector2i, axis: int) -> Vector3i:
+	return Vector3i(c.x, c.y, axis if CityMap.over_axis(c) >= 0 else -1)
+
+
+## 상태 key에서 target까지 도로로 가는 거리 (못 가면 INF). target_level은 목표의 고가차도 층
+static func _cost(key: Vector3i, target: Vector2, target_level: int) -> float:
 	var best := INF
-	for e in road_ends(target):
+	for e in _end_keys(target, target_level):
 		var table := _table(e)
-		if table.has(cell):
-			best = minf(best, table[cell] * City.PITCH + LaneGraph.center(e).distance_to(target))
+		if table.has(key):
+			best = minf(best, table[key] * City.PITCH + LaneGraph.center(Vector2i(e.x, e.y)).distance_to(target))
 	return best
 
 
-## 교차로 e에서 열린 도로로 몇 칸인지 (모든 칸 길이가 같아 너비 우선 탐색이면 된다)
-static func _table(e: Vector2i) -> Dictionary:
+## 상태 e에서 열린 도로로 몇 칸인지 (모든 칸 길이가 같아 너비 우선 탐색이면 된다)
+static func _table(e: Vector3i) -> Dictionary:
 	if _cache.has(e):
 		return _cache[e]
 	if _cache.size() > CACHE_LIMIT:
 		_cache.clear()
 	var steps := {}
-	if LaneGraph.has_cell(e):
+	if LaneGraph.has_cell(Vector2i(e.x, e.y)):
 		steps[e] = 0
-		var queue: Array[Vector2i] = [e]
+		var queue: Array[Vector3i] = [e]
 		var head := 0
 		while head < queue.size():
-			var c := queue[head]
+			var k := queue[head]
 			head += 1
+			var c := Vector2i(k.x, k.y)
 			for d in 4:
-				# 거꾸로 퍼지므로 n → c 방향 도로가 열려 있어야 한다 (양방향 도로라 같다)
+				# 넘는 교차로에서는 지나는 축으로만 이어진다. 양방향 도로라 거꾸로 퍼져도 같다
+				if k.z >= 0 and d % 2 != k.z:
+					continue
 				if LaneGraph.connected(c, d):
-					var n := c + CityMap.STEPS[d]
+					var n := _key(c + CityMap.STEPS[d], d % 2)
 					if not steps.has(n):
-						steps[n] = steps[c] + 1
+						steps[n] = steps[k] + 1
 						queue.append(n)
 	_cache[e] = steps
 	return steps
 
 
 ## 다음에 향할 교차로. forward가 0이 아니면 그 반대 방향 경로에 벌점을 준다 (차는 쉽게 못 돈다).
-static func next_cell(pos: Vector2, forward: Vector2, target: Vector2) -> Vector2i:
+## level은 나의, target_level은 목표의 고가차도 층(-1 모름) — 넘는 교차로에서는 달리던 축으로만 나가고, 서 있으면 층으로 정한다
+static func next_cell(pos: Vector2, forward: Vector2, target: Vector2, level := 0, target_level := -1) -> Vector2i:
 	var here := cell_at(pos)
-	var options: Array[Vector2i] = []
+	var options: Array[Vector3i] = []
 	if is_cell(here):
+		var over := CityMap.over_axis(here)
+		var axis := -1
+		if over >= 0:
+			if forward != Vector2.ZERO:
+				axis = 1 if absf(forward.x) > absf(forward.y) else 0
+			else:
+				axis = over if level == 1 else 1 - over
 		for d in 4:
-			if LaneGraph.connected(here, d):
-				options.append(here + CityMap.STEPS[d])
+			if (axis < 0 or d % 2 == axis) and LaneGraph.connected(here, d):
+				options.append(_key(here + CityMap.STEPS[d], d % 2))
 	else:
-		options = road_ends(pos)
+		options = _end_keys(pos, level)
 	if options.is_empty():
-		return road_ends(pos)[0]
+		var e := _end_keys(pos, level)[0]
+		return Vector2i(e.x, e.y)
 	var best := options[0]
 	var best_cost := INF
-	for c in options:
-		var to := LaneGraph.center(c) - pos
-		var cost := to.length() + cost_to(c, target)
+	for k in options:
+		var to := LaneGraph.center(Vector2i(k.x, k.y)) - pos
+		var cost := to.length() + _cost(k, target, target_level)
 		if forward != Vector2.ZERO:
 			var along := to.normalized().dot(forward)
 			if along < -0.3:
@@ -120,15 +166,16 @@ static func next_cell(pos: Vector2, forward: Vector2, target: Vector2) -> Vector
 				cost += TURN_PENALTY
 		if cost < best_cost:
 			best_cost = cost
-			best = c
-	return best
+			best = k
+	return Vector2i(best.x, best.y)
 
 
 ## a에서 b까지 폭 2×half_width의 띠가 건물에 막히지 않았는지 (양옆 두 줄 + 가운데 한 줄 레이캐스트)
-static func clear_path(space: PhysicsDirectSpaceState2D, a: Vector2, b: Vector2, half_width: float) -> bool:
+## level은 고가차도 층 (고가 위면 난간에 막히는지 본다)
+static func clear_path(space: PhysicsDirectSpaceState2D, a: Vector2, b: Vector2, half_width: float, level := 0) -> bool:
 	var side := (b - a).normalized().orthogonal() * half_width
 	for off in [Vector2.ZERO, side, -side]:
-		var q := PhysicsRayQueryParameters2D.create(a + off, b + off, Layers.WORLD)
+		var q := PhysicsRayQueryParameters2D.create(a + off, b + off, Layers.at(Layers.WORLD, level))
 		if not space.intersect_ray(q).is_empty():
 			return false
 	return true

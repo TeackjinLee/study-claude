@@ -49,12 +49,14 @@ func _test_red_light() -> void:
 	var main := await _make_main(0, 0)
 	await _frames(1)
 	var t: TrafficSystem = main.traffic
-	var cell := Vector2i(2, 2)
-	_expect(t.controller.is_signalized(cell), "(2,2)는 신호 교차로")
-	var piece := t.graph.segment(Vector2i(2, 3), 0)   # 북행, (2,2)로 들어간다
+	var cell := Vector2i(2, 3)   # (2,2)는 고가차도가 넘는 무신호 교차로
+	_expect(t.controller.is_signalized(cell), "(2,3)는 신호 교차로")
+	var piece := t.graph.segment(Vector2i(2, 4), 0)   # 북행, (2,3)로 들어간다
 	# 북행(남북 축)이 빨간불인 시각으로 맞춘다
 	var c := t.controller
-	while c.light(cell, 0) != TrafficController.Light.RED:
+	for k in 1000:   # 신호가 없으면 끝없이 돌지 않게
+		if c.light(cell, 0) == TrafficController.Light.RED:
+			break
 		c.advance(0.1)
 	var v := t.spawn_at(TrafficSystem.TRAFFIC_TYPES[0], piece, 60.0)
 	await _frames(240)
@@ -64,7 +66,9 @@ func _test_red_light() -> void:
 	_expect(v.speed() < 5.0, "빨간불 앞에서 멈춘다 (속도 %.0f)" % v.speed())
 	_expect(piece.length - stopped_s - ai.half_length() < 60.0, "정지선 가까이 선다 (남은 거리 %.0f)" % (piece.length - stopped_s - ai.half_length()))
 	_expect(stopped_s + ai.half_length() <= piece.length, "앞범퍼가 정지선을 넘지 않는다")
-	while c.light(cell, 0) != TrafficController.Light.GREEN:
+	for k in 1000:
+		if c.light(cell, 0) == TrafficController.Light.GREEN:
+			break
 		c.advance(0.1)
 	await _frames(240)
 	_expect(ai.route[0] != piece, "초록불이 되면 출발해 교차로를 지난다")
@@ -77,7 +81,7 @@ func _test_pass_blocker() -> void:
 	var main := await _make_main(0, 0)
 	await _frames(1)
 	var t: TrafficSystem = main.traffic
-	var piece := t.graph.segment(Vector2i(2, 2), 1)   # 동행
+	var piece := t.graph.segment(Vector2i(2, 4), 1)   # 동행 (가로 2번 도로는 고가차도라 4번 도로에서)
 	var blocker: Vehicle = main.start_vehicle          # 빈 차를 안쪽 차로 한가운데 세운다
 	blocker.place(piece.point_at(200.0), PI * 0.5)
 	var v := t.spawn_at(TrafficSystem.TRAFFIC_TYPES[0], piece, 60.0)

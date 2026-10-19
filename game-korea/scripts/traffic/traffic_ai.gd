@@ -321,7 +321,7 @@ func _choose_exit(seg: LanePiece) -> int:
 	if options.is_empty():
 		# 통제된 길로 들어와 열린 출구가 없다 (장을 되돌렸을 때 등) — 닫힌 길이라도 고른다. 바리케이드에 막히면 옮겨진다
 		for out in 4:
-			if out != (seg.dir_in + 2) % 4 and CityMap.road(seg.to_cell, out):
+			if out != (seg.dir_in + 2) % 4 and CityMap.road(seg.to_cell, out) and LaneGraph.allowed(seg.to_cell, seg.dir_in, out):
 				options.append(out)
 	if is_bus():
 		if seg.to_cell == bus_corners[bus_next]:

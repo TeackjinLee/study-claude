@@ -21,6 +21,7 @@ var vehicles: Array[Vehicle]     ## 피해야 할 차들 (도시 전체 목록�
 var target := Vector2.ZERO       ## 쫓아갈 곳 (디스패처가 매 프레임 넣는다)
 var target_velocity := Vector2.ZERO
 var target_vehicle: Vehicle = null   ## ram이면 이 차는 피하지 않는다
+var target_level := -1           ## 목표의 고가차도 층 (-1 모름) — 층이 다르면 곧장 가지 않고 경사로로 길을 찾는다
 var ram := false                 ## 목표에 감속 없이 들이받는다 (★2부터)
 var stop_at_target := false      ## 목표 앞에서 선다 (도보 주인공 앞에 경찰을 내려 줄 때)
 var top_speed := 0.0
@@ -56,7 +57,8 @@ func drive(delta: float) -> void:
 	if _los_timer <= 0.0:
 		_los_timer = LOS_INTERVAL
 		direct = RoadNav.clear_path(vehicle.get_world_2d().direct_space_state, pos, target,
-			vehicle.stats.size.x * 0.5 + 2.0)
+			vehicle.stats.size.x * 0.5 + 2.0, vehicle.level) \
+			and (target_level < 0 or CityMap.meet(pos, vehicle.level, target, target_level))
 
 	var aim: Vector2
 	var limit := top_speed
@@ -99,7 +101,8 @@ func is_stopped() -> bool:
 func _route_aim(pos: Vector2) -> Vector2:
 	var forward := vehicle.motor.forward()
 	if waypoint == RoadNav.INVALID or pos.distance_to(LaneGraph.center(waypoint)) < WAYPOINT_REACH:
-		waypoint = RoadNav.next_cell(pos, forward if vehicle.speed() > 60.0 else Vector2.ZERO, target)
+		waypoint = RoadNav.next_cell(pos, forward if vehicle.speed() > 60.0 else Vector2.ZERO, target,
+			vehicle.level, target_level)
 	var wp := LaneGraph.center(waypoint)
 	var to := wp - pos
 	var axis := Vector2(signf(to.x), 0.0) if absf(to.x) > absf(to.y) else Vector2(0.0, signf(to.y))
@@ -115,7 +118,7 @@ func _corner_limit(pos: Vector2) -> float:
 		return INF
 	var wp := LaneGraph.center(waypoint)
 	var into := (wp - pos).normalized()
-	var after := RoadNav.next_cell(wp + into, into, target)
+	var after := RoadNav.next_cell(wp + into, into, target, vehicle.level, target_level)
 	var out := (LaneGraph.center(after) - wp).normalized()
 	if into.dot(out) > 0.7:
 		return INF
@@ -129,7 +132,7 @@ func _avoid(aim: Vector2, speed: float) -> Vector2:
 	var nearest := INF
 	var shift := 0.0
 	for v in vehicles:
-		if v == vehicle or v.airborne() or (ram and v == target_vehicle):
+		if v == vehicle or v.apart(vehicle.global_position, vehicle.level) or (ram and v == target_vehicle):
 			continue
 		if v.global_position.distance_to(vehicle.global_position) > look + 80.0:
 			continue

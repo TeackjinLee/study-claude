@@ -8,7 +8,10 @@ const CLASP := Color(0.72, 0.74, 0.78)    ## 서류가방 잠금쇠
 
 ## 다리 위에 선 사람은 그 높이만큼 올려 그린다 (2.5D)
 static func _ground(ci: CanvasItem) -> float:
-	return IsoView.ground((ci as Node2D).global_position) if ci is Node2D else 0.0
+	if not ci is Node2D:
+		return 0.0
+	var lv: Variant = ci.get("level")
+	return IsoView.ground((ci as Node2D).global_position, lv if lv is int else -1)
 
 
 static func _base(ci: CanvasItem) -> Vector2:

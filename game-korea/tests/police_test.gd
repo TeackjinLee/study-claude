@@ -392,10 +392,12 @@ func _far_goal(car: Vehicle, police: PoliceDispatcher, rng: RandomNumberGenerato
 ## 앞쪽 1000px 안에 보이는 도로 봉쇄의 차 하나 (없으면 null). 사람이라면 보고 길을 바꾼다.
 func _roadblock_ahead(car: Vehicle, police: PoliceDispatcher) -> Vehicle:
 	for rb in police.roadblocks:
-		for c: Vehicle in rb.cars:
-			var to := c.global_position - car.global_position
+		for c in rb.cars:
+			if not is_instance_valid(c):
+				continue
+			var to: Vector2 = c.global_position - car.global_position
 			if to.length() < 1000.0 and to.normalized().dot(car.motor.forward()) > 0.8:
-				return rb.cars[0]
+				return rb.cars.filter(is_instance_valid)[0]
 	return null
 
 

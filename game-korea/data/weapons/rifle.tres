@@ -16,3 +16,4 @@ pierce = 2
 pickup_ammo = 30
 max_ammo = 180
 tracer_color = Color(1, 0.95, 0.6, 1)
+sound = &"rifle"

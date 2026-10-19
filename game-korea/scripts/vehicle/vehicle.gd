@@ -93,6 +93,8 @@ var steer_input := 0.0
 var handbrake_input := false
 
 var _shape: CollisionShape2D
+var level := 0                ## 고가차도 층 (0 땅 · 1 고가 위, CityMap.level_zone) — 충돌 비트를 Layers.at으로 옮긴다
+var _col_base := Vector2i(Layers.VEHICLES, Layers.WORLD | Layers.VEHICLES)   ## 땅 기준 충돌 (층, 마스크)
 var _drawn_look: Array = []   ## 마지막으로 그린 모습 (같으면 다시 그리지 않는다)
 var _fx: Node2D               ## 불·연기를 그리는 위층 — 매 프레임 다시 그려도 차 모형은 다시 그리지 않는다
 var _fx_shown := false        ## 위층에 지금 무언가 그려져 있다
@@ -102,8 +104,8 @@ func _ready() -> void:
 	motion_mode = MOTION_MODE_FLOATING
 	z_as_relative = false
 	z_index = 1
-	collision_layer = Layers.VEHICLES
-	collision_mask = Layers.WORLD | Layers.VEHICLES
+	_track_level()
+	_set_collision(Layers.VEHICLES, Layers.WORLD | Layers.VEHICLES)
 	_shape = CollisionShape2D.new()
 	add_child(_shape)
 	_fx = Node2D.new()
@@ -130,9 +132,7 @@ func apply_stats(new_stats: VehicleType) -> void:
 	if stats.arm_reach.y > 0.0:   # 굴삭기 팔은 접은 자세로 시작한다
 		var fold := ExcavatorArm.solve(stats.arm_reach.x, ExcavatorArm.CARRY_Z + 8.0)
 		joints = Vector3(fold.x, fold.y, ExcavatorArm.bucket_angle(0.0, false))
-	var mask := Layers.WORLD if stats.crusher else Layers.WORLD | Layers.VEHICLES
-	if collision_mask != mask:
-		collision_mask = mask
+	_set_collision(_col_base.x, Layers.WORLD if stats.crusher else Layers.WORLD | Layers.VEHICLES)
 	if stats.flies and sound == null:
 		sound = HeliSound.new()
 		add_child(sound)
@@ -145,9 +145,11 @@ func place(pos: Vector2, heading: float) -> void:
 	motor.velocity = Vector2.ZERO
 	motor.steer = 0.0
 	rotation = heading
+	_track_level()
 
 
 func _physics_process(delta: float) -> void:
+	_track_level()
 	if _carried_step(delta):
 		return
 	if burning >= 0.0:
@@ -202,10 +204,10 @@ func _physics_process(delta: float) -> void:
 		_keep_on_map()
 	# 2.5D: 깊이(월드 x+y)로 그리는 순서를 정한다. 떠 있는 헬기는 건물 위에 그린다
 	if IsoView.enabled:
-		z_index = IsoView.Z_AIR if airborne() else maxi(IsoView.z_of(global_position), over_z)
+		z_index = IsoView.Z_AIR if airborne() else maxi(IsoView.z_at(global_position, level), over_z)
 	else:
 		z_index = 20 if airborne() else 1
-	ground = IsoView.ground(global_position) + climb
+	ground = IsoView.ground(global_position, level) + climb
 
 
 ## 다시 그릴지는 화면 프레임마다 한 번 정한다 (물리 틱마다 정하면 느려질수록 한 프레임에 여러 번 그려 더 느려진다).
@@ -396,12 +398,29 @@ func _carried_step(delta: float) -> bool:
 	return false
 
 
-## 충돌 층·마스크를 값이 바뀔 때만 넣는다 (같은 값을 다시 넣으면 물리 서버가 몸체를 다시 등록해 충돌 순서가 바뀐다)
+## 충돌 층·마스크(땅 기준)를 정한다. 고가 위면 Layers.at으로 옮겨 넣는다.
+## 값이 바뀔 때만 넣는다 (같은 값을 다시 넣으면 물리 서버가 몸체를 다시 등록해 충돌 순서가 바뀐다)
 func _set_collision(layer: int, mask: int) -> void:
-	if collision_layer != layer:
-		collision_layer = layer
-	if collision_mask != mask:
-		collision_mask = mask
+	_col_base = Vector2i(layer, mask)
+	var l := Layers.at(layer, level)
+	var m := Layers.at(mask, level)
+	if collision_layer != l:
+		collision_layer = l
+	if collision_mask != m:
+		collision_mask = m
+
+
+## 자리가 정하는 고가 층으로 바꾼다 (넘는 교차로 상자 안이면 그대로)
+func _track_level() -> void:
+	var z := CityMap.level_zone(global_position)
+	if z >= 0 and z != level:
+		level = z
+		_set_collision(_col_base.x, _col_base.y)
+
+
+## 층이 달라 닿지 않는 자리에 있는가 (고가 위와 밑). 떠 있는 헬기도 닿지 않는다
+func apart(pos: Vector2, other_level: int) -> bool:
+	return airborne() or not CityMap.meet(global_position, level, pos, other_level)
 
 
 # ── 헬기 ──────────────────────────────────────────────────
@@ -438,12 +457,16 @@ func _fly(delta: float) -> void:
 		landing = false
 		touched_down = true
 	var flying := airborne() or _ghost
-	collision_layer = 0 if flying else Layers.VEHICLES
-	collision_mask = 0 if flying else Layers.WORLD | Layers.VEHICLES
+	_set_collision(0 if flying else Layers.VEHICLES, 0 if flying else Layers.WORLD | Layers.VEHICLES)
 	if altitude < stats.fly_height * LIFTOFF and not landing:
 		throttle_input = 0.0
 		steer_input = 0.0
 		handbrake_input = false
+
+
+## 땅에서 쏜 총알 피해 배율: 높이 뜰수록 약하다 (날 높이에서 stats.ground_fire_damage)
+func ground_fire_factor() -> float:
+	return lerpf(1.0, stats.ground_fire_damage, clampf(altitude / stats.fly_height, 0.0, 1.0))
 
 
 ## 빠르게 돌수록 도는 쪽으로 기울고(조향 × 속도), 속도를 올리는 동안 앞으로 숙인다(가속도 — 최고 속도에 닿으면 펴지고,
@@ -469,10 +492,12 @@ func can_land_here() -> bool:
 	var b := CityMap.block_at(pos)
 	if City.block_rect(b.x, b.y).has_point(pos) and not CityMap.is_open_block(b):
 		return false
+	if CityMap.overpass_at(pos) >= 0:
+		return false   # 고가차도 위·밑 (날개가 상판에 걸린다)
 	var query := PhysicsShapeQueryParameters2D.new()
 	query.shape = _shape.shape
 	query.transform = global_transform
-	query.collision_mask = Layers.WORLD | Layers.VEHICLES
+	query.collision_mask = Layers.at(Layers.WORLD | Layers.VEHICLES, level)
 	query.exclude = [get_rid()]
 	return get_world_2d().direct_space_state.intersect_shape(query, 1).is_empty()
 

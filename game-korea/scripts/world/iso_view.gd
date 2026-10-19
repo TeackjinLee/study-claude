@@ -30,9 +30,9 @@ static func lift(h: float) -> Vector2:
 	return LIFT * h
 
 
-## 그 자리 땅 높이 (다리 위). 위에서 보기(F9)면 0
-static func ground(pos: Vector2) -> float:
-	return CityMap.ground_height(pos) if enabled else 0.0
+## 그 자리 땅 높이 (다리·고가 위). level은 서 있는 층(고가차도 위 1, -1은 모름 — CityMap.ground_height). 위에서 보기(F9)면 0
+static func ground(pos: Vector2, level := -1) -> float:
+	return CityMap.ground_height(pos, level) if enabled else 0.0
 
 
 ## 회전한 노드 안에서 쓸 높이 오프셋
@@ -61,6 +61,25 @@ static func walk_dir(screen_dir: Vector2) -> Vector2:
 
 static func z_of(pos: Vector2) -> int:
 	return clampi(Z_MIN + int((pos.x + pos.y - DEPTH_MIN) / DEPTH_STEP), Z_MIN, Z_MAX)
+
+
+## 고가 위에 선 것이 상판 앞쪽보다 앞에 오도록 미는 거리 (월드 px) — 차 반 길이보다 길어야 앞 상판 조각이 차를 덮지 않는다
+const DECK_Z_AHEAD := 48.0
+
+
+## 층까지 본 그리는 순서: 고가 위(level 1)면 상판 앞 가장자리 + DECK_Z_AHEAD 기준으로 밀어 상판 조각 위에 그린다
+static func z_at(pos: Vector2, level: int) -> int:
+	if level == 1:
+		var o := CityMap.overpass_at(pos)
+		if o >= 0:
+			return deck_z(CityMap.OVERPASSES[o], pos, DECK_Z_AHEAD) + 1
+	return z_of(pos)
+
+
+## 고가 o의 상판 앞(남·동쪽) 가장자리에서 pos 진행 좌표 + ahead 자리의 깊이
+static func deck_z(o: Vector4i, pos: Vector2, ahead: float) -> int:
+	var along := pos.x if o.x == 1 else pos.y
+	return z_of(CityMap.over_point(o, along + ahead, City.road_center(o.y) + City.ROAD * 0.5))
 
 
 ## 카메라 위치·줌 → 캔버스 변환

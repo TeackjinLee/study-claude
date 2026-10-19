@@ -58,7 +58,7 @@ func nearest_enterable() -> Vehicle:
 	var best: Vehicle = null
 	var best_d := ENTER_RANGE
 	for v in vehicles:
-		if v.speed() > MAX_ENTER_SPEED or not v.usable() or v.airborne():
+		if v.speed() > MAX_ENTER_SPEED or not v.usable() or v.apart(player.global_position, player.level):
 			continue
 		var d := player.global_position.distance_to(v.door_position(false))
 		if d < best_d:
@@ -99,7 +99,7 @@ func enter_immediately(v: Vehicle) -> void:
 		if police and police.owns(v):
 			police.eject_crew(v, door + outward * EJECT_OFFSET)
 		else:
-			driver = pedestrians.spawn_fleeing(door + outward * EJECT_OFFSET, outward, v.stats.driver_npc)
+			driver = pedestrians.spawn_fleeing(door + outward * EJECT_OFFSET, outward, v.stats.driver_npc, v.level)
 		vehicle_stolen.emit(v, driver)
 	current_vehicle = v
 	v.controlled = true
@@ -118,6 +118,7 @@ func exit_vehicle() -> void:
 	v.landing = false
 	v.touched_down = false
 	current_vehicle = null
+	player.set_level(v.level)
 	var spot := v.door_position(false)
 	if player.blocked_at(spot):
 		spot = v.door_position(true)
@@ -142,3 +143,4 @@ func _free_ground(pos: Vector2) -> Vector2:
 func _process(_delta: float) -> void:
 	if current_vehicle:
 		player.global_position = current_vehicle.global_position
+		player.set_level(current_vehicle.level)

@@ -126,7 +126,7 @@ func shoot() -> bool:
 		if not w.melee:
 			from += dir * MUZZLE
 	arsenal.fire()
-	combat.fire(from, dir, w, true, exclude)
+	combat.fire(from, dir, w, true, exclude, 0.0, v.level if v else player.level)
 	if w.melee and v == null:
 		player.punch()
 	return true
@@ -148,7 +148,7 @@ func _fire_mounted(v: Vehicle, w: WeaponType) -> bool:
 	_mounted_cooldown = w.fire_interval
 	var dir := v.motor.forward()
 	var exclude: Array[RID] = [v.get_rid()]
-	combat.fire(v.global_position + dir * (v.stats.size.y * 0.5 + 4.0), dir, w, true, exclude)
+	combat.fire(v.global_position + dir * (v.stats.size.y * 0.5 + 4.0), dir, w, true, exclude, 0.0, v.level)
 	return true
 
 
@@ -179,7 +179,7 @@ func _fire_turret(v: Vehicle, w: WeaponType) -> bool:
 		v.recoil = 1.0
 	else:
 		var dir := v.gun_dir()
-		combat.fire(v.global_position + dir * 8.0, dir, w, true, exclude)
+		combat.fire(v.global_position + dir * 8.0, dir, w, true, exclude, 0.0, v.level)
 	return true
 
 

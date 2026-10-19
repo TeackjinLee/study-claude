@@ -448,6 +448,7 @@ func _drive_cars() -> void:
 		if seen:
 			p.target = target.global_position
 			p.target_velocity = target.call("follow_velocity")
+			p.target_level = target.get("level")
 			_search.erase(car)
 		else:
 			# 마지막으로 본 곳에 가 보고, 거기도 없으면 근처 교차로를 돌며 찾는다
@@ -459,6 +460,7 @@ func _drive_cars() -> void:
 			_search[car] = goal
 			p.target = goal
 			p.target_velocity = Vector2.ZERO
+			p.target_level = -1
 		p.target_vehicle = director.current_vehicle
 		# 달아나는 차만 들이받는다. 멈춘 차를 들이받으면 계속 밀고 가서 세우지 못한다.
 		p.ram = wanted.level >= 2 and not on_foot and seen and director.current_vehicle.speed() > RAM_TARGET_SPEED
@@ -500,6 +502,8 @@ func _spawn_officer(pos: Vector2, car: Vehicle, duty: PoliceOfficer.Duty, npc: N
 	o.car = car
 	o.duty = duty
 	o.goal = pos
+	if car:
+		o.level = car.level   # 고가 위 경찰차에서 내리면 고가 위에 선다
 	pedestrians.add(o)
 	officers.append(o)
 	return o
@@ -532,12 +536,14 @@ func _update_officers() -> void:
 			_drop_officer(o)
 			continue
 		var pos := o.global_position
+		o.goal_level = -1
 		match o.duty:
 			PoliceOfficer.Duty.CHASE:
 				o.goal = _nearest_door(pcar, pos) if pcar else ppos
+				o.goal_level = pcar.level if pcar else director.player.level
 				# 달아나는 차(CAR_ESCAPE_SPEED 이상)는 도보로 맞히기 어렵다 — 멈추거나 느린 차, 도보 주인공만 쏜다
 				if level >= SHOOT_LEVEL and (pcar == null or pcar.speed() < CAR_ESCAPE_SPEED):
-					_shoot(o, pcar.global_position if pcar else ppos)
+					_shoot(o, pcar.global_position if pcar else ppos, pcar != null and pcar.airborne())
 				var escaping := pcar != null and pcar.speed() > CAR_ESCAPE_SPEED and pos.distance_to(ppos) > 220.0
 				if level == 0 or escaping or pos.distance_to(ppos) > FOOT_GIVE_UP:
 					_recall(o)
@@ -565,19 +571,19 @@ func _update_officers() -> void:
 					_remove_officer(o)
 
 
-## 보이는 곳에 있으면 주인공(차에 탔으면 그 차)을 쏜다
-func _shoot(o: PoliceOfficer, target: Vector2) -> void:
+## 보이는 곳에 있으면 주인공(차에 탔으면 그 차)을 쏜다. 하늘(떠 있는 헬기)은 건물 너머로도 보인다
+func _shoot(o: PoliceOfficer, target: Vector2, in_air := false) -> void:
 	var weapon := o.npc.weapon
 	if combat == null or weapon == null or o.reload > 0.0 or o.state != Pedestrian.State.WALK:
 		return
 	var pos := o.global_position
-	if pos.distance_to(target) > SHOOT_RANGE or not _can_see(get_world_2d().direct_space_state, pos, target):
+	if pos.distance_to(target) > SHOOT_RANGE or not (in_air or _can_see(get_world_2d().direct_space_state, pos, target)):
 		return
 	o.reload = weapon.fire_interval * shoot_rng.randf_range(SHOOT_DELAY[0], SHOOT_DELAY[1])
 	var dir := (target - pos).normalized()
 	o.facing = Vector2.UP.angle_to(dir)
 	var exclude: Array[RID] = [o.get_rid()]
-	combat.fire(pos + dir * 10.0, dir, weapon, false, exclude)
+	combat.fire(pos + dir * 10.0, dir, weapon, false, exclude, 0.0, o.level)
 
 
 func _nearest_door(v: Vehicle, from: Vector2) -> Vector2:
@@ -617,7 +623,8 @@ func _check_arrest(delta: float) -> void:
 		var at_door := false
 		for o in officers:
 			if _can_grab(o) and pcar.speed() < CAR_BUST_SPEED \
-					and o.global_position.distance_to(_nearest_door(pcar, o.global_position)) < DOOR_REACH:
+					and o.global_position.distance_to(_nearest_door(pcar, o.global_position)) < DOOR_REACH \
+					and CityMap.meet(o.global_position, o.level, pcar.global_position, pcar.level):
 				at_door = true
 		_arrest = _arrest + delta if at_door else maxf(_arrest - delta, 0.0)
 		if _arrest >= CAR_ARREST_TIME:
@@ -629,7 +636,8 @@ func _check_arrest(delta: float) -> void:
 	# 도보: 붙은 경찰마다 BEAT_INTERVAL마다 곤봉을 휘두른다. 체력이 BUST_HEALTH 아래가 되면 쓰러져 체포
 	var player := director.player
 	for o in officers:
-		if not _can_grab(o) or o.global_position.distance_to(player.global_position) >= BEAT_RANGE:
+		if not _can_grab(o) or o.global_position.distance_to(player.global_position) >= BEAT_RANGE \
+				or not CityMap.meet(o.global_position, o.level, player.global_position, player.level):
 			o.beat_wait = maxf(o.beat_wait - delta, BEAT_WINDUP)   # 떨어졌다 다시 붙어도 매가 빨라지지 않게
 			continue
 		o.beat_wait -= delta
@@ -692,6 +700,8 @@ func _on_level_changed(level: int, _previous: int) -> void:
 func _update_roadblocks(delta: float) -> void:
 	for rb in roadblocks.duplicate():
 		rb.age += delta
+		rb.cars = rb.cars.filter(is_instance_valid)    # 부서져 치워진 봉쇄 차 (Combat._cleanup_wrecks)·쓰러져 치워진 경찰
+		rb.officers = rb.officers.filter(is_instance_valid)
 		if rb.checkpoint and wanted.level >= CHECKPOINT_LEVEL:
 			continue
 		if not rb.checkpoint and wanted.level >= 3 and rb.age < ROADBLOCK_LIFETIME:

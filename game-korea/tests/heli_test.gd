@@ -5,12 +5,14 @@ extends Node
 ##  3. F: 건물 위에서는 내려앉지 못하고 떠서 기다린다 (다시 누르면 취소). 빈 도로 위에서는 내려앉아 내린다.
 ##  4. 떠 있는 헬기는 교통이 피하지 않고, 보행자를 치지 않는다. 지도 밖으로 못 나간다.
 ##  5. 공중에서 억지로 내리면(사망·체포·리셋) 주인공은 빈 땅에 서고, 건물 위의 버려진 헬기는 떨어져 부서진다.
-##  6. 소리: 세워 둔 헬기는 조용하고, 타면 날개가 빨라진다. 합성 소리는 날개가 지날 때마다 "두두두" 박자로 터진다.
+##  6. 땅에서 쏜 총알은 떠 있는 헬기에 맞는다 (건물 벽은 넘어간다). 아래에서 위로 쏘니 높을수록 피해가 약하다.
+##  7. 소리: 세워 둔 헬기는 조용하고, 타면 날개가 빨라진다. 합성 소리는 날개가 지날 때마다 "두두두" 박자로 터진다.
 ##  7. 큰불이면 119 구조헬기가 날아와 불 위에서 물을 쏟아 끄고, 다 끄면 돌아간다 (Fires).
 ##  8. NPC 헬기(경찰·군·119)는 입체 모형으로 그린다: 모형 차종이 있고, 기수가 진행 방향으로 돌고, 돌면 기운다.
 ## 실행: godot --headless --fixed-fps 60 --path . res://tests/heli_test.tscn
 
 const SEDAN: VehicleType = preload("res://data/vehicles/car_avela.tres")
+const PISTOL: WeaponType = preload("res://data/weapons/police_pistol.tres")
 
 var _failures: Array[String] = []
 
@@ -144,9 +146,28 @@ func _test_flight() -> void:
 	await _frames(150)
 	_expect(heli.altitude > heli.stats.fly_height * 0.9, "취소하면 다시 날 높이로 오른다 (%.0f)" % heli.altitude)
 
+	# 땅에서 쏘면 건물 너머 하늘의 헬기에도 맞는다 — 피해는 약하다
+	var combat: Combat = main.combat
+	var shooter := Vector2(b.get_center().x, b.end.y + 40.0)
+	var before := heli.health
+	combat.fire(shooter, (heli.global_position - shooter).normalized(), PISTOL, false, [])
+	var dealt := before - heli.health
+	var want := PISTOL.damage * heli.stats.ground_fire_damage
+	_expect(absf(dealt - want) < PISTOL.damage * 0.1,
+		"땅에서 쏜 총알이 건물 위 헬기에 약하게 맞는다 (피해 %.1f, 기대 %.1f / 땅에서는 %.0f)" % [dealt, want, PISTOL.damage])
+	before = heli.health
+	combat.fire(shooter, (heli.global_position - shooter).normalized().rotated(PI * 0.5), PISTOL, false, [])
+	_expect(heli.health == before, "헬기 옆으로 쏘면 안 맞는다")
+	_expect(is_equal_approx(heli.ground_fire_factor(), heli.stats.ground_fire_damage), "날 높이에서 피해 배율 %.2f" % heli.ground_fire_factor())
+	var alt := heli.altitude
+	heli.altitude = heli.stats.fly_height * 0.25
+	_expect(heli.ground_fire_factor() > 0.8, "낮게 뜨면 덜 약해진다 (%.2f)" % heli.ground_fire_factor())
+	heli.altitude = alt
+	heli.health = heli.max_health()
+
 	# 떠 있는 헬기는 교통이 피하지 않는다
 	var t: TrafficSystem = main.traffic
-	var piece := t.graph.segment(Vector2i(2, 2), 1)
+	var piece := t.graph.segment(Vector2i(2, 4), 1)
 	var car := t.spawn_at(SEDAN, piece, 60.0)
 	await _frames(1)
 	heli.place(piece.point_at(150.0), 0.0)
@@ -180,7 +201,7 @@ func _test_flight() -> void:
 	_expect(r.has_point(heli.global_position), "지도 밖으로 못 나간다 %s" % heli.global_position)
 
 	# 빈 도로 위에서 F: 내려앉아 내린다
-	var road := LaneGraph.center(Vector2i(2, 2))
+	var road := LaneGraph.center(Vector2i(3, 3))   # (2,2)는 고가차도 밑 — 헬기가 내려앉지 못한다
 	heli.place(road, 0.0)
 	await _frames(30)
 	d.request_enter_exit()

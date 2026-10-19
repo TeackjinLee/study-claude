@@ -42,6 +42,11 @@ func _ready() -> void:
 		await _air_shots(main)
 		get_tree().quit()
 		return
+	if "--only=overpass" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _overpass_shots(main)
+		get_tree().quit()
+		return
 	if "--only=m6" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _m6_shots(main)
@@ -613,6 +618,69 @@ func _heavy_shots(main: Node2D) -> void:
 	await _save("heavy_dozer")
 
 
+## 고가차도 (`-- --only=overpass`): 교통이 다니는 모습 → 고가 위 차와 밑을 지나는 차가 겹친 모습 → 경사로를 올라 고가 위를 달리는 모습
+func _overpass_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	main.player.died.disconnect(main._on_died)
+	var o: Vector4i = CityMap.OVERPASSES[0]
+	var cell := Vector2i(o.z, o.y)
+	var lane := City.road_center(o.y) + LaneGraph.LANE_OFFSET
+	cam.target = null
+	cam.global_position = LaneGraph.center(cell) + Vector2(300, 0)
+	await _frames(400)
+	await _save("overpass_view")
+	# 겹친 모습: 넘는 교차로 위와 밑에 차를 세운다
+	var top := Vehicle.new()
+	top.stats = load("res://data/vehicles/car_taxi.tres")
+	main.add_child(top)
+	top.place(LaneGraph.center(cell) + Vector2(10, LaneGraph.LANE_OFFSET), PI * 0.5)
+	top.level = 1
+	main.vehicles.append(top)
+	var low := Vehicle.new()
+	low.stats = load("res://data/vehicles/trk_bongo.tres")
+	main.add_child(low)
+	low.place(LaneGraph.center(cell) + Vector2(-LaneGraph.LANE_OFFSET, 40), PI)
+	main.vehicles.append(low)
+	# 앞(남동쪽) 블록 건물에 가리므로 잠깐 숨긴다
+	var hidden: Array = []
+	for b in [cell, cell + Vector2i(1, 0)]:
+		for idx in main.city._by_block.get(b, []):
+			for view in main.city._views.get(idx, []):
+				view.visible = false
+				hidden.append(view)
+	cam.global_position = LaneGraph.center(cell)
+	cam.zoom = Vector2(1.8, 1.8)
+	await _frames(20)
+	await _save("overpass_stack")
+	cam.global_position = LaneGraph.center(cell) + Vector2(150, 150)
+	cam.zoom = Vector2(1.0, 1.0)
+	await _frames(5)
+	await _save("overpass_side")
+	for view in hidden:
+		view.visible = true
+	cam.zoom = Vector2(ChaseCamera.BASE_ZOOM, ChaseCamera.BASE_ZOOM)
+	# 경사로를 올라 고가 위를 달린다
+	var car := Vehicle.new()
+	car.stats = load("res://data/vehicles/car_sonato.tres")
+	main.add_child(car)
+	car.place(Vector2(CityMap.over_extent(o).x - 60.0, lane), PI * 0.5)
+	main.vehicles.append(car)
+	main.director.enter_immediately(car)
+	cam.target = car
+	cam.snap()
+	Input.action_press("accelerate")
+	var shots := ["overpass_ramp", "overpass_deck"]
+	while not shots.is_empty():
+		await _frames(1)
+		main.player.revive()
+		var x := car.global_position.x
+		if shots[0] == "overpass_ramp" and x > CityMap.over_extent(o).x + City.BLOCK * 0.55:
+			await _save(shots.pop_front())
+		elif shots[0] == "overpass_deck" and x > (o.z + 0.6) * City.PITCH:
+			await _save(shots.pop_front())
+	Input.action_release("accelerate")
+
+
 ## NPC 헬기 (입체 모형): ★5 경찰 헬기 탐조등 → ★6 군 기동헬기 → 큰불에 물을 쏟는 119 구조헬기 (`-- --only=air`)
 func _air_shots(main: Node2D) -> void:
 	var cam: ChaseCamera = main.camera
@@ -689,6 +757,17 @@ func _heli_ride_shots(main: Node2D) -> void:
 	await _save("heli_bank_right")
 	Input.action_release("steer_right")
 	await _frames(70)
+	# 땅에서 위로 쏜 총알 궤적 (헬기 그림까지 올라간다)
+	Input.action_release("accelerate")
+	await _frames(90)
+	var pistol: WeaponType = load("res://data/weapons/police_pistol.tres")
+	var none: Array[RID] = []
+	for k in 3:
+		var from := heli.global_position + Vector2(-160.0 + k * 140.0, 170.0)
+		main.combat.fire(from, (heli.global_position - from).normalized(), pistol, false, none)
+	await _frames(1)
+	await _save("heli_shot")
+	Input.action_press("accelerate")
 	Input.action_release("accelerate")
 	main.set_iso(false)
 	await _frames(5)

@@ -89,12 +89,14 @@ func _walk_loop(block: Vector2i) -> PackedVector2Array:
 
 
 ## 차에서 끌려 나온 운전자 등: pos에서 away 방향으로 도망치는 보행자를 만든다 (npc가 없으면 일반 시민)
-func spawn_fleeing(pos: Vector2, away: Vector2, npc: NpcType = null) -> Pedestrian:
+## level: 고가차도 층 (고가 위 차에서 내린 운전자는 1)
+func spawn_fleeing(pos: Vector2, away: Vector2, npc: NpcType = null, level := 0) -> Pedestrian:
 	if npc == null:
 		npc = NPC_TYPES[0]
 	var p := Pedestrian.new()
 	p.setup(npc, rng, City.sidewalk_loop(City.nearest_block(pos)), 0, 0.0, 1)
 	p.position = pos
+	p.level = level
 	add(p)
 	p.panic(away)
 	return p
@@ -263,7 +265,7 @@ func _maintain() -> void:
 func _sense(p: Pedestrian) -> void:
 	for v in vehicles:
 		var rel := p.global_position - v.global_position
-		if rel.length() > SENSE_RANGE or v.airborne():   # 머리 위를 나는 헬기는 치지도, 피하지도 않는다
+		if rel.length() > SENSE_RANGE or v.apart(p.global_position, p.level):   # 머리 위를 나는 헬기·고가 위아래 차는 치지도, 피하지도 않는다
 			continue
 		var speed := v.speed()
 		var local := v.to_local(p.global_position)

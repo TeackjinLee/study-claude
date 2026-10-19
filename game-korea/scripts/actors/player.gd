@@ -29,13 +29,14 @@ var knocked_down := false
 var _stun := 0.0                 ## 맞아서 못 움직이는 남은 시간
 var _push := Vector2.ZERO        ## 맞아서 밀려나는 속도
 var _hurt := 0.0                 ## 맞은 뒤 붉게 번쩍이는 남은 시간
+var level := 0                   ## 고가차도 층 (CityMap.level_zone)
+var _col_base := Vector2i(Layers.PEOPLE, Layers.WORLD | Layers.VEHICLES)
 
 
 func _ready() -> void:
 	motion_mode = MOTION_MODE_FLOATING
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR     # 인물 그림(PersonRig 스프라이트)을 줄여 그릴 때 깨지지 않게
-	collision_layer = Layers.PEOPLE
-	collision_mask = Layers.WORLD | Layers.VEHICLES
+	_set_collision(Layers.PEOPLE, Layers.WORLD | Layers.VEHICLES)
 	var shape := CollisionShape2D.new()
 	var circle := CircleShape2D.new()
 	circle.radius = RADIUS
@@ -44,6 +45,8 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if input_enabled:
+		_track_level()
 	if not input_enabled or knocked_down:
 		velocity = Vector2.ZERO
 		return
@@ -82,15 +85,38 @@ func _process(delta: float) -> void:
 ## 2.5D: 깊이(월드 x+y)로 그리는 순서를 정한다
 func _sort() -> void:
 	z_as_relative = not IsoView.enabled
-	z_index = IsoView.z_of(global_position) if IsoView.enabled else 0
+	z_index = IsoView.z_at(global_position, level) if IsoView.enabled else 0
 
 
 ## 차에 타면 숨기고 충돌을 끈다. 내리면 되돌린다.
 func set_in_vehicle(inside: bool) -> void:
 	visible = not inside
 	input_enabled = not inside
-	collision_layer = 0 if inside else Layers.PEOPLE
-	collision_mask = 0 if inside else Layers.WORLD | Layers.VEHICLES
+	_set_collision(0 if inside else Layers.PEOPLE, 0 if inside else Layers.WORLD | Layers.VEHICLES)
+
+
+## 고가차도 층 (0 땅 · 1 고가 위). 차에 탔다 내리면 차의 층을 받는다
+func set_level(l: int) -> void:
+	if l != level:
+		level = l
+		_set_collision(_col_base.x, _col_base.y)
+
+
+func _track_level() -> void:
+	var z := CityMap.level_zone(global_position)
+	if z >= 0:
+		set_level(z)
+
+
+## 땅 기준 충돌을 정하고 지금 층으로 옮겨 넣는다 (값이 바뀔 때만)
+func _set_collision(layer: int, mask: int) -> void:
+	_col_base = Vector2i(layer, mask)
+	var l := Layers.at(layer, level)
+	var m := Layers.at(mask, level)
+	if collision_layer != l:
+		collision_layer = l
+	if collision_mask != m:
+		collision_mask = m
 
 
 ## 그 자리에 서면 벽이나 차와 겹치는지
@@ -100,7 +126,7 @@ func blocked_at(pos: Vector2) -> bool:
 	var query := PhysicsShapeQueryParameters2D.new()
 	query.shape = circle
 	query.transform = Transform2D(0.0, pos)
-	query.collision_mask = Layers.WORLD | Layers.VEHICLES
+	query.collision_mask = Layers.at(Layers.WORLD | Layers.VEHICLES, level)
 	return not get_world_2d().direct_space_state.intersect_shape(query, 1).is_empty()
 
 

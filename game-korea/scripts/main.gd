@@ -71,7 +71,7 @@ const PARKED := [
 	[1, false, 4, 3, 0.6, false],
 	[2, true, 4, 3, 0.25, true],
 	[4, true, 2, 4, 0.5, false],
-	[5, false, 2, 1, 0.7, false],
+	[5, false, 2, 3, 0.7, false],       # 가로 2번 도로 1~2구간은 고가차도 (CityMap.OVERPASSES)
 	[6, true, 5, 1, 0.6, true],
 	[7, false, 5, 4, 0.5, false],
 	# M6 구역들 (잠긴 구역의 차는 그 장이 열릴 때까지 통제 구역 안에 서 있다)

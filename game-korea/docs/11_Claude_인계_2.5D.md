@@ -151,7 +151,7 @@ Godot 4.7.2 / Apple M1 Pro에서 시작 장면을 실행하고 1280×720 PNG 저
 - 건물: `scripts/world/building_view.gd` — 정사각형 조각 단위로 깊이 정렬(샘플의 x+y 근사가 긴 건물 옆에서 틀리던 문제), 벽·창·1층 상가·벽 간판, 지붕은 기존 BuildingDrawer 그림. 가림 반투명은 보간한다.
 - 차·사람·헬기·효과·미션 표식·미니맵을 본편 코드에서 2.5D로 그린다. `F9`로 위에서 보기 전환.
 - 검증: 기존 테스트 전부 + 새 `tests/iso_test.tscn`. 화면 캡처 `screenshot.tscn -- --only=iso`.
-- 남은 것: 고가도로(겹치는 길), 신호등 기둥·공중전화 부스 입체, 최종 픽셀 에셋, 성능 목표 측정.
+- 남은 것: 고가차도는 2026-10-19에 한 곳(강남 가로 2번, docs/08 M6) 놓았다. 신호등 기둥·공중전화 부스 입체, 최종 픽셀 에셋, 성능 목표 측정.
 
 ## 후속 (Claude Code): 본편 차량 입체 모형
 
@@ -460,3 +460,22 @@ City 전체 건물 충돌을 부지 Rect에서 실제 Piece 장애물로 변경�
 - `scripts/vehicle/heli_sound.gd`: `Vehicle.apply_stats`가 나는 차종에 붙인다(`Vehicle.sound`). 날개가 돌면(`_rotor_spinning`) 약 3초에 걸쳐 빨라지고 내리면 약 5초에 멈춘다. `AudioStreamGenerator`에 프레임마다 모자란 만큼 채우고, 카메라에서 `HEAR_RANGE`(1500px) 밖이면 멈춘다. 헤드리스에서는 플레이어를 만들지 않는다(빠르기 계산만).
 - 합성 비용: 1초 분량 약 11ms (프레임당 약 0.2ms).
 - 확인: heli_test(세워 둔 헬기 무음·타면 빨라짐·합성 무음/크기/찢어짐·1초에 날개 박자 `BLADE_HZ`번 — 30ms 토막으로 센다(처음 11번 → 사용자 요청으로 8번 → 더 낮고 느리게 5.5번, 쿵 소리 36Hz)), 창 모드 `screenshot.tscn -- --only=heli` 오류 없음. 미리 듣기 `output/sound/heli_preview.wav`(시동 0~3초 · 힘 3.5~6초 · 9초부터 시동 끔).
+
+### 2026-10-19 떠 있는 헬기에 총알이 맞는다 (아래에서 쏘면 약하게)
+
+- `Combat.fire`(즉시 맞는 총알)가 총알 길마다 `_air_target`으로 떠 있는 헬기(`flies`·`airborne()`·쏜 쪽 제외)를 찾는다. 길에서 헬기 가운데까지 거리가 길이 × `AIR_HIT_RADIUS`(0.5) 안이고, √(땅 거리² + 높이²)가 사거리 안이면 맞는다.
+- 땅 광선과 비교: 벽(건물)은 넘어가고(위로 쏘는 총알), 헬기보다 가까운 사람·차에 맞으면 꿰뚫을 힘(pierce)을 다 쓴 경우 헬기까지 못 간다.
+- 피해 = 무기 피해 × `Vehicle.ground_fire_factor()` = lerp(1, `ground_fire_damage`, 높이 / 날 높이). 민간 헬기 0.4 → 경찰 권총 8이 날 높이에서 3.2.
+- 궤적은 맞은 점에서 헬기 높이만큼 올려 그린다(땅에서 하늘로 올라가는 줄).
+- 경찰 헬기(`fire_from_air`)가 떠 있는 헬기를 겨누면 그 헬기가 맞는다(같은 하늘, 피해 그대로).
+- 경찰(`PoliceDispatcher._shoot`)·조직원(`GangManager`)은 주인공 헬기가 떠 있으면 건물에 가려도 쏜다(시야 검사 생략). 주먹·칼 조직원은 못 닿는다. 빠르게 나는 헬기는 차와 같은 `CAR_ESCAPE_SPEED` 규칙으로 쏘지 않는다 — 떠서 멈추거나 느리게 날면 맞는다.
+- 로켓·수류탄·화염병(날아가는 탄)과 화염방사기는 아직 공중을 맞히지 않는다.
+- 확인: heli_test(건물 너머 하늘의 헬기에 경찰 권총이 3.2 피해, 옆으로 쏘면 안 맞음, 낮게 뜨면 배율 0.8 넘음; 하늘 검사를 빼면 실패하는 것 확인), `screenshot.tscn -- --only=heli`의 heli_shot.
+
+### 2026-10-19 총소리·폭발 소리
+
+- 합성기 `scripts/fx/gun_synth.gd`(노드 없는 계산부, 22050Hz 모노). 한 발 = 탁(아주 짧은 높은 바람 소리) + 몸통(걸러 낸 바람 소리, 빨리 사그라짐) + 쿵(높게 시작해 떨어지는 낮은 사인파) + 울림(아주 낮게 걸러 낸 긴 꼬리) + 건물 메아리 한 번. 폭발은 타닥거림(파편)을 더한다. 종류 8개(`KINDS`: pistol·smg·rifle·shotgun·mg·rocket·cannon·explosion)는 길이·두께·쿵 높이가 다르다 — 무거울수록 낮고 길다. 종류마다 변형 3개(`VARIANTS`)로 연발이 똑같이 들리지 않게 한다.
+- 무기는 `WeaponType.sound`(data/weapons/*.tres)로 종류를 고른다 — 권총 3종 pistol, 기관단총 2종 smg, 소총 2종 rifle, 산탄총 shotgun, 차·헬기·지프 기관총 mg, 로켓 rocket, 곡사포 cannon. 주먹·방망이·수류탄·화염병·화염방사기·물대포는 소리 없음(다음 차례).
+- 재생 `scripts/fx/sfx.gd`: Combat이 하나 붙인다(`Sfx.current`). `Combat.fire`(산탄도 한 번)·`fire_from_air`·`_launch`(로켓)·`fire_shell`·`explode`(크기 배율 — 클수록 크고 낮게)가 `Sfx.play(종류, 위치, 크기)`를 부른다. 한 번 울리는 소리라 `AudioStreamGenerator`가 아니라 처음에 `AudioStreamWAV`로 구워 둔다 — 다 굽는 데 약 1초라 `WorkerThreadPool`에서 굽고, 다 구워지기 전엔 그 종류는 소리 없이 넘어간다. 목소리 14개(`VOICES`)를 돌려 쓰고 모자라면 가장 오래 운 것을 끊는다. 카메라에서 멀수록 작다(총 `HEAR_RANGE` 1400px, 폭발 `BLAST_RANGE` 2600px). 같은 종류가 같은 곳에서 2틱 안에 또 나면 한 번만. 높이 흔들기는 Sfx 자기 rng라 게임 결과(★3 도주 등)를 바꾸지 않는다. 헤드리스에서는 소리 없이 기록(`heard`)만 남긴다.
+- 들어 보기: `godot --headless --path . -s res://tools/sound_preview.gd` → `output/sound/<종류>.wav`(변형 셋)·`sfx_all.wav`(전부).
+- 확인: `sound_test`(합성 길이·크기·사그라짐·같은 값 같은 소리·변형 다름, 낮은 소리 몫 권총 < 소총 < 포 < 폭발, 쏘는 무기 데이터에 소리, 본편에서 권총·산탄 한 번·주먹 무음·폭발 크기 기록; 창 모드로 돌리면 다 구워진 뒤 실제로 목소리가 우는지도 본다).

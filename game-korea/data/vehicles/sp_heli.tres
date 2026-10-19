@@ -30,3 +30,4 @@ fly_height = 150.0
 climb_rate = 70.0
 bank_angle = 0.45
 pitch_angle = 0.28
+ground_fire_damage = 0.4

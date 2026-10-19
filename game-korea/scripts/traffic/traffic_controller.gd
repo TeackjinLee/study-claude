@@ -24,7 +24,7 @@ var _waiting := {}         ## cell → { 차 id: [이동, 기다리기 시작한
 
 func _init(p_graph: LaneGraph) -> void:
 	graph = p_graph
-	# 4지 교차로는 신호등, 3지·2지(다리 위 포함)와 일부 4지는 무신호
+	# 4지 교차로는 신호등, 3지·2지(다리 위 포함)와 일부 4지·고가차도가 넘는 교차로는 무신호
 	for j in range(CityMap.MIN.y, CityMap.MAX.y + 2):
 		for i in range(CityMap.MIN.x, CityMap.MAX.x + 2):
 			var cell := Vector2i(i, j)
@@ -32,7 +32,7 @@ func _init(p_graph: LaneGraph) -> void:
 			for d in 4:
 				if CityMap.road(cell, d):
 					ways += 1
-			if ways == 4 and posmod(i + 2 * j, 5) != 0:
+			if ways == 4 and posmod(i + 2 * j, 5) != 0 and CityMap.over_axis(cell) < 0:
 				signal_offsets[cell] = posmod(i + j, 4) * 3.0
 
 
@@ -57,6 +57,8 @@ func light(cell: Vector2i, dir_in: int) -> Light:
 
 
 func try_reserve(cell: Vector2i, dir_in: int, dir_out: int, who: int) -> bool:
+	if CityMap.over_axis(cell) >= 0:
+		return true   # 고가차도가 넘는 교차로: 직진만 있고 위아래가 따로 지나가므로 겹치는 이동이 없다
 	var act: Dictionary = _active.get(cell, {})
 	if act.has(who):
 		return true

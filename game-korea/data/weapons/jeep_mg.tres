@@ -18,3 +18,4 @@ pickup_ammo = 0
 max_ammo = 0
 mounted_on = Array[StringName]([&"ARMY_JEEP"])
 tracer_color = Color(1, 0.88, 0.4, 1)
+sound = &"mg"

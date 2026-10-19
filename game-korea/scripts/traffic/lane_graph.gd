@@ -6,6 +6,7 @@ extends RefCounted
 ## 방향마다 차로가 둘이다. NPC는 중앙선에서 LANE_OFFSET 떨어진 안쪽 차로를 달리고,
 ## 바깥 차로(PASS_OFFSET만큼 더 오른쪽)는 갓길 주차와 추월에 쓴다. 우측통행.
 ## 교차로 회전은 원호다 — 정지선(STOP_LINE)부터 돌기 시작해 반경이 차의 최소 회전 반경보다 크다.
+## 고가차도가 넘는 교차로(CityMap.over_axis)는 직진만 있다 — 고가 위는 고가 축, 밑은 다른 축으로 곧장 지난다.
 
 const LANE_OFFSET := 24.0
 const PASS_OFFSET := 48.0
@@ -34,7 +35,7 @@ func _init() -> void:
 				if not CityMap.road(cell, (d + 2) % 4):
 					continue
 				for out in 4:
-					if out != (d + 2) % 4 and CityMap.road(cell, out):
+					if out != (d + 2) % 4 and CityMap.road(cell, out) and allowed(cell, d, out):
 						turns[Vector4i(i, j, d, out)] = _make_turn(cell, d, out)
 	_build_conflicts()
 
@@ -62,6 +63,11 @@ static func is_open(piece: LanePiece) -> bool:
 	return CityMap.open_road(piece.from_cell, piece.dir_in)
 
 
+## cell에서 dir_in으로 들어와 dir_out으로 나갈 수 있는가 — 고가차도가 넘는 교차로는 직진만
+static func allowed(cell: Vector2i, dir_in: int, dir_out: int) -> bool:
+	return dir_in == dir_out or CityMap.over_axis(cell) < 0
+
+
 static func dir_index(v: Vector2i) -> int:
 	return STEPS.find(Vector2i(signi(v.x), signi(v.y)))
 
@@ -76,7 +82,7 @@ func exits(cell: Vector2i, dir_in: int) -> Array[int]:
 	if not CityMap.road(cell, (dir_in + 2) % 4):
 		return result
 	for out in 4:
-		if out != (dir_in + 2) % 4 and connected(cell, out):
+		if out != (dir_in + 2) % 4 and connected(cell, out) and allowed(cell, dir_in, out):
 			result.append(out)
 	return result
 

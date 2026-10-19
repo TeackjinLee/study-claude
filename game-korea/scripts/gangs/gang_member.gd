@@ -16,6 +16,7 @@ var reload := 0.0
 
 
 func _physics_process(delta: float) -> void:
+	_track_level()
 	reload -= delta
 	aggro = maxf(aggro - delta, 0.0)
 	# 싸우는 조직원은 겁먹지 않는다 — 화나기 전에 도망치던 참이면 돌아선다.
@@ -73,7 +74,7 @@ func _draw() -> void:
 		return
 	if IsoView.enabled:
 		# 2.5D: 가슴에 갱 상징색 띠
-		draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, IsoView.ground(global_position)).scaled_local(Vector2(npc.body_scale, npc.body_scale)))
+		draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, IsoView.ground(global_position, level)).scaled_local(Vector2(npc.body_scale, npc.body_scale)))
 		draw_rect(Rect2(-4.5, -17, 9, 2.2), gang.accent)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return

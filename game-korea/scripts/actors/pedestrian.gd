@@ -33,6 +33,8 @@ var look_seed := 0                ## 모자·소지품 유무를 정하는 값 (
 var speech := ""                  ## 말풍선 (speech_time 동안)
 var speech_time := 0.0
 var _drawn_key: Array = []        ## 마지막으로 그린 모습 — 같으면 다시 그리지 않는다
+var level := 0                    ## 고가차도 층 (CityMap.level_zone) — 충돌 비트를 Layers.at으로 옮긴다
+var _col_base := Vector2i(Layers.PEOPLE, Layers.WORLD)
 
 
 func setup(p_npc: NpcType, p_rng: RandomNumberGenerator, p_loop: PackedVector2Array,
@@ -55,8 +57,8 @@ func setup(p_npc: NpcType, p_rng: RandomNumberGenerator, p_loop: PackedVector2Ar
 func _ready() -> void:
 	motion_mode = MOTION_MODE_FLOATING
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR     # 인물 그림(PersonRig 스프라이트)을 줄여 그릴 때 깨지지 않게
-	collision_layer = Layers.PEOPLE
-	collision_mask = Layers.WORLD
+	_track_level()
+	_set_collision(Layers.PEOPLE, Layers.WORLD)
 	var shape := CollisionShape2D.new()
 	var circle := CircleShape2D.new()
 	circle.radius = RADIUS
@@ -65,6 +67,7 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_track_level()
 	if state == State.DEAD:
 		dead_time += delta
 		return
@@ -166,10 +169,34 @@ func die(away: Vector2) -> void:
 	if away != Vector2.ZERO:
 		facing = Vector2.UP.angle_to(away)
 	velocity = Vector2.ZERO
-	collision_layer = 0          # 시신은 총알·차를 막지 않는다
+	_set_collision(0, _col_base.y)          # 시신은 총알·차를 막지 않는다
 	_set_state(State.DEAD, 0.0)
 	dead_time = 0.0
 	queue_redraw()
+
+
+## 고가차도 층을 정한다 (차에서 내린 사람은 차의 층)
+func set_level(l: int) -> void:
+	if l != level:
+		level = l
+		_set_collision(_col_base.x, _col_base.y)
+
+
+func _track_level() -> void:
+	var z := CityMap.level_zone(global_position)
+	if z >= 0:
+		set_level(z)
+
+
+## 땅 기준 충돌을 정하고 지금 층으로 옮겨 넣는다 (값이 바뀔 때만)
+func _set_collision(layer: int, mask: int) -> void:
+	_col_base = Vector2i(layer, mask)
+	var l := Layers.at(layer, level)
+	var m := Layers.at(mask, level)
+	if collision_layer != l:
+		collision_layer = l
+	if collision_mask != m:
+		collision_mask = m
 
 
 func is_dead() -> bool:
@@ -195,9 +222,9 @@ func resume_walking() -> void:
 ## 모습(걸음 24단계·방향·상태·말풍선)이 바뀔 때만 다시 그린다 — 물리 틱마다 그리면 사람 수만큼 비싸다
 func _process(_delta: float) -> void:
 	z_as_relative = not IsoView.enabled
-	z_index = IsoView.z_of(global_position) if IsoView.enabled else 0
+	z_index = IsoView.z_at(global_position, level) if IsoView.enabled else 0
 	var key := [int(walk_phase * 24.0 / TAU), snappedf(facing, 0.05), state, speech_time > 0.0, speech,
-		IsoView.enabled, npc, shirt]
+		IsoView.enabled, npc, shirt, snappedf(IsoView.ground(global_position, level), 0.5)]
 	if key != _drawn_key:
 		_drawn_key = key
 		queue_redraw()

@@ -30,6 +30,7 @@ const DIG_RADIUS := 22.0             ## 버킷이 찍은 곳에서 이 안의 �
 const DIG_PERSON_DAMAGE := 40.0
 const BLADE_DPS := 70.0              ## 내린 불도저 블레이드에 밀리는 차가 받는 초당 피해
 const BLADE_PERSON_DAMAGE := 30.0    ## 블레이드에 밀린 사람 (넘어진다)
+const AIR_HIT_RADIUS := 0.5         ## 떠 있는 헬기를 맞히는 반경 = 길이 × 이 값 (아래에서 보면 날개까지 표적이다)
 const DUST_TIME := 1.2            ## 이보다 빨리 움직이거나 돌 때만 깔아뭉갠다 (px/s)
 
 var vehicles: Array[Vehicle] = []    ## 도시의 모든 차 (main과 공유)
@@ -67,6 +68,7 @@ func _ready() -> void:
 	_decals.z_index = -5
 	_decals.draw.connect(_draw_decals)
 	add_child(_decals)
+	add_child(Sfx.new())
 
 
 func _physics_process(delta: float) -> void:
@@ -105,40 +107,82 @@ func _process(_delta: float) -> void:
 # ── 사격 ──────────────────────────────────────────────────
 
 ## from에서 dir 쪽으로 무기 w를 한 번 쏜다(친다). exclude는 맞지 않을 몸(쏜 사람, 탄 차).
-func fire(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID] = [], extra_spread := 0.0) -> void:
+## level은 쏜 사람의 고가차도 층 — 총알은 같은 층의 벽·차·사람만 맞는다 (-1이면 쏜 자리로 정한다)
+func fire(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID] = [], extra_spread := 0.0,
+		level := -1) -> void:
+	var lv := level if level >= 0 else maxi(CityMap.level_zone(from), 0)
 	if w.melee:
 		_melee(from, dir, w, by_player, exclude)
 		return
 	if w.projectile != &"":
-		_launch(from, dir, w, by_player, exclude)
+		_launch(from, dir, w, by_player, exclude, lv)
 		return
 	if w.flame or w.water:
-		_spray(from, dir, w, by_player, exclude)
+		_spray(from, dir, w, by_player, exclude, lv)
 		return
 	var space := get_world_2d().direct_space_state
 	for d in Ballistics.pellet_dirs(dir, w, rng, extra_spread):
 		var to := from + d * w.max_range
+		# 떠 있는 헬기는 충돌체가 없어 따로 잰다. 위로 쏘는 총알이라 건물 벽은 넘어가고, 그 앞의 사람·차에 먼저 맞으면 못 간다
+		var air := _air_target(from, d, w.max_range, exclude)
+		var air_at := from.distance_to(air[1]) if not air.is_empty() else INF
 		# 관통: 맞은 몸을 빼고 다시 재서 pierce개까지 맞힌다 (벽에 닿으면 멈춘다)
 		var skip := exclude.duplicate()
 		for n in w.pierce:
-			var q := PhysicsRayQueryParameters2D.create(from, from + d * w.max_range, Layers.WORLD | Layers.VEHICLES | Layers.PEOPLE, skip)
+			var q := PhysicsRayQueryParameters2D.create(from, from + d * w.max_range,
+				Layers.at(Layers.WORLD | Layers.VEHICLES | Layers.PEOPLE, lv), skip)
 			var hit := space.intersect_ray(q)
 			if hit.is_empty():
 				to = from + d * w.max_range
 				break
+			var wall: bool = not (hit.collider is CollisionObject2D) or hit.collider is StaticBody2D
+			if not air.is_empty() and (wall or from.distance_to(hit.position) > air_at):
+				break
 			to = hit.position
-			if not (hit.collider is CollisionObject2D) or hit.collider is StaticBody2D:
+			if wall:
 				break
 			_hit(hit.collider, d, w.damage, by_player)
 			skip.append((hit.collider as CollisionObject2D).get_rid())
+			if n == w.pierce - 1:
+				air = []      # 꿰뚫을 힘을 땅에서 다 썼다
+		if not air.is_empty():
+			var heli: Vehicle = air[0]
+			to = air[1]
+			damage_vehicle(heli, w.damage * heli.ground_fire_factor(), by_player)
 		# 주인공 총알은 지나는 길의 헬기도 맞힌다 (공중이라 충돌체가 없다)
 		if by_player and police:
 			for h in police.helis:
 				if h.hit_by(from, to):
 					h.take_damage(w.damage, true)
-		_tracers.append([from, to, w.tracer_color, 0.0])
+		var end := to
+		if not air.is_empty() and IsoView.enabled:
+			var heli: Vehicle = air[0]
+			end = to + IsoView.lift(heli.altitude + heli.ground - 12.0)   # 궤적은 떠 있는 헬기 그림까지 올라간다
+		_tracers.append([from, end, w.tracer_color, 0.0])
+	Sfx.play(w.sound, from)
 	gunfire.emit(from, by_player)
 	pedestrians.scare(from, SCARE_RADIUS)
+
+
+## 총알 길(from에서 d쪽으로 reach)에 걸리는 떠 있는 헬기 중 가장 가까운 것: [헬기, 맞은 점] (없으면 []).
+## 땅에서 쏘면(from_ground) 땅 위 거리와 높이를 함께 따져 사거리 안이어야 한다
+func _air_target(from: Vector2, d: Vector2, reach: float, exclude: Array[RID], from_ground := true) -> Array:
+	var best: Array = []
+	var best_t := INF
+	for v in vehicles:
+		if not is_instance_valid(v) or not v.stats.flies or not v.airborne() or v.wrecked or exclude.has(v.get_rid()):
+			continue
+		var t := (v.global_position - from).dot(d)
+		if t <= 0.0 or t >= best_t:
+			continue
+		var point := from + d * t
+		if point.distance_to(v.global_position) > v.stats.size.y * AIR_HIT_RADIUS:
+			continue
+		if Vector2(t, v.altitude if from_ground else 0.0).length() > reach:
+			continue
+		best = [v, point]
+		best_t = t
+	return best
 
 
 ## 공중(헬기)에서 땅의 at을 쏜다: at 바로 앞에서부터 광선을 재고, 궤적은 헬기에서 그린다
@@ -147,6 +191,17 @@ func fire_from_air(air: Vector2, at: Vector2, w: WeaponType) -> void:
 	var d := (at - air).normalized().rotated(rng.randf_range(-w.spread, w.spread))
 	var from := at - d * 60.0 + d.orthogonal() * rng.randf_range(-18.0, 18.0)
 	var to := from + d * 120.0
+	# 떠 있는 헬기를 겨눴으면 그 헬기가 맞는다 (같은 하늘이라 피해는 그대로)
+	Sfx.play(w.sound, air)
+	var target := _air_target(from, d, 120.0, [], false)
+	if not target.is_empty():
+		var heli: Vehicle = target[0]
+		damage_vehicle(heli, w.damage, false)
+		var end: Vector2 = target[1]
+		if IsoView.enabled:
+			end += IsoView.lift(heli.altitude + heli.ground - 12.0)
+		_tracers.append([air, end, w.tracer_color, 0.0])
+		return
 	var hit := space.intersect_ray(PhysicsRayQueryParameters2D.create(from, to, Layers.VEHICLES | Layers.PEOPLE))
 	if not hit.is_empty():
 		to = hit.position
@@ -156,10 +211,11 @@ func fire_from_air(air: Vector2, at: Vector2, w: WeaponType) -> void:
 
 # ── 던지는 무기 · 로켓 ─────────────────────────────────────
 
-func _launch(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID]) -> void:
+func _launch(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID], level := 0) -> void:
 	var d := dir.rotated(rng.randf_range(-w.spread, w.spread))
 	_projectiles.append({"pos": from, "vel": d * w.projectile_speed, "w": w, "by_player": by_player, "age": 0.0,
-		"travel": 0.0, "exclude": exclude, "stopped": false})
+		"travel": 0.0, "exclude": exclude, "stopped": false, "level": level})
+	Sfx.play(w.sound, from)
 	if w.projectile == &"rocket":
 		gunfire.emit(from, by_player)
 		pedestrians.scare(from, SCARE_RADIUS)
@@ -176,7 +232,7 @@ func _fly(delta: float) -> void:
 			continue
 		var step: Vector2 = p.vel * delta
 		var to: Vector2 = p.pos + step
-		var mask := Layers.WORLD | Layers.VEHICLES | Layers.PEOPLE
+		var mask := Layers.at(Layers.WORLD | Layers.VEHICLES | Layers.PEOPLE, p.get("level", 0))
 		var hit := space.intersect_ray(PhysicsRayQueryParameters2D.create(p.pos, to, mask, p.exclude))
 		if not hit.is_empty():
 			p.pos = hit.position - step.normalized() * 4.0
@@ -216,6 +272,7 @@ func fire_shell(from: Vector2, to: Vector2, w: WeaponType, by_player: bool, shoo
 	_shells.append({"from": from, "to": to, "dur": maxf(dist / w.projectile_speed, 0.3), "t": 0.0, "w": w,
 		"by_player": by_player, "shooter": shooter, "arc": dist * SHELL_ARC})
 	_muzzles.append([from, (to - from).normalized(), 0.0])
+	Sfx.play(w.sound, from)
 	gunfire.emit(from, by_player)
 	pedestrians.scare(from, BLAST_SCARE_RADIUS)
 
@@ -253,7 +310,7 @@ func _crush(delta: float) -> void:
 		var goal := 0.0
 		t.over_z = 0
 		for v in vehicles:
-			if v == t or v.stats.tracked or v.airborne():
+			if v == t or v.stats.tracked or v.apart(t.global_position, t.level):
 				continue
 			var local := t.to_local(v.global_position)
 			var r := minf(v.stats.size.x, v.stats.size.y) * 0.5
@@ -279,7 +336,7 @@ func _crush(delta: float) -> void:
 			goal = maxf(goal, v.stats.height * (1.0 - VehicleModel.CRUSH_FLAT * v.crushed) * minf(depth * 1.6, 1.0))
 			t.over_z = maxi(t.over_z, v.z_index + 1)   # 올라탄 차보다 위에 그린다
 		t.climb_goal = goal
-		if moving and player and player.visible and not player.is_dead():
+		if moving and player and player.visible and not player.is_dead() and not t.apart(player.global_position, player.level):
 			var lp := t.to_local(player.global_position)
 			if absf(lp.x) < half.x + Player.RADIUS and absf(lp.y) < half.y + Player.RADIUS:
 				player.take_damage(CRUSH_PLAYER_DPS * delta)
@@ -300,7 +357,7 @@ func _on_dug(at: Vector2, ex: Vehicle) -> void:
 	var best: Vehicle = null
 	var best_d := INF
 	for v in vehicles:
-		if v == ex or v.stats.tracked or v.airborne() or v.carried_by or v == director.current_vehicle:
+		if v == ex or v.stats.tracked or v.apart(ex.global_position, ex.level) or v.carried_by or v == director.current_vehicle:
 			continue
 		var d := v.global_position.distance_to(at) - minf(v.stats.size.x, v.stats.size.y) * 0.5
 		if d < GRAB_RADIUS and d < best_d:
@@ -326,7 +383,7 @@ func _bail_out(v: Vehicle) -> void:
 	if police and police.owns(v):
 		police.eject_crew(v, door + outward * EJECT_OFFSET)
 	else:
-		pedestrians.spawn_fleeing(door + outward * EJECT_OFFSET, outward, v.stats.driver_npc)
+		pedestrians.spawn_fleeing(door + outward * EJECT_OFFSET, outward, v.stats.driver_npc, v.level)
 
 
 ## 내린 불도저 블레이드: 앞으로 밀고 가는 동안 블레이드 앞의 차는 다치며 밀려 가고, 사람은 밀려 넘어진다
@@ -336,7 +393,7 @@ func _blades(delta: float) -> void:
 			continue
 		var half := d.stats.size * 0.5
 		for v in vehicles:
-			if v == d or v.airborne():
+			if v == d or v.apart(d.global_position, d.level):
 				continue
 			var local := d.to_local(v.global_position)
 			var r := minf(v.stats.size.x, v.stats.size.y) * 0.5
@@ -356,11 +413,11 @@ func _blades(delta: float) -> void:
 # ── 화염방사기 · 물대포 ───────────────────────────────────
 
 ## 짧은 부채꼴: 불은 사람·차를 태우고 끝에 불을 놓는다. 물은 사람·차를 밀고 불을 끈다
-func _spray(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID]) -> void:
+func _spray(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: Array[RID], level := 0) -> void:
 	var space := get_world_2d().direct_space_state
 	# 벽에 막히면 거기까지만
 	var reach := w.max_range
-	var wall := space.intersect_ray(PhysicsRayQueryParameters2D.create(from, from + dir * reach, Layers.WORLD, exclude))
+	var wall := space.intersect_ray(PhysicsRayQueryParameters2D.create(from, from + dir * reach, Layers.at(Layers.WORLD, level), exclude))
 	if not wall.is_empty():
 		reach = from.distance_to(wall.position)
 	_flames.append([from, dir, w, 0.0])
@@ -452,7 +509,7 @@ func _on_caught_fire(v: Vehicle) -> void:
 		if police and police.owns(v):
 			police.eject_crew(v, door + out * EJECT_OFFSET)
 		else:
-			pedestrians.spawn_fleeing(door + out * EJECT_OFFSET, out, v.stats.driver_npc)
+			pedestrians.spawn_fleeing(door + out * EJECT_OFFSET, out, v.stats.driver_npc, v.level)
 	if police:
 		police.abandon(v)
 
@@ -490,6 +547,7 @@ func explode(pos: Vector2, by_player: bool, source: Vehicle = null, scale := 0.0
 	if player.visible:
 		player.take_damage(DamageModel.EXPLOSION_PERSON_DAMAGE * DamageModel.explosion_falloff(player.global_position.distance_to(pos), scale))
 	_blasts.append([pos, scale, 0.0])
+	Sfx.play(&"explosion", pos, scale)
 	_scorch.append(pos)
 	if _scorch.size() > MAX_SCORCH:
 		_scorch.remove_at(0)

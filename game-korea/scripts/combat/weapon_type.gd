@@ -40,3 +40,5 @@ extends Resource
 
 @export_group("Look")
 @export var tracer_color := Color(1.0, 0.9, 0.5)
+## 쏠 때 소리 (GunSynth.KINDS의 종류 — pistol·smg·rifle·shotgun·mg·rocket·cannon, ""면 소리 없음)
+@export var sound: StringName = &""

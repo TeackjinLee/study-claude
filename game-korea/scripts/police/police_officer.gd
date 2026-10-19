@@ -12,6 +12,7 @@ var duty := Duty.CHASE
 var car: Vehicle = null          ## 타고 온 경찰차 (빼앗기면 null)
 var post := Vector2.ZERO         ## 지키는 자리 (도로 봉쇄). 차가 없으면 여기로 돌아간다
 var goal := Vector2.ZERO         ## 디스패처가 매 프레임 넣는다 (CHASE: 주인공, RETURN: 차 문)
+var goal_level := -1             ## goal의 고가차도 층 (-1 모름)
 var reload := 0.0                ## 다음 발포까지 남은 시간 (★2부터 쏜다, PoliceDispatcher가 정한다)
 var beat_wait := 0.0             ## 다음 매까지 남은 시간 (PoliceDispatcher가 정한다)
 var _swing := -1.0               ## 곤봉을 휘두른 뒤 지난 시간 (그림, 휘두르지 않을 때 -1)
@@ -21,6 +22,7 @@ var _los_timer := 0.0
 
 
 func _physics_process(delta: float) -> void:
+	_track_level()
 	reload -= delta
 	if _swing >= 0.0:
 		_swing = _swing + delta if _swing + delta < SWING_TIME else -1.0
@@ -62,12 +64,14 @@ func _toward(to: Vector2, delta: float) -> Vector2:
 	_los_timer -= delta
 	if _los_timer <= 0.0:
 		_los_timer = 0.15
-		_los = RoadNav.clear_path(get_world_2d().direct_space_state, pos, to, RADIUS)
+		# 고가 위아래로 갈라져 있으면 보여도 곧장 못 간다 — 경사로로 돈다
+		_los = RoadNav.clear_path(get_world_2d().direct_space_state, pos, to, RADIUS, level) \
+			and (goal_level < 0 or CityMap.meet(pos, level, to, goal_level))
 	if _los:
 		_waypoint = RoadNav.INVALID
 		return (to - pos).normalized()
 	if _waypoint == RoadNav.INVALID or pos.distance_to(LaneGraph.center(_waypoint)) < 20.0:
-		_waypoint = RoadNav.next_cell(pos, Vector2.ZERO, to)
+		_waypoint = RoadNav.next_cell(pos, Vector2.ZERO, to, level, goal_level)
 	return (LaneGraph.center(_waypoint) - pos).normalized()
 
 

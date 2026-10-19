@@ -173,6 +173,7 @@ func _ready() -> void:
 	_bridge_layer = BridgeLayer.new()
 	_bridge_layer.city = self
 	add_child(_bridge_layer)
+	OverpassView.build(self)
 	_lock_layer = LockLayer.new()
 	_lock_layer.city = self
 	add_child(_lock_layer)
@@ -732,8 +733,8 @@ func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 		for i in range(area.position.x, area.end.x):
 			var c := Vector2i(i, j)
 			for d in [2, 1]:
-				if not CityMap.road(c, d) or (IsoView.enabled and CityMap.is_bridge(c, d)):
-					continue
+				if not CityMap.road(c, d) or (IsoView.enabled and CityMap.is_bridge(c, d)) or CityMap.over_strip(c, d):
+					continue   # 다리·고가 구간의 차선은 상판이 그린다
 				var fl := CityMap.flanks(c, d)
 				var water_sides: Array[float] = []
 				if CityMap.is_water(fl[0]):
@@ -744,6 +745,9 @@ func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 					_draw_road_segment(ci, i, j, true, water_sides)
 				else:
 					_draw_road_segment(ci, j, i, false, water_sides)
+			# 고가차도가 넘는 교차로 밑 그늘
+			if IsoView.enabled and CityMap.over_axis(c) >= 0:
+				ci.draw_rect(node_rect(c), OverpassView.UNDER)
 			# 교차로 둘레 중 강 쪽 (도로가 끊긴 쪽) 난간
 			if CityMap.node_exists(c) and not _on_deck(c):
 				var box := node_rect(c)

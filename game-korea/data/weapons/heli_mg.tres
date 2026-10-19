@@ -15,3 +15,4 @@ infinite = true
 pickup_ammo = 0
 max_ammo = 0
 tracer_color = Color(1, 0.6, 0.3, 1)
+sound = &"mg"

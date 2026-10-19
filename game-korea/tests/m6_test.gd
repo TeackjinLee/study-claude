@@ -478,10 +478,11 @@ func _test_weapons() -> void:
 	player.arsenal.give(mg, 100)
 	while player.arsenal.current() != mg:
 		player.arsenal.cycle(1)
-	player.global_position = o + Vector2(0, 520)
+	# 주차장 안에서 (바로 밑 가로 2번 도로는 고가 상판이라 층이 달라 주차장 사람을 못 맞힌다)
+	player.global_position = o + Vector2(0, 380)
 	player.arsenal.cooldown = 0.0
 	_expect(not main.weapons.shoot(), "차량 기관총은 도보로 못 쏜다")
-	var mine := _park(main, o + Vector2(0, 520))
+	var mine := _park(main, o + Vector2(0, 380))
 	main.director.enter_immediately(mine)
 	var front := _civ(main, mine.global_position + Vector2(0, -160))
 	for i in 10:
