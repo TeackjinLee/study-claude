@@ -109,7 +109,7 @@ func _ready() -> void:
 	piece.deco = [&"landmark_sign"]
 	piece.text = "검문"
 	var holder := Node2D.new()
-	holder.position = IsoView.lift(CityMap.ground_height(_booth))
+	holder.position = IsoView.lift(IsoView.ground(_booth))
 	add_child(holder)
 	views = BuildingView.make(holder, null, -1, piece)
 	var body := StaticBody2D.new()

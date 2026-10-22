@@ -70,6 +70,7 @@ var _light_timer := 0.0
 
 func _ready() -> void:
 	z_index = -4
+	material = Terrain.material()   # 바닥 그림을 지형 높이만큼 올린다
 	rng.seed = seed
 	controller = TrafficController.new(graph)
 	_build_bus_stops()

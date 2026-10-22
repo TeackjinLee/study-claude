@@ -11,7 +11,7 @@ static func asphalt(ci: CanvasItem, r: Rect2) -> void:
 				var shade := .135 + h*.065
 				img.set_pixel(x,y,Color(shade,shade*1.035,shade*1.10))
 		_asphalt = ImageTexture.create_from_image(img)
-	ci.draw_texture_rect(_asphalt,r,true)
+	Terrain.texture_rect(ci,_asphalt,r)   # 격자 칸마다 잘라 깐다 — 비탈에서 땅 높이를 따른다
 	# 보수 흔적과 균열은 구간 안에 제한한다.
 	var seed_id := int(r.position.x*.13+r.position.y*.37)
 	for k in 5:
@@ -36,7 +36,7 @@ static func pavement(ci: CanvasItem, r: Rect2) -> void:
 				ci.draw_rect(Rect2(Vector2(x,y),size-Vector2(.8,.8)),Color("77766e").darkened(shade*.22))
 				x += 18
 			y += 14
-	ci.draw_rect(r.grow(-1),Color("a29f8f"),false,2)
+	Terrain.rect(ci,r.grow(-1),Color("a29f8f"),false,2)
 	# 횡단보도 양 끝의 점자 경고 블록.
 	for corner in [r.position,r.position+Vector2(r.size.x-28,0),r.end-Vector2(28,28),r.position+Vector2(0,r.size.y-28)]:
 		var tile := Rect2(corner+Vector2(4,4),Vector2(20,20))

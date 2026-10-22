@@ -26,6 +26,7 @@ static func draw(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int, font: Fon
 		&"hanok": _hanok(ci, r, t, seed, font, roof)
 		&"jjokbang": _jjokbang(ci, r, t, seed, font, roof)
 		&"campsite": _campsite(ci, r, t, seed, font, roof)
+		&"forest": _forest(ci, r, t, seed)
 		&"park": _park(ci, r, t, seed, font, roof)
 		_: _commercial(ci, r, t, seed, font, roof)
 
@@ -371,3 +372,11 @@ static func _park(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int, font: Fo
 	if r.size.x > 200:
 		ci.draw_string(font, r.get_center() + Vector2(-r.size.x * 0.5, -20), _pick(t, seed), HORIZONTAL_ALIGNMENT_CENTER,
 			r.size.x, 20, Color(1, 1, 1, 0.5))
+
+
+## 산자락 숲 (위에서 보기): 숲 바닥에 나무 수관
+static func _forest(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int) -> void:
+	ci.draw_rect(r, City.FOREST_FLOOR)
+	for p in BuildingModel.build(r, t, seed, IsoView.FLOOR_HEIGHT):
+		if p.roof == &"tree":
+			ci.draw_circle(p.rect.get_center(), p.rise, p.roof_color)

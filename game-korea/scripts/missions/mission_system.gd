@@ -108,6 +108,7 @@ func setup(world_vehicles: Array[Vehicle]) -> void:
 func _ready() -> void:
 	z_as_relative = false
 	z_index = 4
+	material = Terrain.material()   # 바닥 그림을 지형 높이만큼 올린다
 	for g in gangs.gangs:
 		for k in g.phones.size():
 			phones.append({"gang": g, "tier": k % 3, "set": k / 3, "pos": g.phones[k], "armed": true})

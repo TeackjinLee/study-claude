@@ -112,6 +112,7 @@ static func build(r: Rect2, t: BuildingType, seed: int, height: float) -> Array[
 		&"hanok": _hanok(out, r, t, seed)
 		&"jjokbang": _jjokbang(out, r, t, seed)
 		&"campsite": _campsite(out, r, t, seed)
+		&"forest": _forest(out, r, t, seed)
 		&"warehouse": _warehouse(out, r, t, seed, height)
 		&"factory": _factory(out, r, t, seed, height)
 		&"rowhouse": _rowhouse(out, r, t, seed, height)
@@ -368,6 +369,48 @@ static func _campsite(out: Array[Piece], r: Rect2, t: BuildingType, seed: int) -
 		k += 1
 
 
+## 산자락 숲: 흙길(forest_trail)을 비켜 크고 작은 나무를 고르게 흩뿌리고, 바위 몇 개
+static func _forest(out: Array[Piece], r: Rect2, t: BuildingType, seed: int) -> void:
+	var trail := forest_trail(r)
+	var step := 46.0
+	var k := 0
+	var y := r.position.y + 16.0
+	while y < r.end.y - 10.0:
+		var x := r.position.x + 14.0 + fmod(y * 0.37, step * 0.5)
+		while x < r.end.x - 10.0:
+			var at := Vector2(x, y) + (Vector2(hash01(seed, k * 3), hash01(seed, k * 3 + 1)) - Vector2(0.5, 0.5)) * step * 0.7
+			at = at.clamp(r.position + Vector2(10, 10), r.end - Vector2(10, 10))
+			if _trail_distance(trail, at) > 24.0:
+				var tree := _tree(at, seed + k, 1.15 + hash01(seed, k * 3 + 2) * 0.6)
+				tree.roof_color = t.roof_colors[posmod(seed + k, t.roof_colors.size())]
+				out.append(tree)
+			x += step
+			k += 1
+		y += step * 0.86
+	for n in 3:
+		var at := r.position + r.size * Vector2(0.15 + hash01(seed, n + 900) * 0.7, 0.15 + hash01(seed, n + 950) * 0.7)
+		if _trail_distance(trail, at) > 26.0:
+			out.append(_box(Rect2(at - Vector2(9, 7), Vector2(18, 14)), 0.0, 7.0, STONE.darkened(0.25), &"flat", STONE.darkened(0.1), &"none", seed + n))
+
+
+## 숲 흙길: 남쪽 변 가운데에서 들어와 지그재그로 북쪽 변까지 (월드 점들)
+static func forest_trail(r: Rect2) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var turns := maxi(int(r.size.y / 110.0), 2)
+	for k in turns + 1:
+		var y := r.end.y - r.size.y * k / turns
+		var x := r.position.x + r.size.x * (0.5 if k == 0 or k == turns else (0.25 if k % 2 == 1 else 0.75))
+		pts.append(Vector2(x, y))
+	return pts
+
+
+static func _trail_distance(trail: PackedVector2Array, p: Vector2) -> float:
+	var d := INF
+	for k in trail.size() - 1:
+		d = minf(d, p.distance_to(Geometry2D.get_closest_point_to_segment(p, trail[k], trail[k + 1])))
+	return d
+
+
 ## 창고: 골함석 벽, 긴 쪽으로 용마루가 난 박공 지붕, 앞마당(바닥)의 팔레트
 static func _warehouse(out: Array[Piece], r: Rect2, t: BuildingType, seed: int, height: float) -> void:
 	var body_r := Rect2(r.position + Vector2(INSET, INSET), r.size - Vector2(INSET * 2.0, INSET + 40.0))
@@ -495,6 +538,8 @@ static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int, fl
 			_apt_ground(ci, r, seed)
 		&"campsite":
 			_camp_ground(ci, r, seed)
+		&"forest":
+			_forest_ground(ci, r, seed)
 		&"park":
 			# 가이드용 (도시의 공원은 BuildingDrawer._park가 그린다): 잔디와 십자 산책로
 			ci.draw_rect(r, GRASS)
@@ -609,6 +654,25 @@ static func _plinth_hedges(ci: CanvasItem, r: Rect2, seed: int) -> void:
 			low_box(ci, Rect2(x, r.end.y - 8.0, 20.0, 6.0), 6.0, HEDGE.lightened(hash01(seed, k) * 0.1))
 		x += 24.0
 		k += 1
+
+
+## 숲 바닥: 낙엽 흙에 풀 덤불 점, 지그재그 흙길과 통나무 계단
+static func _forest_ground(ci: CanvasItem, r: Rect2, seed: int) -> void:
+	Terrain.rect(ci, r, City.FOREST_FLOOR)
+	for k in int(r.get_area() / 900.0):
+		var at := r.position + r.size * Vector2(hash01(seed, k * 2 + 40), hash01(seed, k * 2 + 41))
+		ci.draw_circle(at, 3.0 + hash01(seed, k) * 5.0, HEDGE.darkened(0.15 + hash01(seed, k + 7) * 0.2))
+	var trail := forest_trail(r)
+	for k in trail.size() - 1:
+		Terrain.line(ci, trail[k], trail[k + 1], EARTH.darkened(0.15), 16.0)
+		Terrain.line(ci, trail[k], trail[k + 1], EARTH, 11.0)
+		var dir := (trail[k + 1] - trail[k]).normalized()
+		var side := dir.orthogonal() * 6.0
+		var s := 14.0
+		while s < trail[k].distance_to(trail[k + 1]) - 8.0:
+			var at := trail[k] + dir * s
+			ci.draw_line(at - side, at + side, WOOD, 2.0)   # 통나무 계단
+			s += 18.0
 
 
 static func _camp_ground(ci: CanvasItem, r: Rect2, seed: int) -> void:

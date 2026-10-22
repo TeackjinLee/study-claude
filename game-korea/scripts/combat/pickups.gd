@@ -30,6 +30,7 @@ var crates: Array[Dictionary] = []
 
 func _ready() -> void:
 	z_index = -1
+	material = Terrain.material()   # 바닥 그림을 지형 높이만큼 올린다
 	_ready_drops()
 	# 출발점 바로 위 인도에 권총 — 처음 몇 걸음 안에 찾게
 	_add(City.start_position() + Vector2(0, -140), PISTOL)

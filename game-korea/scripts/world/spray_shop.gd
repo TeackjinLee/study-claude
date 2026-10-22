@@ -28,6 +28,7 @@ var _time := 0.0
 
 func _ready() -> void:
 	z_index = -3
+	material = Terrain.material()   # 바닥 그림을 지형 높이만큼 올린다
 	global_position = City.spray_bay()
 
 

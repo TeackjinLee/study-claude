@@ -63,11 +63,12 @@ static func _draw_sign(n: Node2D) -> void:
 static func _draw_pile(n: Node2D) -> void:
 	for k in 4:
 		var r := 34.0 - k * 7.0
-		var lift := IsoView.lift(k * 3.0) if IsoView.enabled else Vector2.ZERO
+		var lift := IsoView.lift(k * 3.0 + IsoView.ground(n.position)) if IsoView.enabled else Vector2.ZERO
 		FireFx.circle(n, lift, r, DIRT.lightened(k * 0.06))
+	var base := IsoView.lift(IsoView.ground(n.position)) if IsoView.enabled else Vector2.ZERO
 	for k in 6:
 		var a := k * 1.7
-		n.draw_circle(Vector2.RIGHT.rotated(a) * (12.0 + k * 3.0), 2.0, DIRT.darkened(0.3))
+		n.draw_circle(base + Vector2.RIGHT.rotated(a) * (12.0 + k * 3.0), 2.0, DIRT.darkened(0.3))
 
 
 func _process(_delta: float) -> void:

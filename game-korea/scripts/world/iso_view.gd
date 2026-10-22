@@ -30,9 +30,9 @@ static func lift(h: float) -> Vector2:
 	return LIFT * h
 
 
-## 그 자리 땅 높이 (다리·고가 위). level은 서 있는 층(고가차도 위 1, -1은 모름 — CityMap.ground_height). 위에서 보기(F9)면 0
+## 그 자리 땅 높이 (지형 Terrain + 다리·고가 위 CityMap.ground_height). level은 서 있는 층(고가차도 위 1, -1은 모름). 위에서 보기(F9)면 0
 static func ground(pos: Vector2, level := -1) -> float:
-	return CityMap.ground_height(pos, level) if enabled else 0.0
+	return CityMap.ground_height(pos, level) + Terrain.height(pos) if enabled else 0.0
 
 
 ## 회전한 노드 안에서 쓸 높이 오프셋

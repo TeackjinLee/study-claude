@@ -180,6 +180,7 @@ var roof := false              ## 지붕을 그리는 조각 (덩어리마다 �
 var height := 72.0             ## 덩어리 꼭대기 (지붕·얹힌 것 포함)
 var lights := false            ## 불빛 조각이다 (켜질 창·간판만 그린다)
 var glow: BuildingView         ## 이 조각의 불빛 조각 (자식)
+var pad := 0.0                 ## 비탈에서 이 덩어리가 선 높이 (노드를 그만큼 올린다 — City._place_views). 축대는 부지 단(City.Terrace)이 그린다
 var _mute := false             ## 불빛 조각이 창을 훑는 동안: 벽·창틀(_quad·_hline)은 그리지 않는다
 
 # 지금 그리는 벽 한 면 (_face 동안만 쓴다)
