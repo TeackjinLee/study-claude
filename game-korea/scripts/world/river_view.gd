@@ -31,6 +31,7 @@ static func material() -> ShaderMaterial:
 		_material.set_shader_parameter("field_rect", Vector4(r.position.x, r.position.y, r.size.x, r.size.y))
 		_material.set_shader_parameter("bank_w", BANK)
 		_material.set_shader_parameter("tile_world", TILE_WORLD)
+		_material.set_shader_parameter("bank_drop", RiverBank.HEIGHT if IsoView.enabled else 0.0)
 		var tile := BuildingSkin.texture(TILE_PATH)
 		if tile:
 			_material.set_shader_parameter("tile", tile)
@@ -41,6 +42,11 @@ static func material() -> ShaderMaterial:
 			_material.set_shader_parameter("has_bank", true)
 			_material.set_shader_parameter("bank_aspect", float(bank.get_width()) / bank.get_height())
 	return _material
+
+
+## 2.5D 옹벽 높이 (`City.set_iso`가 부른다, 위에서 보기면 0)
+static func set_drop(h: float) -> void:
+	material().set_shader_parameter("bank_drop", h)
 
 
 ## 밤 불빛 (DayNight가 부른다). screen은 화면 색(CanvasModulate) — 비친 불빛은 그만큼 나눠 밝게 남긴다
@@ -78,19 +84,90 @@ static func _water_rects() -> Array[Rect2]:
 	return _rects
 
 
-## 강변까지 거리 그림 (칸 = TEXEL px, 값 = 월드 px, 물 +, 땅 -). 칸 가운데끼리의 거리를 두 번 훑어(체임퍼) 잰다
-static func shore_field() -> Image:
+## 물 칸 표 (칸 = TEXEL px): water 1 = 물, bridge 1 = 다리 밑 물 (2.5D에서 상판이 덮는 구간)
+static func _mask() -> Dictionary:
 	var r := CityMap.world_rect()
 	var w := ceili(r.size.x / TEXEL)
 	var h := ceili(r.size.y / TEXEL)
 	var water := PackedByteArray()
 	water.resize(w * h)
+	var bridge := PackedByteArray()
+	bridge.resize(w * h)
+	var under := _bridge_rects()
 	for rect in _water_rects():
 		var a := Vector2i(((rect.position - r.position) / TEXEL).floor())
 		var b := Vector2i(((rect.end - r.position) / TEXEL).ceil())
+		var deck := under.has(rect)
 		for y in range(maxi(a.y, 0), mini(b.y, h)):
 			for x in range(maxi(a.x, 0), mini(b.x, w)):
 				water[y * w + x] = 1
+				if deck:
+					bridge[y * w + x] = 1
+	return {"water": water, "bridge": bridge, "w": w, "h": h, "origin": r.position}
+
+
+static func _bridge_rects() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for j in range(CityMap.MIN.y, CityMap.MAX.y + 2):
+		for k in CityMap.BRIDGES:
+			var c := Vector2i(k, j)
+			if CityMap.is_bridge(c, 2):
+				out.append(City.segment_rect(c, 2))
+	return out
+
+
+## 강변 선분: [{a, b, into (땅 → 물 방향), bridge (다리 밑으로 들어가는 곳)}]. 칸 경계를 따라 같은 것끼리 이어 붙인다
+static func shore_edges() -> Array:
+	var m := _mask()
+	var water: PackedByteArray = m.water
+	var bridge: PackedByteArray = m.bridge
+	var w: int = m.w
+	var h: int = m.h
+	var o: Vector2 = m.origin
+	var out := []
+	# 가로 경계 (y-1 칸과 y 칸 사이)
+	for y in range(1, h):
+		var run := {}
+		for x in w + 1:
+			var e := {}
+			if x < w:
+				var up := water[(y - 1) * w + x]
+				var dn := water[y * w + x]
+				if up != dn:
+					var wi := (y * w + x) if dn == 1 else ((y - 1) * w + x)
+					e = {"into": Vector2.DOWN if dn == 1 else Vector2.UP, "bridge": bridge[wi] == 1}
+			if not run.is_empty() and (e.is_empty() or e.into != run.into or e.bridge != run.bridge):
+				out.append({"a": o + Vector2(run.x0, y) * TEXEL, "b": o + Vector2(x, y) * TEXEL, "into": run.into, "bridge": run.bridge})
+				run = {}
+			if not e.is_empty() and run.is_empty():
+				run = e
+				run.x0 = x
+	# 세로 경계 (x-1 칸과 x 칸 사이)
+	for x in range(1, w):
+		var run := {}
+		for y in h + 1:
+			var e := {}
+			if y < h:
+				var lf := water[y * w + x - 1]
+				var rt := water[y * w + x]
+				if lf != rt:
+					var wi := (y * w + x) if rt == 1 else (y * w + x - 1)
+					e = {"into": Vector2.RIGHT if rt == 1 else Vector2.LEFT, "bridge": bridge[wi] == 1}
+			if not run.is_empty() and (e.is_empty() or e.into != run.into or e.bridge != run.bridge):
+				out.append({"a": o + Vector2(x, run.y0) * TEXEL, "b": o + Vector2(x, y) * TEXEL, "into": run.into, "bridge": run.bridge})
+				run = {}
+			if not e.is_empty() and run.is_empty():
+				run = e
+				run.y0 = y
+	return out
+
+
+## 강변까지 거리 그림 (칸 = TEXEL px, 값 = 월드 px, 물 +, 땅 -). 칸 가운데끼리의 거리를 두 번 훑어(체임퍼) 잰다
+static func shore_field() -> Image:
+	var m := _mask()
+	var water: PackedByteArray = m.water
+	var w: int = m.w
+	var h: int = m.h
 	var to_land := _chamfer(water, w, h, 0)
 	var to_water := _chamfer(water, w, h, 1)
 	var img := Image.create(w, h, false, Image.FORMAT_RF)
@@ -152,6 +229,7 @@ uniform float tile_world = 512.0;
 uniform sampler2D bank : filter_linear_mipmap, repeat_enable;
 uniform bool has_bank = false;
 uniform float bank_aspect = 4.0;   // 호안 그림 가로/세로 — 한 장이 강변을 따라 덮는 길이 = 폭 × 이 값
+uniform float bank_drop = 0.0;          // 2.5D 옹벽 높이 (화면 px). 0이면 위에서 보기 — 평면 호안 띠를 칠한다
 
 varying vec2 world;
 
@@ -251,15 +329,25 @@ void fragment() {
 		}
 	}
 
-	// 물가: 흰 물거품 줄이 흐름 따라 끊겼다 이어진다
-	float edge = sd - bank_w;
+	// 물가: 흰 물거품 줄이 흐름 따라 끊겼다 이어진다.
+	// 2.5D에서는 수면이 옹벽(`RiverBank`) 높이만큼 낮다 — 화면 위로 bank_drop만큼 올라간 자리(물가의 옹벽 발치)에서 강변까지 잰다.
+	// 그래서 거품은 보이는 옹벽(북·서 둑) 발치에 서고, 앞 둑(남·동) 밑은 땅에 가려 없다
+	float se = bank_drop > 0.0 ? sd_at(p + vec2(-1.2820513, -1.2820513) * bank_drop) : sd;
+	float edge = se - (bank_drop > 0.0 ? 0.0 : bank_w);
 	float foam_n = noise(vec2((along + t * 30.0) / 14.0, t * 0.6 + along / 400.0));
-	float foam = (1.0 - smoothstep(0.0, 6.0 + 4.0 * foam_n, edge)) * (0.45 + 0.55 * foam_n);
-	col = mix(col, vec3(0.62, 0.68, 0.68), clamp(foam, 0.0, 1.0) * 0.55);
+	float foam_w = bank_drop > 0.0 ? 12.0 : 6.0;   // 옹벽 발치는 물이 부딪혀 거품이 더 넓다
+	float foam = (1.0 - smoothstep(0.0, foam_w + foam_w * 0.6 * foam_n, edge)) * (0.45 + 0.55 * foam_n);
+	if (bank_drop > 0.0) {
+		// 옹벽에 부딪힌 물: 끊긴 흰 물보라 조각이 흘러간다
+		float burst = smoothstep(0.35, 0.75, noise(vec2((along + t * 42.0) / 9.0, t * 0.9)));
+		col = mix(col, vec3(0.78, 0.84, 0.84), clamp(foam * (0.35 + burst), 0.0, 1.0) * 0.8);
+	} else {
+		col = mix(col, vec3(0.62, 0.68, 0.68), clamp(foam, 0.0, 1.0) * 0.55);
+	}
 	col *= mix(0.78, 1.0, smoothstep(0.0, 14.0, edge));   // 물가 그늘
 
-	// 호안 (콘크리트 비탈): 땅에서 물 쪽으로 내려간다 — 위는 밝고 물에 가까울수록 젖어 어둡다
-	if (edge < 0.0) {
+	// 호안 (콘크리트 비탈): 땅에서 물 쪽으로 내려간다 — 위는 밝고 물에 가까울수록 젖어 어둡다 (위에서 보기만, 2.5D는 옹벽이 덮는다)
+	if (edge < 0.0 && bank_drop <= 0.0) {
 		float k = clamp(sd / bank_w, 0.0, 1.0);
 		vec3 bc;
 		if (has_bank) {
