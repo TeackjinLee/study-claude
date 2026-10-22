@@ -17,12 +17,18 @@ config/features=PackedStringArray("4.7")
 [autoload]
 
 InputSetup="*res://scripts/core/input_setup.gd"
+WebRuntime="*res://scripts/core/web_runtime.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
+window/stretch/mode.web="viewport"
+
+[gui]
+
+theme/custom_font.web="res://assets/fonts/NotoSansKR.ttf"
 
 [rendering]
 

@@ -38,6 +38,7 @@ const PITCH_RATE := 0.9       ## 숙이기가 목표를 따라가는 속도 (rad
 const MAP_MARGIN := 40.0      ## 헬기는 지도 가장자리에서 이만큼 안쪽까지만 난다
 
 @export var stats: VehicleType
+var control := PlayerControl.new()   ## 운전자의 입력 출처 (탑승 시 Director가 연결)
 var controlled := false       ## 플레이어가 운전 중 (Director가 정한다)
 var has_driver := false       ## NPC 운전자가 타고 있음 — 탈취하면 끌려 나와 도망친다
 var ai: TrafficAI = null      ## 도로를 달리는 NPC 차의 운전자 (주차된 차는 null)
@@ -170,9 +171,10 @@ func _physics_process(delta: float) -> void:
 		steer_input = 0.0
 		handbrake_input = false
 	elif controlled:
-		throttle_input = Input.get_action_strength("accelerate") - Input.get_action_strength("brake")
-		steer_input = Input.get_axis("steer_left", "steer_right")
-		handbrake_input = Input.is_action_pressed("handbrake")
+		var command := control.read()
+		throttle_input = command.throttle
+		steer_input = command.steer
+		handbrake_input = command.handbrake
 	elif pursuit and has_driver:
 		pursuit.drive(delta)
 	elif ai and has_driver:

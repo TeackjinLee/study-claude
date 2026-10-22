@@ -53,6 +53,10 @@ var _no_change_scene := false               ## 테스트: 장면을 바꾸지 �
 
 
 func _ready() -> void:
+	# 웹 멀티 주소는 타이틀 UI·포커스를 만들기 전에 전용 클라이언트로 보낸다.
+	if OS.has_feature("web") and WebRuntime.multiplayer_requested:
+		get_tree().change_scene_to_file.call_deferred("res://scenes/session/client.tscn")
+		return
 	if auto_skip and (DisplayServer.get_name() == "headless" or MainScript.start_chapter_arg() > 0):
 		get_tree().change_scene_to_file.call_deferred(MAIN_SCENE)
 		return

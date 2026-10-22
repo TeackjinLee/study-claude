@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/session/session_bootstrap.gd" id="1"]
+
+[node name="NetworkSession" type="Node"]
+script = ExtResource("1")
+role = 2
+city_world = true

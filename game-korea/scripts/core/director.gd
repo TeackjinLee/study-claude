@@ -24,6 +24,15 @@ var _enter_t := 0.0
 var _enter_from := Vector2.ZERO
 
 
+func _ready() -> void:
+	player.control.action_requested.connect(_on_control_action)
+
+
+func _on_control_action(action: StringName) -> void:
+	if action == &"enter_exit":
+		request_enter_exit()
+
+
 func controlled_target() -> Node2D:
 	return current_vehicle if current_vehicle else player
 
@@ -33,8 +42,8 @@ func is_entering() -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("enter_exit"):
-		request_enter_exit()
+	if player.control.is_local() and event.is_action_pressed("enter_exit"):
+		player.control.request_action(&"enter_exit")
 
 
 func request_enter_exit() -> void:
@@ -102,6 +111,7 @@ func enter_immediately(v: Vehicle) -> void:
 			driver = pedestrians.spawn_fleeing(door + outward * EJECT_OFFSET, outward, v.stats.driver_npc, v.level)
 		vehicle_stolen.emit(v, driver)
 	current_vehicle = v
+	v.control = player.control
 	v.controlled = true
 	v.landing = false
 	v.touched_down = false

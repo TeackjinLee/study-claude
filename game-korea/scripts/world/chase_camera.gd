@@ -69,9 +69,11 @@ func _apply() -> void:
 	if current != self or not is_inside_tree():
 		return
 	var size := get_viewport().get_visible_rect().size
+	# 웹에서는 보이는 도시 범위를 줄여 그리기 호출을 낮춘다 (추적·물리 위치는 그대로).
+	var draw_zoom := zoom * (1.35 if OS.has_feature("web") else 1.0)
 	if IsoView.enabled:
-		get_viewport().canvas_transform = IsoView.canvas(size, global_position + IsoView.lift(_view_lift), zoom.x)
+		get_viewport().canvas_transform = IsoView.canvas(size, global_position + IsoView.lift(_view_lift), draw_zoom.x)
 	else:
-		var t := Transform2D(0.0, zoom, 0.0, Vector2.ZERO)
-		t.origin = size * 0.5 - global_position * zoom
+		var t := Transform2D(0.0, draw_zoom, 0.0, Vector2.ZERO)
+		t.origin = size * 0.5 - global_position * draw_zoom
 		get_viewport().canvas_transform = t
