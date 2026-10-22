@@ -32,7 +32,7 @@ var rng := RandomNumberGenerator.new()
 var _until_check := WEATHER_CHECK
 var _modulate: CanvasModulate
 var _rain_layer: CanvasLayer
-var _rain_view: Control
+var _rain_view: ColorRect             ## 화면을 덮는 비 셰이더 사각형 (RainFx)
 var _time := 0.0
 
 
@@ -44,10 +44,10 @@ func _ready() -> void:
 	_rain_layer = CanvasLayer.new()
 	_rain_layer.layer = 1   # HUD와 같은 층, HUD보다 먼저 붙어 HUD 밑에 그려진다
 	add_child(_rain_layer)
-	_rain_view = Control.new()
+	_rain_view = ColorRect.new()
 	_rain_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_rain_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_rain_view.draw.connect(_draw_rain)
+	_rain_view.material = RainFx.material()
 	_rain_layer.add_child(_rain_view)
 	_apply()
 
@@ -64,7 +64,7 @@ func _process(delta: float) -> void:
 	rain = move_toward(rain, 1.0 if raining else 0.0, RAIN_FADE * delta)
 	_apply()
 	if rain > 0.0:
-		_rain_view.queue_redraw()
+		RainFx.update(rain, get_viewport().canvas_transform)
 
 
 func set_raining(on: bool) -> void:
@@ -84,6 +84,7 @@ func _apply() -> void:
 	VehicleMotor.road_grip = lerpf(1.0, RAIN_GRIP, rain)
 	_rain_view.visible = rain > 0.0
 	BuildingView.set_lights(lights_on(hour), _modulate.color)
+	RiverView.set_lights(lights_on(hour), _modulate.color, rain)
 	if pedestrians:
 		pedestrians.hour = hour
 
@@ -114,14 +115,3 @@ static func is_night(h: float) -> bool:
 ## "21:30"
 func clock_text() -> String:
 	return "%02d:%02d" % [int(hour), int(fmod(hour, 1.0) * 60.0)]
-
-
-func _draw_rain() -> void:
-	var size := _rain_view.size
-	var n := int(160 * rain)
-	var fall := Vector2(-90, 520)
-	for i in n:
-		var x := fposmod(float(i * 73) + _time * fall.x * 0.3, size.x + 100.0)
-		var y := fposmod(float(i * 151) + _time * fall.y * (0.8 + 0.4 * fmod(i * 0.37, 1.0)), size.y + 40.0) - 20.0
-		var p := Vector2(x, y)
-		_rain_view.draw_line(p, p + fall.normalized() * 14.0, Color(0.75, 0.85, 1.0, 0.35 * rain), 1.5)
