@@ -2,7 +2,8 @@ class_name RoadDetail
 ## 도로 시트의 아스팔트·보도 재질. 물리/차선 좌표와 독립적인 바닥 장식.
 static var _asphalt: ImageTexture
 
-static func asphalt(ci: CanvasItem, r: Rect2) -> void:
+## 아스팔트 결 그림 (128px, 되풀이). 다리 상판도 같은 그림을 깐다 (`City.draw_bridges`)
+static func asphalt_texture() -> ImageTexture:
 	if _asphalt == null:
 		var img := Image.create(128, 128, false, Image.FORMAT_RGBA8)
 		for y in 128:
@@ -11,8 +12,14 @@ static func asphalt(ci: CanvasItem, r: Rect2) -> void:
 				var shade := .135 + h*.065
 				img.set_pixel(x,y,Color(shade,shade*1.035,shade*1.10))
 		_asphalt = ImageTexture.create_from_image(img)
-	Terrain.texture_rect(ci,_asphalt,r)   # 격자 칸마다 잘라 깐다 — 비탈에서 땅 높이를 따른다
-	# 보수 흔적과 균열은 구간 안에 제한한다.
+	return _asphalt
+
+static func asphalt(ci: CanvasItem, r: Rect2) -> void:
+	Terrain.texture_rect(ci,asphalt_texture(),r)   # 격자 칸마다 잘라 깐다 — 비탈에서 땅 높이를 따른다
+	cracks(ci, r)
+
+## 보수 흔적과 균열 (구간 안에 제한한다)
+static func cracks(ci: CanvasItem, r: Rect2) -> void:
 	var seed_id := int(r.position.x*.13+r.position.y*.37)
 	for k in 5:
 		var at := r.position + Vector2(20,20) + (r.size-Vector2(40,40))*Vector2(noise(seed_id,k),noise(k+7919,seed_id))
