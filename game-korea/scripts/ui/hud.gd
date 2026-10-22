@@ -6,7 +6,7 @@ extends CanvasLayer
 const KMH_PER_PX := 0.22   ## 720px/s ≈ 160km/h
 const NOTICE_TIME := 2.0
 const HINT_FOOT := "WASD 이동   Shift 달리기   Z·J 공격   Q/E 무기   F 차 타기   R 출발점으로"
-const HINT_DRIVE := "W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   Z·J 드라이브바이   Q/E 무기   F 내리기   1·2·3 차종"
+const HINT_DRIVE := "W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   Z·J 드라이브바이   Q/E 무기   F 내리기   T 라디오   1·2·3 차종"
 const HINT_SPG := "W/S 전진·후진   A/D 제자리 돌기   마우스 포탑·사거리 (Q/E 포탑)   클릭·Z·J 포격   차를 깔고 넘는다   F 내리기"
 const HINT_TURRET := "W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   마우스 기관총 (Q/E 돌리기)   클릭·Z·J 사격   F 내리기"
 const HINT_DIGGER := "W/S 전진·후진   A/D 제자리 돌기   마우스 상부·팔 뻗기 (Q/E 상부)   클릭·Z·J 퍼 올리기 (차 집기·놓기)   F 내리기"
@@ -16,6 +16,8 @@ const METERS_PER_HEIGHT := 0.4   ## 헬기 높이(화면 px) → 고도 표시(m
 const BAR_SIZE := Vector2(180, 12)
 const GOLD := Color(1.0, 0.82, 0.3)
 const BANNER_RED := Color(1.0, 0.25, 0.25)
+const RADIO_TIME := 4.0
+const DJ_TIME := 6.0
 const ARROW_MARGIN := 46.0
 
 const STAR_SLOTS := 6         ## 별칸은 6개 (M3에서는 ★3까지 찬다)
@@ -34,6 +36,7 @@ var city: City
 var sky: DayNight
 var jobs: SideJobs
 var events: StreetEvents
+var rampages: Rampages
 var _info: Label
 var _clock: Label
 var _respect: Label
@@ -52,6 +55,10 @@ var _star_flash := 0.0
 var _drift: Label
 var _prompt: Label
 var _notice: Label
+var _radio: Label                ## 차 라디오 채널 이름 (맞출 때 잠깐)
+var _dj: Label                   ## DJ 자막
+var _radio_time := 0.0
+var _dj_time := 0.0
 var _hint: Label
 var _notice_time := 0.0
 var _goal: Label
@@ -83,6 +90,17 @@ func _ready() -> void:
 	_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	_hint.offset_left = 24
 	_hint.offset_top = -40
+
+	_radio = _label(20, GOLD)
+	_radio.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_radio.offset_left = 24
+	_radio.offset_top = -112
+	_radio.visible = false
+	_dj = _label(17, Color(1, 1, 1, 0.92))
+	_dj.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_dj.offset_left = 24
+	_dj.offset_top = -82
+	_dj.visible = false
 
 	_money = _label(26, Color(0.45, 1.0, 0.55))
 	_money.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
@@ -198,8 +216,8 @@ static func money_text(n: int) -> String:
 func banner(title: String, sub: String, seconds := 2.5, color := BANNER_RED) -> void:
 	_banner_id += 1
 	var id := _banner_id
-	_banner.text = title
-	_banner_sub.text = sub
+	_banner.text = Locale.t(title)
+	_banner_sub.text = Locale.t(sub)
 	_banner.add_theme_color_override("font_color", color)
 	_banner.visible = true
 	_banner_sub.visible = true
@@ -219,8 +237,8 @@ const DISTRICT_TIME := 3.0
 
 ## 구역 이름을 잠깐 띄운다
 func show_district(name: String, tagline: String, color: Color) -> void:
-	_district.text = name
-	_district_sub.text = tagline
+	_district.text = Locale.t(name)
+	_district_sub.text = Locale.t(tagline)
 	_district.add_theme_color_override("font_color", color)
 	_district_time = DISTRICT_TIME
 
@@ -243,7 +261,7 @@ func _on_level_changed(level: int, previous: int) -> void:
 
 func _on_crime(crime: WantedSystem.Crime, raised: bool) -> void:
 	if raised and police.wanted.level > 1:
-		notify("수배 %s — %s" % ["★".repeat(police.wanted.level), WantedSystem.crime_name(crime)])
+		notify(Locale.t("수배 %s — %s") % ["★".repeat(police.wanted.level), Locale.t(WantedSystem.crime_name(crime))])
 
 
 func _draw_stars() -> void:
@@ -282,8 +300,24 @@ func _bar(y: float, ratio: float, color: Color) -> void:
 	_bars.draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(ratio, 0.0, 1.0), r.size.y)), color)
 
 
+## 차 라디오 채널을 맞췄다 (null = 껐다)
+func show_radio(ch: RadioChannel) -> void:
+	_radio.text = "♪ " + Locale.t("라디오 끔") if ch == null else "♪ %s  %s" % [ch.frequency, Locale.t(ch.display_name)]
+	_radio.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7) if ch == null else ch.color)
+	_radio_time = RADIO_TIME
+	if ch == null:
+		_dj_time = 0.0
+
+
+## DJ 자막
+func show_dj(ch: RadioChannel, text: String) -> void:
+	_dj.text = "DJ  " + text
+	_dj.add_theme_color_override("font_color", ch.color.lerp(Color.WHITE, 0.6))
+	_dj_time = DJ_TIME
+
+
 func notify(text: String) -> void:
-	_notice.text = text
+	_notice.text = Locale.t(text)
 	_notice_time = NOTICE_TIME
 
 
@@ -308,6 +342,10 @@ func _centered(size: int, color: Color, top: float) -> Label:
 func _process(delta: float) -> void:
 	_notice_time -= delta
 	_notice.visible = _notice_time > 0.0
+	_radio_time -= delta
+	_dj_time -= delta
+	_radio.visible = _radio_time > 0.0
+	_dj.visible = _dj_time > 0.0 and director.current_vehicle != null
 	_district_time -= delta
 	_district.visible = _district_time > 0.0
 	_district_sub.visible = _district.visible
@@ -316,7 +354,7 @@ func _process(delta: float) -> void:
 	_district_sub.modulate.a = fade
 	_goal.text = goal_text
 	if sky:
-		_clock.text = "%s  %s" % [sky.clock_text(), "비" if sky.raining else ("밤" if DayNight.is_night(sky.hour) else "맑음")]
+		_clock.text = "%s  %s" % [sky.clock_text(), Locale.t("비" if sky.raining else ("밤" if DayNight.is_night(sky.hour) else "맑음"))]
 	_star_flash = maxf(_star_flash - delta, 0.0)
 	_money.text = money_text(wallet.money)
 	_update_mission()
@@ -324,34 +362,33 @@ func _process(delta: float) -> void:
 	_bars.queue_redraw()
 	var w := player.arsenal.current()
 	var ammo := player.arsenal.ammo_of(w)
-	_weapon.text = w.display_name if ammo < 0 else "%s  %d" % [w.display_name, ammo]
+	_weapon.text = Locale.t(w.display_name) if ammo < 0 else "%s  %d" % [Locale.t(w.display_name), ammo]
 	var v := director.current_vehicle
 	if v:
-		_info.text = "%s\n%d km/h" % [v.stats.display_name, roundi(v.speed() * KMH_PER_PX)]
+		_info.text = "%s\n%d km/h" % [Locale.t(v.stats.display_name), roundi(v.speed() * KMH_PER_PX)]
 		_drift.visible = absf(v.motor.lateral_speed()) > 220.0 and not v.stats.flies
 		if v.stats.flies:
-			_info.text += "  ·  고도 %d m" % roundi(v.altitude * METERS_PER_HEIGHT)
+			_info.text += Locale.t("  ·  고도 %d m") % roundi(v.altitude * METERS_PER_HEIGHT)
 		_prompt.visible = v.burning >= 0.0 or v.on_fire
-		_prompt.text = "불이 붙었다!  F 내려!" if v.burning >= 0.0 else "차에 불이 났다! 곧 터진다  F 내려!"
+		_prompt.text = Locale.t("불이 붙었다!  F 내려!" if v.burning >= 0.0 else "차에 불이 났다! 곧 터진다  F 내려!")
 		var job := jobs.available() if jobs else null
 		if job and not _prompt.visible:
-			_prompt.text = "B  %s 부업 시작 (최고 %d단계)" % [job.display_name, jobs.best.get(job.id, 0)]
+			_prompt.text = Locale.t("B  %s 부업 시작 (최고 %d단계)") % [Locale.t(job.display_name), jobs.best.get(job.id, 0)]
 			_prompt.visible = true
-		_hint.text = HINT_FLY if v.stats.flies else HINT_SPG if v.stats.cannon_max > 0.0 \
+		_hint.text = Locale.t(HINT_FLY if v.stats.flies else HINT_SPG if v.stats.cannon_max > 0.0 \
 			else HINT_DIGGER if v.stats.arm_reach.y > 0.0 else HINT_DOZER if v.stats.blade \
-			else HINT_TURRET if v.stats.turret_rate > 0.0 else HINT_DRIVE
+			else HINT_TURRET if v.stats.turret_rate > 0.0 else HINT_DRIVE)
 		if v.stats.flies and not _prompt.visible:
-			_prompt.text = "착륙 중…  F 취소" if v.landing else ("F  착륙" if v.airborne() else "W  이륙")
+			_prompt.text = Locale.t("착륙 중…  F 취소" if v.landing else ("F  착륙" if v.airborne() else "W  이륙"))
 			_prompt.visible = true
 		return
-	_info.text = "도보"
+	_info.text = Locale.t("도보")
 	_drift.visible = false
-	_hint.text = HINT_FOOT
+	_hint.text = Locale.t(HINT_FOOT)
 	var near := director.nearest_enterable()
 	_prompt.visible = near != null and not director.is_entering()
 	if near:
-		_prompt.text = "F  %s 빼앗기" % near.stats.display_name if near.has_driver \
-			else "F  %s 타기" % near.stats.display_name
+		_prompt.text = Locale.t("F  %s 빼앗기" if near.has_driver else "F  %s 타기") % Locale.t(near.stats.display_name)
 	var phone := missions.phone_prompt()
 	if phone != "" and not _prompt.visible:
 		_prompt.text = phone
@@ -363,9 +400,16 @@ func _update_mission() -> void:
 	for g in missions.gangs.gangs:
 		if missions.gang_reachable(g):
 			var v := respect.of(g.id)
-			parts.append("%s 존경도 %s%d" % [g.display_name, "+" if v > 0 else "", v])
+			parts.append(Locale.t("%s 존경도 %s%d") % [Locale.t(g.display_name), "+" if v > 0 else "", v])
 	_respect.text = "\n".join(parts)
 	_arrow.queue_redraw()
+	if not missions.active() and rampages and rampages.active():
+		_mission_title.text = rampages.title_text()
+		_mission_title.add_theme_color_override("font_color", Color(1.0, 0.4, 0.35) if rampages.time_left < 15.0 else Color(1.0, 0.25, 0.2))
+		_objective.text = rampages.objective_text()
+		_mission_title.visible = true
+		_objective.visible = true
+		return
 	if not missions.active():
 		var job_on := jobs != null and jobs.active()
 		_mission_title.visible = job_on

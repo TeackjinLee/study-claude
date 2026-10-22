@@ -17,3 +17,5 @@ extends Resource
 @export var wanted_relief := 1           ## 막으면 떼 주는 수배 별 (정의 구현 보너스)
 @export var weight := 1.0                ## 고를 비중
 @export var start_text := ""             ## 저지를 때 알림
+@export var store := false              ## 편의점을 턴다: 피해자는 가까운 편의점 앞에 나온 점원(clerk) — 거리의 시민이 아니다
+@export var clerk: NpcType               ## store일 때 점원

@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="DistrictType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/district_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gwangjin"
+display_name = "광진 강북"
+chapter = 3
+gang = &"oldtown"
+blocks = Rect2i(6, -11, 3, 7)
+color = Color(0.55, 0.85, 0.85, 1)
+sidewalk = Color(0.34, 0.35, 0.37, 1)
+building_weights = {
+&"APT": 2,
+&"VILLA": 2,
+&"ROWHOUSE": 1.5,
+&"MIXED": 1.5,
+&"COMMERCIAL": 1,
+&"ONEROOM": 1
+}
+plazas = Array[Vector2i]([])
+police_stations = Array[Vector2i]([])
+hospitals = Array[Vector2i]([])
+tagline = "잠실대교 건너 강북 — 대학가와 빌라촌"

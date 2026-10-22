@@ -26,8 +26,10 @@ func _ready() -> void:
 	var stream := AudioStreamGenerator.new()
 	stream.mix_rate = RotorSynth.MIX_RATE
 	stream.buffer_length = BUFFER
+	AudioSetup.ensure()
 	_player = AudioStreamPlayer.new()
 	_player.stream = stream
+	_player.bus = AudioSetup.SFX
 	add_child(_player)
 
 

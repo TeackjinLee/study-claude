@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="DistrictType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/district_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"jamsil"
+display_name = "잠실"
+chapter = 2
+gang = &""
+blocks = Rect2i(6, 0, 3, 6)
+color = Color(0.7, 0.55, 1.0, 1)
+sidewalk = Color(0.35, 0.35, 0.4, 1)
+building_weights = {
+&"APT": 3,
+&"OFFICETEL": 1,
+&"COMMERCIAL": 1,
+&"OFFICE": 0.8,
+&"MIXED": 0.5
+}
+plazas = Array[Vector2i]([])
+police_stations = Array[Vector2i]([])
+hospitals = Array[Vector2i]([])
+tagline = "롯데월드타워와 석촌호수 — 놀이공원의 동네"

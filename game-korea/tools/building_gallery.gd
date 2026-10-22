@@ -5,7 +5,7 @@ extends Node2D
 ## 한 종만 크게: ... -- --shot --ids=HANOK,APT --name=building_closeup
 ## 기능 건물 8종: ... -- --shot --set=special  →  .screenshots/building_special.png
 
-const LANDMARKS := ["LANDMARK_TOWER", "TERMINAL", "MARKET", "DOCK_CRANE", "BROADCAST", "CHECKPOINT", "CONTAINER", "DOCK_WAREHOUSE", "BARRIER", "INDUSTRIAL_DOCK"]
+const LANDMARKS := ["LANDMARK_TOWER", "TERMINAL", "MARKET", "DOCK_CRANE", "BROADCAST", "CHECKPOINT", "CONTAINER", "DOCK_WAREHOUSE", "BARRIER", "INDUSTRIAL_DOCK", "SKY_TOWER", "LAKE_PARK"]
 
 const STREET := ["CHURCH", "MOTEL", "GAS_STATION", "NIGHTLIFE", "PARKING_TOWER", "SCHOOL", "SUBWAY", "FIRE_STATION", "FINANCE_TOWER", "PRINT_ALLEY"]
 

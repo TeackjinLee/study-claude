@@ -47,6 +47,7 @@ const DESPAWN_RADIUS := 3300.0
 const SPAWN_CLEARANCE := 110.0
 const STUCK_RESPAWN_TIME := 25.0
 const LIGHT_REDRAW_INTERVAL := 0.2
+const SIGNAL_POLE_IN := 12.0                ## 신호등 기둥을 교차로 상자 모서리에서 인도 쪽으로
 const LIGHT_DRAW_REACH := 1300.0            ## 카메라에서 이만큼(줌 1 기준) 안의 신호등·정류장만 그린다
 
 var traffic_count := 20
@@ -62,6 +63,7 @@ var rng := RandomNumberGenerator.new()
 var ais: Array[TrafficAI] = []
 var teleports := 0
 var _drawn_spot := Vector2i.ZERO          ## 신호등을 그린 때 카메라가 있던 블록 (블록을 넘으면 다시 그린다)
+var _drawn_iso := true                     ## 그린 때 2.5D였나 (바꾸면 바로 다시 그린다 — 위에서 보기의 바닥 신호 점)
 var _bus_stops := {}                       ## LanePiece → true
 var _next_id := 1
 var _respawn_timer := 0.0
@@ -73,6 +75,7 @@ func _ready() -> void:
 	material = Terrain.material()   # 바닥 그림을 지형 높이만큼 올린다
 	rng.seed = seed
 	controller = TrafficController.new(graph)
+	_build_signal_poles()
 	_build_bus_stops()
 	for i in bus_count:
 		_spawn_bus(i * 2)
@@ -85,9 +88,10 @@ func _physics_process(delta: float) -> void:
 	_light_timer -= delta
 	var cam := ChaseCamera.current_cam()
 	var spot := CityMap.block_at(cam.global_position) if cam else Vector2i.ZERO
-	if _light_timer <= 0.0 or spot != _drawn_spot:
+	if _light_timer <= 0.0 or spot != _drawn_spot or IsoView.enabled != _drawn_iso:
 		_light_timer = LIGHT_REDRAW_INTERVAL
 		_drawn_spot = spot
+		_drawn_iso = IsoView.enabled
 		queue_redraw()
 	_respawn_timer -= delta
 	if _respawn_timer <= 0.0:
@@ -397,6 +401,22 @@ func is_bus_stop(piece: LanePiece) -> bool:
 	return _bus_stops.has(piece)
 
 
+## 2.5D 신호등 기둥: 신호 교차로 모서리마다 하나 (SignalPole — 그 모서리를 건너편으로 보는 차의 등 + 보행 신호 둘)
+func _build_signal_poles() -> void:
+	for cell: Vector2i in controller.signal_offsets:
+		var c := LaneGraph.center(cell)
+		for d in 4:
+			var dir := LaneGraph.DIRS[d]
+			var pole := SignalPole.new()
+			pole.controller = controller
+			pole.cell = cell
+			pole.d_in = d
+			pole.dir = dir
+			pole.legs.assign([d, (d + 1) % 4])
+			pole.position = c + (dir + LaneGraph.right_of(dir)) * (LaneGraph.HALF + SIGNAL_POLE_IN)
+			add_child(pole)
+
+
 ## 노선 위 구간을 하나 걸러 하나씩 정류장으로
 func _build_bus_stops() -> void:
 	for k in BUS_CORNERS.size():
@@ -432,6 +452,8 @@ func _draw() -> void:
 		draw_rect(Rect2(pole - Vector2(15, 9), Vector2(30, 18)), Color(0.75, 0.85, 1.0), false, 1.5)
 		draw_string(font, pole + Vector2(-15, 5), "정류장", HORIZONTAL_ALIGNMENT_CENTER, 30, 9, Color.WHITE)
 	for cell: Vector2i in controller.signal_offsets:
+		if IsoView.enabled:
+			break   # 2.5D 신호등은 서 있는 기둥(SignalPole)이 그린다
 		var c := LaneGraph.center(cell)
 		if not near.has_point(c):
 			continue

@@ -18,6 +18,8 @@ const KEYS := {
 	"vehicle_3": [KEY_3],
 	"side_job": [KEY_B],
 	"view_toggle": [KEY_F9],   ## 2.5D ↔ 위에서 보기
+	"radio_next": [KEY_T],     ## 차 라디오 다음 채널
+	"pause": [KEY_ESCAPE, KEY_P],   ## 일시정지 메뉴 (지도·설정)
 }
 
 ## [action, axis, 방향]
@@ -38,6 +40,8 @@ const PAD_BUTTONS := {
 	"weapon_prev": JOY_BUTTON_DPAD_LEFT,
 	"weapon_next": JOY_BUTTON_DPAD_RIGHT,
 	"side_job": JOY_BUTTON_DPAD_UP,
+	"radio_next": JOY_BUTTON_DPAD_DOWN,
+	"pause": JOY_BUTTON_START,
 }
 
 

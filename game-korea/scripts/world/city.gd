@@ -1,6 +1,6 @@
 class_name City
 extends Node2D
-## 가상 서울 (M6): 구역 7개, 한강, 다리 3개. 격자 블록·도로·인도·건물(충돌)을 전부 코드로 그린다.
+## 가상 서울 (M6): 구역 9개(잠실·광진 확장 포함), 한강, 다리 4개. 격자 블록·도로·인도·건물(충돌)을 전부 코드로 그린다.
 ## 구역·강·다리 배치는 CityMap, 구역별 건물 비중은 data/districts/*.tres.
 ## 건물 배치는 블록 좌표만으로 결정된다(RNG 없음) — 실행할 때마다 같은 도시.
 ## 그리기는 블록 묶음(청크)마다 따로 해서 화면 밖은 그리지 않는다.
@@ -83,6 +83,8 @@ const LANDMARK_PLACEMENTS := [
 	["fire_station", &"industrial", Vector2i(-2,4)],
 	["finance_tower", &"yeouido", Vector2i(-2,-2)],
 	["print_alley", &"jongno", Vector2i(1,-7)],
+	["sky_tower", &"jamsil", Vector2i(6,2)],
+	["lake_park", &"jamsil", Vector2i(7,3)],
 ]
 var landmark_indices := {}
 ## 블록 → 그 블록 랜드마크 부지 안 공터를 오가는 보행자 길들 (PedestrianManager가 인도 대신 쓰기도 한다)
@@ -343,64 +345,64 @@ func _build_layout() -> void:
 	park_kinds.clear()
 	stations.clear()
 	hospitals.clear()
-	for j in range(CityMap.MIN.y, CityMap.MAX.y + 1):
-		for i in range(CityMap.MIN.x, CityMap.MAX.x + 1):
-			var cell := Vector2i(i, j)
-			var dist := CityMap.district_of(cell)
-			if dist == null or dist.plazas.has(cell):
-				continue
-			var inner := block_rect(i, j).grow(-SIDEWALK)
-			var half := (inner.size - Vector2(ALLEY, ALLEY)) * 0.5
-			if dist.police_stations.has(cell):
-				stations.append(inner)
-				if cell == POLICE_STATION:
-					station = inner
-				_add(inner, null, cell)
-				continue
-			if dist.hospitals.has(cell):
-				hospitals.append(inner)
-				if cell == HOSPITAL:
-					hospital = inner
-				_add(inner, null, cell)
-				continue
-			if cell == GANG_HQ:
-				hq = inner
-				_add(inner, _type(&"OFFICE"), cell)
-				continue
-			if cell == WAREHOUSE:
-				warehouse = inner
-				_add(inner, _type(&"WAREHOUSE"), cell)
-				continue
-			var rects: Array[Rect2] = []
-			var footprint := 0
-			match posmod(i * 7 + j * 13, 4):
-				0:
-					rects = [inner]
-				1:
-					footprint = 1
-					rects = [Rect2(inner.position, Vector2(half.x, inner.size.y)),
-						Rect2(inner.position + Vector2(half.x + ALLEY, 0), Vector2(half.x, inner.size.y))]
-				2:
-					footprint = 1
-					rects = [Rect2(inner.position, Vector2(inner.size.x, half.y)),
-						Rect2(inner.position + Vector2(0, half.y + ALLEY), Vector2(inner.size.x, half.y))]
-				_:
-					footprint = 2
-					for oy in [0.0, half.y + ALLEY]:
-						for ox in [0.0, half.x + ALLEY]:
-							rects.append(Rect2(inner.position + Vector2(ox, oy), half))
-			for n in rects.size():
-				var r := rects[n]
-				if cell == HIDEOUT and n == rects.size() - 1:
-					hideout = r
-					_add(r, _type(&"OFFICETEL"), cell)
-				elif cell == SPRAY_SHOP and n == 0:
-					spray = r
-					_add(r, null, cell)
-				elif Terrain.is_forest(cell):
-					_add(r, FOREST, cell)
-				else:
-					_add(r, _pick_kind(dist, footprint, i * 131 + j * 37 + n * 11), cell)
+	for cell in CityMap.layout_order():   # 잠실(동쪽 확장)은 뒤에 센다 — 예전 건물 번호를 지킨다
+		var i := cell.x
+		var j := cell.y
+		var dist := CityMap.district_of(cell)
+		if dist == null or dist.plazas.has(cell):
+			continue
+		var inner := block_rect(i, j).grow(-SIDEWALK)
+		var half := (inner.size - Vector2(ALLEY, ALLEY)) * 0.5
+		if dist.police_stations.has(cell):
+			stations.append(inner)
+			if cell == POLICE_STATION:
+				station = inner
+			_add(inner, null, cell)
+			continue
+		if dist.hospitals.has(cell):
+			hospitals.append(inner)
+			if cell == HOSPITAL:
+				hospital = inner
+			_add(inner, null, cell)
+			continue
+		if cell == GANG_HQ:
+			hq = inner
+			_add(inner, _type(&"OFFICE"), cell)
+			continue
+		if cell == WAREHOUSE:
+			warehouse = inner
+			_add(inner, _type(&"WAREHOUSE"), cell)
+			continue
+		var rects: Array[Rect2] = []
+		var footprint := 0
+		match posmod(i * 7 + j * 13, 4):
+			0:
+				rects = [inner]
+			1:
+				footprint = 1
+				rects = [Rect2(inner.position, Vector2(half.x, inner.size.y)),
+					Rect2(inner.position + Vector2(half.x + ALLEY, 0), Vector2(half.x, inner.size.y))]
+			2:
+				footprint = 1
+				rects = [Rect2(inner.position, Vector2(inner.size.x, half.y)),
+					Rect2(inner.position + Vector2(0, half.y + ALLEY), Vector2(inner.size.x, half.y))]
+			_:
+				footprint = 2
+				for oy in [0.0, half.y + ALLEY]:
+					for ox in [0.0, half.x + ALLEY]:
+						rects.append(Rect2(inner.position + Vector2(ox, oy), half))
+		for n in rects.size():
+			var r := rects[n]
+			if cell == HIDEOUT and n == rects.size() - 1:
+				hideout = r
+				_add(r, _type(&"OFFICETEL"), cell)
+			elif cell == SPRAY_SHOP and n == 0:
+				spray = r
+				_add(r, null, cell)
+			elif Terrain.is_forest(cell):
+				_add(r, FOREST, cell)
+			else:
+				_add(r, _pick_kind(dist, footprint, i * 131 + j * 37 + n * 11), cell)
 
 	_assign_looks()
 	_assign_landmarks()
@@ -574,13 +576,7 @@ func _build_collision() -> void:
 	body.collision_layer = Layers.WORLD
 	add_child(body)
 	var w := world_rect()
-	var rects: Array[Rect2] = []
-	for idx in buildings.size():
-		# 사람과 차량이 공유하는 물리 장애물. 부지 전체 대신 실제 벽/기둥만 막는다.
-		rects.append_array(BuildingModel.ground_obstacles(_pieces(idx)))
-		var ground_kind := _ground_kind(idx)
-		if ground_kind and ground_kind.style in [&"house", &"hanok"]:
-			rects.append_array(BuildingModel.yard_walls(buildings[idx]))
+	var rects := obstacle_rects()
 	rects.append(Rect2(w.position.x - WALL, w.position.y - WALL, w.size.x + WALL * 2, WALL))
 	rects.append(Rect2(w.position.x - WALL, w.end.y, w.size.x + WALL * 2, WALL))
 	rects.append(Rect2(w.position.x - WALL, w.position.y, WALL, w.size.y))
@@ -589,6 +585,26 @@ func _build_collision() -> void:
 	rects.append_array(water)
 	for r: Rect2 in rects:
 		_add_box(body, r)
+
+
+## 사람과 차량이 공유하는 건물 장애물 (지도 벽·강물 빼고). 부지 전체 대신 실제 벽/기둥만 막는다.
+## 비밀 패키지 생성기·검사도 이것으로 걸어서 닿는지 잰다
+func obstacle_rects() -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	for idx in buildings.size():
+		rects.append_array(BuildingModel.ground_obstacles(_pieces(idx)))
+		var ground_kind := _ground_kind(idx)
+		if ground_kind and ground_kind.style in [&"house", &"hanok"]:
+			rects.append_array(BuildingModel.yard_walls(buildings[idx]))
+	return rects
+
+
+## 위에서 덮어 가리는 덩어리 (비밀 패키지 생성기·검사)
+func cover_rects() -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	for idx in buildings.size():
+		rects.append_array(BuildingModel.cover_rects(_pieces(idx)))
+	return rects
 
 
 static func _add_box(body: StaticBody2D, r: Rect2) -> void:

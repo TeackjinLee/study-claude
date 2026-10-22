@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="RadioChannel" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/radio_channel.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"rock"
+display_name = "홍대 인디 록"
+frequency = "FM 104.9"
+style = &"rock"
+bpm = 142.0
+root = 52
+minor = false
+seed = 11
+dj = &"DJ_ROCK"
+color = Color(1, 0.35, 0.3, 1)

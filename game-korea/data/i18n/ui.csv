@@ -1,0 +1,202 @@
+ko,en
+# 화면 글자 번역 (Locale.t). ko는 코드에 쓴 한국어 그대로, en이 비면 한국어를 쓴다. 쉼표·따옴표가 든 글자는 큰따옴표로 감싼다.
+WASD 이동   Shift 달리기   Z·J 공격   Q/E 무기   F 차 타기   R 출발점으로,WASD Move   Shift Run   Z·J Attack   Q/E Weapon   F Enter car   R Back to start
+W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   Z·J 드라이브바이   Q/E 무기   F 내리기   T 라디오   1·2·3 차종,W/S Gas·Brake   A/D Steer   Space Handbrake   Z·J Drive-by   Q/E Weapon   F Exit   T Radio   1·2·3 Car type
+W/S 전진·후진   A/D 제자리 돌기   마우스 포탑·사거리 (Q/E 포탑)   클릭·Z·J 포격   차를 깔고 넘는다   F 내리기,W/S Forward·Reverse   A/D Pivot   Mouse Turret·Range (Q/E Turret)   Click·Z·J Fire   Crushes cars   F Exit
+W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   마우스 기관총 (Q/E 돌리기)   클릭·Z·J 사격   F 내리기,W/S Gas·Brake   A/D Steer   Space Handbrake   Mouse MG (Q/E Turn)   Click·Z·J Fire   F Exit
+W/S 전진·후진   A/D 제자리 돌기   마우스 상부·팔 뻗기 (Q/E 상부)   클릭·Z·J 퍼 올리기 (차 집기·놓기)   F 내리기,W/S Forward·Reverse   A/D Pivot   Mouse Swing·Reach (Q/E Swing)   Click·Z·J Dig (grab·drop cars)   F Exit
+W/S 전진·후진   A/D 제자리 돌기   클릭·Z·J 블레이드 올리기·내리기 (내리면 밀어붙인다)   F 내리기,W/S Forward·Reverse   A/D Pivot   Click·Z·J Raise·Lower blade (lowered pushes)   F Exit
+W/S 앞으로·멈춤   A/D 돌기   Space 급선회   Z·J 사격   Q/E 무기   F 착륙 (빈 땅·도로 위),W/S Forward·Hover   A/D Turn   Space Hard turn   Z·J Fire   Q/E Weapon   F Land (open ground·road)
+도보,On foot
+드리프트!,DRIFT!
+  ·  고도 %d m,  ·  Alt %d m
+불이 붙었다!  F 내려!,On fire!  F to bail!
+차에 불이 났다! 곧 터진다  F 내려!,Car is burning! It'll blow  F to bail!
+B  %s 부업 시작 (최고 %d단계),B  Start %s side job (best level %d)
+착륙 중…  F 취소,Landing…  F to cancel
+F  착륙,F  Land
+W  이륙,W  Take off
+F  %s 빼앗기,F  Steal %s
+F  %s 타기,F  Enter %s
+%s 존경도 %s%d,%s respect %s%d
+비,Rain
+밤,Night
+맑음,Clear
+라디오 끔,Radio off
+차량 탈취!,Car jacked!
+경찰을 따돌렸다,Lost the cops
+경찰이 추격 중입니다!,The police are after you!
+특공대 출동! 다리에 검문소가 섰다,SWAT deployed! Checkpoints on the bridges
+경찰 헬기가 떴다 — 탐조등을 피해라,Police chopper up — stay out of the spotlight
+군 병력 투입!,The army is coming!
+수배 %s — %s,Wanted %s — %s
+병원 구급헬기 출동,Hospital air ambulance dispatched
+저장을 불러오지 못했다 — 새 게임으로 시작,Couldn't load the save — starting a new game
+밑이 막혀 내려앉을 수 없다 — 빈 땅이나 도로 위로 옮긴다,Can't land here — move over open ground or a road
+수배 중에는 돌아갈 수 없다,Can't go back while wanted
+미션 중에는 돌아갈 수 없다,Can't go back during a mission
+수배 중에는 저장할 수 없다,Can't save while wanted
+미션 중에는 저장할 수 없다,Can't save during a mission
+저장 실패,Save failed
+2.5D 화면,2.5D view
+위에서 보는 화면,Top-down view
+%s %d단계 — ₩%s,%s level %d — ₩%s
+%s 끝 — %s (%d단계),%s over — %s (level %d)
+%s %s,%s %s
+검거,busted
+제압,stopped
+보상 ₩%s,Reward ₩%s
+%s를 놓쳤다,The %s got away
+비밀 패키지 %d/%d — ₩%s,Hidden package %d/%d — ₩%s
+비밀 패키지 %d개,%d hidden packages
+%s 해금 — 은신처에 늘 놓인다,%s unlocked — always waiting at your hideouts
+비밀 패키지 모두 찾았다,All hidden packages found
+보너스 ₩%s,Bonus ₩%s
+광란!,RAMPAGE!
+%d초 안에 %s,Within %d seconds: %s
+광란 성공,Rampage complete
+보상 ₩%s · %d/%d,Reward ₩%s · %d/%d
+광란 실패,Rampage failed
+%d / %d,%d / %d
+광란!   %d:%02d,RAMPAGE!   %d:%02d
+%d명 쓰러뜨리기,Knock out %d people
+%s 조직원 %d명 쓰러뜨리기,Knock out %s members: %d
+차 %d대 터뜨리기,Blow up %d cars
+%d장 · %s,Chapter %d · %s
+시험 시작 (--chapter=%d) — 저장 불러오기 없음,Test start (--chapter=%d) — no save loading
+%s 부업 완료!,%s side job mastered!
+보너스: ,Bonus: 
+엔딩,The End
+%s 모았다 — 서울은 이제 네 것이다,You made %s — Seoul is yours now
+새 구역: ,New areas: 
+미션 성공!,Mission passed!
+₩%s · %s 존경도 +%d,₩%s · %s respect +%d
+미션 실패 — %s,Mission failed — %s
+%s — ₩%s 필요,%s — need ₩%s
+%s을(를) 샀다 — 여기서 저장할 수 있다,Bought %s — you can save here
+슬롯 %d에 저장했다 — 체력 회복,Saved to slot %d — health restored
+%s — %s에서 이어 한다,%s — continuing at %s
+자동 저장,Autosave
+슬롯 %d,Slot %d
+체포!,BUSTED!
+벌금 ₩%s · 무기 압수,Fine ₩%s · weapons confiscated
+기절!,WASTED!
+치료비 ₩%s · 무기 분실,Hospital bill ₩%s · weapons lost
+일시정지,Paused
+계속하기,Resume
+지도,Map
+설정,Settings
+타이틀로,Back to title
+게임 종료,Quit game
+돌아가기,Back
+서울 지도,Map of Seoul
+%d장에 열림,Opens in chapter %d
+나,You
+은신처,Hideout
+공중전화,Payphone
+미션 목표,Objective
+전체 소리,Master volume
+효과음,Sound effects
+음악 (라디오),Music (radio)
+배경음,Ambience
+언어 / Language,Language / 언어
+전체 화면,Fullscreen
+2.5D 화면 (F9),2.5D view (F9)
+강남대로,Gangnam Boulevard
+종로 구도심,Jongno Old Town
+홍대 거리,Hongdae Streets
+한강변,Hangang Riverside
+여의도 섬,Yeouido Island
+변두리 주택가,Outer Suburbs
+외곽 공단,Industrial Outskirts
+잠실,Jamsil
+광진 강북,Gwangjin North Bank
+고층 빌딩과 네온 — 강남 조직의 땅,Towers and neon — Gangnam syndicate turf
+기와지붕과 골목 — 건달파가 주먹으로 다스린다,Tiled roofs and alleys — ruled by the Old Town thugs
+클럽과 버스킹 — 주인 없는 거리,Clubs and buskers — nobody's streets
+강변북로와 한강공원,The riverside highway and Hangang Park
+강 위의 금융가,A financial district on the river
+아파트 단지와 빌라촌,Apartment blocks and villa alleys
+굴뚝과 컨테이너 — 밀수단의 부두,Smokestacks and containers — the smugglers' docks
+강남 조직,Gangnam Syndicate
+구도심 건달파,Old Town Thugs
+외곽 밀수단,Outskirts Smugglers
+상경,Coming to Seoul
+강 건너,Across the River
+구도심,Old Town
+부두,The Docks
+강남 오피스텔,Gangnam officetel
+홍대 고시원,Hongdae study room
+한강 캠핑장,Hangang campsite
+변두리 단독주택,Suburban house
+종로 한옥,Jongno hanok
+택시,Taxi
+버스 노선,Bus route
+배달,Delivery
+응급 이송,Ambulance
+소방,Firefighter
+자경단,Vigilante
+소매치기,pickpocket
+노상강도,mugger
+편의점 강도,store robber
+도둑이야! 가방을 낚아챘다 — 잡으면 보상,Thief! He snatched a bag — catch him for a reward
+강도다! 총으로 시민을 위협한다 — 막으면 보상,A mugger is holding someone at gunpoint — stop him for a reward
+편의점 강도다! 점원을 위협하고 있다 — 막으면 보상,Store robbery! The clerk is being held up — stop it for a reward
+강남 아이돌 FM,Gangnam Idol FM
+뽕짝 한마당,Trot Jamboree
+한밤의 로파이,Midnight Lo-Fi
+홍대 인디 록,Hongdae Indie Rock
+서울 교통 뉴스,Seoul Traffic News
+주먹,Fists
+야구방망이,Baseball bat
+권총,Pistol
+SMG,SMG
+산탄총,Shotgun
+소총,Rifle
+화염방사기,Flamethrower
+로켓런처,Rocket launcher
+화염병,Molotov
+수류탄,Grenade
+차량 기관총,Car MG
+물대포,Water cannon
+거치 기관총,Mounted MG
+곡사포,Howitzer
+한대 소나토,Handae Sonato
+소나토 택시,Sonato Taxi
+한대 아벨라,Handae Avela
+한대 아벨라 R,Handae Avela R
+한대 포르타,Handae Porta
+한대 타이탄,Handae Titan
+키온 루미,Kion Lumi
+키온 소레아,Kion Sorea
+키온 스트라이커,Kion Striker
+키온 봉고르,Kion Bongor
+제니스 G8,Zenith G8
+경찰 순찰차,Police cruiser
+경찰특공대 차량,SWAT truck
+구급차,Ambulance
+소방차,Fire truck
+견인차,Tow truck
+청소차,Garbage truck
+레미콘 차량,Cement mixer
+대형 화물 트럭,Big rig
+유조차 (SR에너지),Tanker (SR Energy)
+시내버스,City bus
+마을버스,Neighborhood bus
+고속버스,Express coach
+캠핑카,Camper
+배달 오토바이,Delivery scooter
+자전거,Bicycle
+민간 헬기,Helicopter
+경찰 헬기,Police chopper
+군 기동헬기,Army helicopter
+119 구조헬기,119 rescue chopper
+병원 구급헬기,Air ambulance
+군 트럭,Army truck
+소형 전술차량,Light tactical vehicle
+번개 자주포,Beongae SPG
+굴삭기 (포크레인),Excavator
+불도저,Bulldozer
+엔딩 — 자유 플레이,The End — free roam
+%d장 %s · 목표 ₩%s,Chapter %d %s · goal ₩%s
+한강,Han River

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="PackageSet" format=3]
+
+[ext_resource type="Script" path="res://scripts/collect/package_set.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/combat/weapon_type.gd" id="2_i0kyu"]
+[ext_resource type="Resource" path="res://data/weapons/smg.tres" id="3_qx1h3"]
+[ext_resource type="Resource" path="res://data/weapons/shotgun.tres" id="4_82hjr"]
+[ext_resource type="Resource" path="res://data/weapons/rifle.tres" id="5_n6ep0"]
+[ext_resource type="Resource" path="res://data/weapons/rocket.tres" id="6_kqgmc"]
+[ext_resource type="Resource" path="res://data/weapons/flamethrower.tres" id="7_5e2f3"]
+
+[resource]
+script = ExtResource("1")
+spots = PackedVector2Array(466, 466, 481, 2785, 4321, 2785, 2785, 3553, 4321, 481, 2017, 1249, 481, 4321, 2770, 2800, 1249, 1249, 1249, 2017, 1222, -4868, 4321, -5663, 4321, -4127, 2785, -4895, 1237, -4139, 481, -5663, 2017, -4895, -1055, -5663, -1823, -4127, -2645, -5723, -3359, -4127, -287, -4127, -1823, -5663, -287, -5663, 2785, -3359, 4321, -3359, 481, -3359, -1055, -3359, -3359, -3359, -1838, -1808, -1103, -1007, -2591, -1823, -1055, -1823, -1823, -1055, -1823, -7199, 3505, -7919, 2017, -7199, 481, -7967, -3359, -6431, -287, -6431, -3359, -7967, 3553, -6431, -1862, 4360, -287, 481, -2591, 1249, -3359, 4321, -326, 2746, -2591, 2785, -287, 4321, -2591, 4321)
+unlocks = Array[ExtResource("2_i0kyu")]([ExtResource("3_qx1h3"), ExtResource("4_82hjr"), ExtResource("5_n6ep0"), ExtResource("6_kqgmc"), ExtResource("7_5e2f3")])

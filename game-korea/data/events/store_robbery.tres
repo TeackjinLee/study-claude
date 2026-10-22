@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="StreetEventType" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/events/street_event_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/npc/robber.tres" id="2"]
+[ext_resource type="Resource" path="res://data/npc/merchant.tres" id="3"]
+
+[resource]
+script = ExtResource("1")
+id = &"store_robbery"
+display_name = "편의점 강도"
+npc = ExtResource("2")
+act_time = 7.0
+victim_situation = &"store_held"
+flee_speed = 170.0
+alert_range = 170.0
+give_up_distance = 750.0
+escape_time = 50.0
+reward = 90000
+kill_reward_scale = 0.5
+wanted_relief = 1
+weight = 0.8
+start_text = "편의점 강도다! 점원을 위협하고 있다 — 막으면 보상"
+store = true
+clerk = ExtResource("3")

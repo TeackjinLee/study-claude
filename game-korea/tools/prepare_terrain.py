@@ -2,6 +2,7 @@
 """서울 지형 높이 그림 → data/terrain/seoul.tres (TerrainMap).
 
 그림(output/imagegen/terrain/seoul_height.png)은 도시 블록 격자(가로 11 × 세로 17칸, 위가 북쪽)에 맞춘 흑백 높이 지도다.
+그림은 잠실(동쪽 확장, 블록 x 6~8) 전의 지도(IMG_MAX)만 덮는다 — 그 동쪽은 평지(0)로 채운다.
 칸 경계 선 = 도로 한가운데. 검정 = 가장 낮은 곳, 흰색 = 가장 높은 곳.
 CELL(월드 192px — 교차로 상자 한 변)마다 밝기를 0~1로 읽어 적는다. 강가를 낮추고 고가를 평평하게 하는 것은 게임(Terrain)이 한다.
 
@@ -20,7 +21,8 @@ OUT = ROOT / "data/terrain/seoul.tres"
 ROAD = 192.0
 PITCH = 768.0
 MIN = (-5, -11)
-MAX = (5, 5)
+MAX = (8, 5)
+IMG_MAX = (5, 5)     # 높이 그림이 덮는 동쪽 끝 블록 (그 너머는 평지)
 CELL = 192.0
 BLUR = 0.18          # 블러 반지름 (칸 크기 배수) — 생성 그림의 얼룩을 고른다
 # 높이 조절 값 (TerrainMap). 이미 .tres에 있으면 그 값을 지킨다
@@ -34,8 +36,8 @@ def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     src = Path(args[0]) if args else SRC
     im = Image.open(src).convert("L")
-    cols = MAX[0] - MIN[0] + 1
-    rows = MAX[1] - MIN[1] + 1
+    cols = IMG_MAX[0] - MIN[0] + 1
+    rows = IMG_MAX[1] - MIN[1] + 1
     cw = im.width / cols
     ch = im.height / rows
     # 칸 경계 선(1~2px 밝은 회색)을 지운 뒤 고른다 — 남으면 도로마다 둑이 솟는다
@@ -64,7 +66,7 @@ def main() -> None:
             # 그림 칸 경계 선 = 도로 한가운데 (교차로 MIN + k의 중심)
             gx = ((wx - ROAD * 0.5) / PITCH - MIN[0]) * cw
             gy = ((wy - ROAD * 0.5) / PITCH - MIN[1]) * ch
-            values.append(sample(gx, gy))
+            values.append(sample(gx, gy) if wx <= (IMG_MAX[0] + 2) * PITCH else 0.0)
 
     nums = ", ".join("%.4f" % v for v in values)
     tuning = dict(TUNING)

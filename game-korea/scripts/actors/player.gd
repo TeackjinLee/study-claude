@@ -18,6 +18,9 @@ var health := MAX_HEALTH
 var arsenal := Arsenal.new(FIST)
 var facing := 0.0
 var walk_phase := 0.0
+var _step_dist := 0.0              ## 발소리: 지난 발소리 뒤 걸은 거리
+const STEP_WALK := 22.0           ## 걸을 때 발소리 간격 (px)
+const STEP_RUN := 30.0
 var shirt := Color(0.12, 0.12, 0.13)   # 패키지 아트의 검은 재킷
 var pants := Color(0.2, 0.22, 0.3)
 var hair := Color(0.05, 0.05, 0.05)
@@ -88,6 +91,10 @@ func apply_movement(command: PlayerInputCommand, delta: float) -> void:
 		if _aim_hold <= 0.0 and not has_meta(&"punch_state"):
 			facing = Vector2.UP.angle_to(dir)
 		walk_phase += delta * velocity.length() / 9.0
+		_step_dist += velocity.length() * delta
+		if _step_dist >= (STEP_RUN if command.sprint else STEP_WALK):
+			_step_dist = 0.0
+			Sfx.play(&"step", global_position, 0.8 if command.sprint else 0.5)
 	move_and_slide()
 	_sort()
 
@@ -184,6 +191,7 @@ func take_damage(amount: float) -> void:
 		return
 	health = maxf(health - amount, 0.0)
 	queue_redraw()
+	Sfx.play(&"fall" if health <= 0.0 else &"grunt_m", global_position)
 	if health <= 0.0:
 		input_enabled = false
 		died.emit()
@@ -194,6 +202,8 @@ func beaten(amount: float, push_dir: Vector2, stun_time: float) -> void:
 	if is_dead() or knocked_down:
 		return
 	health = maxf(health - amount, 1.0)
+	Sfx.play(&"hit", global_position)
+	Sfx.play(&"grunt_m", global_position)
 	_stun = maxf(_stun, stun_time)
 	_push = push_dir.normalized() * 80.0
 	_hurt = 0.18

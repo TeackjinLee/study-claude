@@ -130,6 +130,7 @@ func panic(away: Vector2, forced := false) -> bool:
 	# 셋 중 하나는 소리친다 (사람마다 정해져 있다 — 무작위를 쓰지 않아 다른 결과가 바뀌지 않는다)
 	if not was_fleeing and get_instance_id() % 3 == 0:
 		say_line(&"flee", 1.2)
+		Sfx.play(VoiceSynth.scream_of(npc), global_position)
 	return not was_fleeing
 
 

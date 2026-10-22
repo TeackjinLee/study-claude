@@ -15,12 +15,16 @@ const DISTRICTS: Array[DistrictType] = [
 	preload("res://data/districts/yeouido.tres"),
 	preload("res://data/districts/outskirts.tres"),
 	preload("res://data/districts/industrial.tres"),
+	preload("res://data/districts/jamsil.tres"),
+	preload("res://data/districts/gwangjin.tres"),
 ]
 ## 블록 좌표 범위 (양끝 포함). 교차로 좌표는 MIN ~ MAX + 1
 const MIN := Vector2i(-5, -11)
-const MAX := Vector2i(5, 5)
+const MAX := Vector2i(8, 5)
+## 잠실(동쪽 확장) 전의 동쪽 끝 블록. 건물 번호는 이 안을 먼저 센다 — 예전 도시의 건물 번호·겉모습이 그대로 남게
+const LEGACY_MAX_X := 5
 ## 한강을 건너는 세로 도로 번호
-const BRIDGES: Array[int] = [-3, 2, 5]
+const BRIDGES: Array[int] = [-3, 2, 5, 7]   ## 7 = 잠실대교 (잠실 ↔ 광진)
 ## 다리 위 도로 높이 (2.5D 화면 px). 다리는 강물 위로 이만큼 떠 있고, 양끝은 경사로로 땅에 닿는다.
 ## 그림에만 쓴다 — 다리 밑으로 지나는 길이 없어서(밑은 강물) 물리·충돌은 평면 그대로다
 const DECK_HEIGHT := 46.0
@@ -57,6 +61,17 @@ static func _ensure() -> void:
 		for j in range(d.blocks.position.y, d.blocks.end.y):
 			for i in range(d.blocks.position.x, d.blocks.end.x):
 				_blocks[Vector2i(i, j)] = d
+
+
+## 건물을 세는 블록 차례: 예전 지도(LEGACY_MAX_X까지)를 줄마다, 그다음 동쪽 확장을 줄마다
+static func layout_order() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for east in [false, true]:
+		for j in range(MIN.y, MAX.y + 1):
+			for i in range(MIN.x, MAX.x + 1):
+				if (i > LEGACY_MAX_X) == east:
+					out.append(Vector2i(i, j))
+	return out
 
 
 static func set_chapter(n: int) -> void:

@@ -540,7 +540,8 @@ func _windows(p: BuildingModel.Piece, south: bool, wall: Color) -> void:
 			for f in _floors:
 				if f == 0 and ground:
 					continue
-				_quad(glass_from + 2.0, _len - 2.0, f * _fh + _fh * 0.12, f * _fh + _fh * 0.94, GLASS.darkened(_shade * 0.5))
+				_quad(glass_from + 2.0, _len - 2.0, f * _fh + _fh * 0.12, f * _fh + _fh * 0.94,
+					(p.glass_tint if p.glass_tint.a > 0.0 else GLASS).darkened(_shade * 0.5))
 				var bays := maxi(1, int((_len - glass_from) / 22.0))
 				var w := (_len - glass_from) / bays
 				for k in bays:

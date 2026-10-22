@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="RampageType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/collect/rampage_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/weapons/grenade.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"jongno_grenade"
+block = Vector2i(0, -7)
+corner = 2
+weapon = ExtResource("2")
+target = 2
+count = 6
+time_limit = 90.0
+reward = 150000

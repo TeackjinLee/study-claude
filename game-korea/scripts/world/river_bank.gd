@@ -7,6 +7,7 @@ extends Node2D
 ## - 둑 위에는 서 있는 난간 (다리가 둑에 닿는 곳은 비운다 — 차가 지나간다)
 ## - 난간을 따라 `LAMP_EVERY`마다 가로등(`Lamp`, 깊이 정렬되는 노드). 밤 불빛은 건물 불빛 셰이더(`BuildingView.light_material`)로
 ##   등 머리·도로에 떨어진 빛·옹벽 면에 비친 빛·물 위로 길게 늘어진 반사를 그린다 — 해 질 녘 하나둘 켜진다
+## - 다리 상판 양쪽 난간에도 `BRIDGE_LAMP_EVERY`마다 마주 보는 가로등 한 쌍 (상판 높이에 서고, 동쪽 등은 물 위에 반사)
 ## 물거품은 물 셰이더(`RiverView`, `bank_drop`)가 옹벽 발치에 그린다. 위에서 보기(F9)에서는 숨고 물 셰이더가 평면 호안을 칠한다.
 ## 선분은 시작할 때 한 번 재고(`RiverView.shore_edges`), 다시 그리는 것은 2.5D를 켜고 끌 때뿐이다.
 
@@ -25,6 +26,9 @@ const LAMP_IN := 10.0            ## 가로등을 땅 끝에서 안쪽으로
 const LAMP_H := 40.0             ## 가로등 높이
 const LAMP_ARM := 12.0           ## 도로 쪽으로 내민 팔
 const LAMP_END := 40.0           ## 선분 끝(교차로·다리 어귀)에서 이만큼은 비운다
+const BRIDGE_LAMP_EVERY := 256.0 ## 다리 가로등 사이 (월드 px, 양쪽 난간에 마주 보게)
+const BRIDGE_LAMP_ARM := 20.0    ## 다리 가로등은 차로 위로 더 내민다
+const BRIDGE_LAMP_IN := 3.0      ## 상판 끝에서 안쪽으로 (난간 위)
 
 const CONCRETE := Color(0.56, 0.57, 0.56)
 const CAP_COLOR := Color(0.72, 0.72, 0.69)
@@ -43,6 +47,9 @@ var _iso := true
 class Lamp extends Node2D:
 	var into := Vector2.DOWN      ## 땅 → 물 방향
 	var dir := Vector2.RIGHT      ## 둑을 따라
+	var base := 0.0               ## 선 바닥 높이 (다리 상판 위면 상판 높이)
+	var arm := LAMP_ARM
+	var bridge := false           ## 다리 난간 위 — 옹벽 대신 상판 밑 물에 반사
 	var glow: Node2D
 
 	func _ready() -> void:
@@ -55,7 +62,7 @@ class Lamp extends Node2D:
 
 	## 팔 끝 등 머리 (월드, 이 노드 기준)
 	func _head(grow := 0.0) -> PackedVector2Array:
-		var c := -into * LAMP_ARM
+		var c := -into * arm
 		var z := LAMP_H - 2.0
 		var a := dir * (3.0 + grow)
 		var b := into * (3.0 + grow)
@@ -65,9 +72,10 @@ class Lamp extends Node2D:
 	func _draw() -> void:
 		if not IsoView.enabled:
 			return
+		draw_set_transform(IsoView.lift(base))
 		draw_circle(Vector2.ZERO, 3.0, STEEL.darkened(0.3))
 		draw_line(Vector2.ZERO, IsoView.lift(LAMP_H), STEEL, 2.0)
-		draw_line(IsoView.lift(LAMP_H), -into * LAMP_ARM + IsoView.lift(LAMP_H - 1.0), STEEL, 2.0)
+		draw_line(IsoView.lift(LAMP_H), -into * arm + IsoView.lift(LAMP_H - 1.0), STEEL, 2.0)
 		draw_primitive(_head(), PackedColorArray([LAMP_LIGHT.darkened(0.25)]), PackedVector2Array())
 
 	## 불빛: UV (2, 2 + 차례) — 불빛 셰이더가 lights_on이 차례를 넘으면 켠다
@@ -76,15 +84,27 @@ class Lamp extends Node2D:
 			return
 		var order := 0.06 + 0.12 * RiverBank._hash(position)
 		var uv := Vector2(2.0, 2.0 + order)
-		# 도로에 떨어진 빛 웅덩이
-		var c := -into * (LAMP_ARM + 4.0)
+		glow.draw_set_transform(IsoView.lift(base))
+		# 도로(다리면 상판)에 떨어진 빛 웅덩이
+		var c := -into * (arm + 4.0)
 		for ring in [[30.0, 0.06], [18.0, 0.1]]:
 			var pool := PackedVector2Array()
 			for k in 14:
 				var t := TAU * k / 14.0
 				pool.append(c + Vector2(cos(t), sin(t)) * ring[0])
 			_poly(pool, Color(1.0, 0.78, 0.42, ring[1]), uv)
-		if IsoView.faces_viewer(into):
+		if bridge:
+			# 동쪽 난간 등만: 상판 밖 물 위로 길게 늘어진 반사 (서쪽은 상판 밑이라 안 보인다)
+			var sink := City._water_drop(position + into * 12.0)
+			if IsoView.faces_viewer(into) and sink > 0.0:
+				var water := into * 6.0 + IsoView.lift(-base - sink)
+				for band in [[11.0, 70.0, 0.1], [4.0, 54.0, 0.22]]:
+					var s: Vector2 = dir * band[0]
+					var near := Color(1.0, 0.82, 0.5, band[2])
+					var far := Color(1.0, 0.82, 0.5, 0.0)
+					_poly(PackedVector2Array([water - s, water + s, water + s * 0.5 + IsoView.lift(-band[1]), water - s * 0.5 + IsoView.lift(-band[1])]),
+						[near, near, far, far], uv)
+		elif IsoView.faces_viewer(into):
 			# 옹벽 면에 비친 빛 (위가 밝다)과 물 위로 길게 늘어진 반사
 			var foot := into * LAMP_IN
 			var w := dir * 22.0
@@ -130,6 +150,28 @@ func _ready() -> void:
 				lamp.dir = dir
 				add_child(lamp)
 			s += LAMP_EVERY
+	_bridge_lamps()
+
+
+## 다리 상판 양쪽 난간 위 가로등 (마주 보는 한 쌍씩, 상판 높이에 선다)
+func _bridge_lamps() -> void:
+	var hw := City.ROAD * 0.5 - BRIDGE_LAMP_IN
+	for k in CityMap.BRIDGES:
+		var cx := City.road_center(k)
+		for span in CityMap.bridge_spans(k):
+			var len := span.y - span.x
+			var n := maxi(1, roundi(len / BRIDGE_LAMP_EVERY))
+			for i in n:
+				var y := lerpf(span.x, span.y, (i + 0.5) / n)
+				for side in [-1.0, 1.0]:
+					var lamp := Lamp.new()
+					lamp.position = Vector2(cx + side * hw, y)
+					lamp.into = Vector2(side, 0.0)
+					lamp.dir = Vector2.DOWN
+					lamp.base = CityMap.deck_height_at(span, y)
+					lamp.arm = BRIDGE_LAMP_ARM
+					lamp.bridge = true
+					add_child(lamp)
 
 
 func _process(_delta: float) -> void:

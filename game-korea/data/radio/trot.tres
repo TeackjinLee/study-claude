@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="RadioChannel" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/radio_channel.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"trot"
+display_name = "뽕짝 한마당"
+frequency = "FM 89.7"
+style = &"trot"
+bpm = 132.0
+root = 57
+minor = true
+seed = 5
+dj = &"DJ_TROT"
+color = Color(1, 0.75, 0.3, 1)

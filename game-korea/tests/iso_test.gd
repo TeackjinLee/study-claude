@@ -266,9 +266,9 @@ func _test_landmarks() -> void:
 	await _frames(3)
 	var city: City = main.city
 	var space := city.get_world_2d().direct_space_state
-	# 큰 랜드마크 다섯 곳 (거리 건물 StreetBuilding도 landmark_indices에 같이 든다 — 공터 길은 큰 것만)
+	# 큰 랜드마크 일곱 곳 — 잠실 롯데월드타워·롯데월드 포함 (거리 건물 StreetBuilding도 landmark_indices에 같이 든다 — 공터 길은 큰 것만)
 	var big := city.landmark_indices.keys().filter(func(k): return (city.looks[city.landmark_indices[k]] as BuildingType).style in LandmarkBuilding.STYLES)
-	_expect(big.size() == 5, "랜드마크 다섯 곳 (%d)" % big.size())
+	_expect(big.size() == 7, "랜드마크 일곱 곳 (%d)" % big.size())
 	for key in big:
 		var idx: int = city.landmark_indices[key]
 		var r := city.buildings[idx]

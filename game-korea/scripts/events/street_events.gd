@@ -12,6 +12,7 @@ signal failed(e: StreetEventType)                              ## 놓쳤다
 const EVENTS: Array[StreetEventType] = [
 	preload("res://data/events/thief.tres"),
 	preload("res://data/events/robber.tres"),
+	preload("res://data/events/store_robbery.tres"),
 ]
 ## 피해자가 될 수 있는 사람 (교통경찰·노숙자·공연하는 사람은 빼다)
 const VICTIMS: Array[StringName] = [&"CIV_M", &"CIV_F", &"OFFICE", &"FOREIGNER", &"MERCHANT", &"DELIVERY", &"STUDENT", &"FLYER"]
@@ -25,6 +26,8 @@ const CLEANUP_DISTANCE := 950.0    ## 끝난 범인은 카메라에서 이만큼
 const CLEANUP_TIME := 30.0         ## 또는 이만큼 지나고 화면 밖이면
 const SHOOT_RANGE := 220.0         ## 들킨 강도가 쏘는 거리
 const SHOOT_DELAY := Vector2(1.3, 2.2)   ## 무기 발사 간격 배율 (강도는 조직원보다 굼뜨게)
+const STORE_RANGE := Vector2(220.0, 800.0)   ## 편의점 강도: 주인공에게서 이 거리의 편의점을 고른다
+const CONVENIENCE := &"CONVENIENCE"
 
 var director: Director
 var player: Player
@@ -34,6 +37,7 @@ var wallet: Wallet
 var combat: Combat
 var missions: MissionSystem
 var jobs: SideJobs
+var city: City                     ## 편의점 강도가 편의점 자리를 찾는다
 var enabled := true
 var rng := RandomNumberGenerator.new()
 var criminal: StreetCriminal = null   ## 지금 벌어지는 이벤트의 범인 (없으면 null)
@@ -80,7 +84,7 @@ func start(e: StreetEventType, victim: Pedestrian = null) -> StreetCriminal:
 	if criminal != null:
 		return null
 	if victim == null:
-		victim = _pick_victim()
+		victim = _store_clerk(e) if e.store else _pick_victim()
 	if victim == null:
 		return null
 	var c := StreetCriminal.new()
@@ -94,6 +98,53 @@ func start(e: StreetEventType, victim: Pedestrian = null) -> StreetCriminal:
 	pedestrians.add(c)
 	criminal = c
 	return c
+
+
+## 편의점 강도: 주인공 근처(STORE_RANGE) 열린 블록의 편의점 앞 인도에 점원을 세운다. 없으면 null
+func _store_clerk(e: StreetEventType) -> Pedestrian:
+	var at := _threat()
+	var best := -1
+	var best_d := INF
+	for idx in store_lots().size():
+		var r: Rect2 = store_lots()[idx]
+		var d := r.get_center().distance_to(at)
+		if d >= STORE_RANGE.x and d <= STORE_RANGE.y and d < best_d and CityMap.is_open_block(CityMap.block_at(r.get_center())):
+			best = idx
+			best_d = d
+	if best < 0:
+		return null
+	var lot: Rect2 = store_lots()[best]
+	var loop := City.sidewalk_loop(CityMap.block_at(lot.get_center()))
+	# 편의점 부지에서 가장 가까운 인도 변 위의 점
+	var edge := 0
+	var t := 0.0
+	var near := INF
+	for k in loop.size():
+		var a := loop[k]
+		var b := loop[(k + 1) % loop.size()]
+		var q := Geometry2D.get_closest_point_to_segment(lot.get_center(), a, b)
+		var dq := q.distance_to(lot.get_center())
+		if dq < near:
+			near = dq
+			edge = k
+			t = clampf(a.distance_to(q) / maxf(a.distance_to(b), 1.0), 0.1, 0.9)
+	var clerk := Pedestrian.new()
+	clerk.setup(e.clerk, rng, loop, edge, t, 1)
+	pedestrians.add(clerk)
+	clerk._set_state(Pedestrian.State.IDLE, 2.0)
+	return clerk
+
+
+## 도시의 편의점 부지 (기능 건물 겉모습 CONVENIENCE)
+func store_lots() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	if city == null:
+		return out
+	for idx: int in city.looks:
+		var look: BuildingType = city.looks[idx]
+		if look and look.id == CONVENIENCE:
+			out.append(city.buildings[idx])
+	return out
 
 
 func _pick_event() -> StreetEventType:

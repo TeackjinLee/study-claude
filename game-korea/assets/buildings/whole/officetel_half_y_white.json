@@ -1,0 +1,25 @@
+{
+  "id": "OFFICETEL",
+  "lot": "half_y",
+  "lot_size": [
+    251.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1426,
+    1161
+  ],
+  "origin": [
+    712.72,
+    762.77
+  ],
+  "scale": 1.82824,
+  "floors": 7,
+  "hull_pieces": {
+    "0": [
+      0,
+      8
+    ]
+  }
+}

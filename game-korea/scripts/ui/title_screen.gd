@@ -62,6 +62,7 @@ func _ready() -> void:
 		return
 	if DisplayServer.get_name() != "headless":
 		MainScript.limit_frame_rate()
+		Settings.load_and_apply()
 	_read_saves()
 	_build_scene()
 	_build_front()

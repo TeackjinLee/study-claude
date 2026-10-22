@@ -1,6 +1,6 @@
 class_name Sfx
 extends Node
-## 한 번 울리는 효과음(총소리·폭발·차 충돌·경적·물에 빠짐)을 트는 곳. Combat이 하나 만들어 붙이고, 어디서든 `Sfx.play(종류, 위치)`로 부른다.
+## 한 번 울리는 효과음(총소리·폭발·차 충돌·경적·물에 빠짐·비명·맞는 소리·발소리 — VoiceSynth)을 트는 곳. Combat이 하나 만들어 붙이고, 어디서든 `Sfx.play(종류, 위치)`로 부른다.
 ## 소리는 GunSynth가 코드로 만든 것을 처음에 한 번 AudioStreamWAV로 구워 두고(전부 굽는 데 1초쯤 걸려 따로 만든 스레드 하나에서 굽는다 —
 ## 다 구워지기 전에 부른 종류는 소리 없이 넘어간다. 굽는 스레드는 샘플 계산만 하고 AudioStreamWAV는 본 스레드에서 만든다 —
 ## 스레드에서 소리 자원을 만들면 강물 셰이더와 겹쳐 본 스레드가 1초쯤 멈췄다(perf_probe)), 목소리(AudioStreamPlayer) 몇 개를 돌려 쓴다.
@@ -14,6 +14,9 @@ const VOLUME_DB := -6.0
 const PITCH_JITTER := 0.05     ## 같은 소리도 높이를 조금씩 흔든다
 const SAME_GAP := 2            ## 같은 종류가 같은 곳에서 이 물리 틱 안에 또 나면 한 번만 (동시 발사)
 const LOG_SIZE := 64
+const VOICE_RANGE := 750.0     ## 사람 소리(비명·신음)가 들리는 거리
+const STEP_RANGE := 260.0      ## 발소리
+const SCREAM_GAP := 0.35       ## 비명은 어디서든 이 초 안에 하나만 (한꺼번에 겁먹은 사람들이 동시에 지르면 시끄럽다)
 
 static var current: Sfx
 
@@ -22,6 +25,7 @@ var _streams := {}             ## 종류 → [AudioStreamWAV …] (VARIANTS개)
 var _voices: Array[AudioStreamPlayer] = []
 var _started: Array[float] = []
 var _last := {}                ## 종류 → [시각, 위치]
+var _last_scream := -INF
 var _rng := RandomNumberGenerator.new()   # 게임 rng와 따로 (소리가 게임 결과를 바꾸지 않게)
 var _silent := false
 var _thread: Thread
@@ -34,8 +38,10 @@ func _ready() -> void:
 	_silent = DisplayServer.get_name() == "headless"
 	if _silent:
 		return
+	AudioSetup.ensure()
 	for i in VOICES:
 		var p := AudioStreamPlayer.new()
+		p.bus = AudioSetup.SFX
 		add_child(p)
 		_voices.append(p)
 		_started.append(-INF)
@@ -65,14 +71,20 @@ func _play(kind: StringName, pos: Vector2, size: float) -> void:
 	var last: Array = _last.get(kind, [-SAME_GAP, Vector2.ZERO])
 	if tick - int(last[0]) < SAME_GAP and pos.distance_to(last[1]) < 40.0:
 		return
-	_last[kind] = [tick, pos]
 	var now := Time.get_ticks_msec() / 1000.0
+	if String(kind).begins_with("scream"):
+		if now - _last_scream < SCREAM_GAP:
+			return
+		_last_scream = now
+	_last[kind] = [tick, pos]
 	heard.append([kind, pos, size])
 	if heard.size() > LOG_SIZE:
 		heard.remove_at(0)
 	if _silent:
 		return
-	var gain := _near(pos, BLAST_RANGE if kind == &"explosion" else HEAR_RANGE) * minf(sqrt(size), 1.4)
+	var reach := BLAST_RANGE if kind == &"explosion" else STEP_RANGE if kind == &"step" \
+		else VOICE_RANGE if VoiceSynth.SHOTS.has(kind) else HEAR_RANGE
+	var gain := _near(pos, reach) * minf(sqrt(size), 1.4)
 	if gain < 0.01:
 		return
 	var v := _free_voice()
@@ -89,7 +101,7 @@ func _play(kind: StringName, pos: Vector2, size: float) -> void:
 
 ## 합성기(GunSynth·CarSynth)가 아는 종류인가
 static func known(kind: StringName) -> bool:
-	return GunSynth.KINDS.has(kind) or CarSynth.SHOTS.has(kind)
+	return GunSynth.KINDS.has(kind) or CarSynth.SHOTS.has(kind) or VoiceSynth.SHOTS.has(kind)
 
 
 ## 놀고 있는 목소리, 없으면 가장 오래 운 것
@@ -114,12 +126,13 @@ func _near(pos: Vector2, reach: float) -> float:
 
 ## 굽는 스레드에서 돈다: 종류 하나를 다 구울 때마다 본 스레드에서 넣는다 (KINDS 순서 — 자주 쓰는 권총부터)
 func _bake_all() -> void:
-	for kind: StringName in GunSynth.KINDS.keys() + CarSynth.SHOTS.keys():
+	for kind: StringName in GunSynth.KINDS.keys() + CarSynth.SHOTS.keys() + VoiceSynth.SHOTS.keys():
 		if _stop:
 			return
 		var list: Array = []
 		for variant in GunSynth.VARIANTS:
-			var samples := GunSynth.render(kind, variant) if GunSynth.KINDS.has(kind) else CarSynth.render(kind, variant)
+			var samples := GunSynth.render(kind, variant) if GunSynth.KINDS.has(kind) \
+				else CarSynth.render(kind, variant) if CarSynth.SHOTS.has(kind) else VoiceSynth.render(kind, variant)
 			list.append(pcm16(samples))
 		_set_streams.call_deferred(kind, list)
 

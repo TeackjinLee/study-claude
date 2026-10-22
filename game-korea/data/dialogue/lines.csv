@@ -12,6 +12,9 @@ npc,situation,ko,en
 *,held,살려 주세요…,Please don't hurt me…
 *,held,다 드릴게요!,Take it all!
 *,held,쏘지 마세요!,Don't shoot!
+*,store_held,계산대 다 열게요!,I'll open the register!
+*,store_held,돈은 가져가세요!,Just take the money!
+*,store_held,누가 경찰 좀!,Someone call the police!
 *,thanks,고맙습니다!,Thank you!
 *,thanks,"휴, 살았다…","Phew, saved…"
 *,thanks,경찰보다 빠르네요!,Faster than the cops!
@@ -79,3 +82,25 @@ ROBBER,escape,따라오면 쏜다!,Follow me and you're dead!
 ROBBER,escape,비켜!,Out of my way!
 ROBBER,caught,항복! 항복!,I give up!
 ROBBER,caught,쏘지 마!,Don't shoot!
+# 차 라디오 DJ 자막 (상황 radio)
+DJ_KPOP,radio,"강남 아이돌 FM, 오늘도 신나게 달려 볼까요!","Gangnam Idol FM — let's ride!"
+DJ_KPOP,radio,"다음 곡은 신인 그룹 '별빛소년'의 데뷔곡!","Next up: the debut single from Starlight Boys!"
+DJ_KPOP,radio,"사연 보내 주신 택시 기사님, 안전 운전하세요~","To the taxi driver who wrote in — drive safe!"
+DJ_KPOP,radio,"이번 주 1위 곡, 지금 바로 갑니다!","This week's number one, coming right up!"
+DJ_TROT,radio,"자~ 어르신들, 손뼉 한번 쳐 주세요!","Everyone, give us a clap!"
+DJ_TROT,radio,"뽕짝 한마당! 인생은 쿵짝쿵짝~","Trot time! Life goes boom-chak, boom-chak~"
+DJ_TROT,radio,"고속도로 휴게소 최고 인기곡 나갑니다!","The rest-stop favorite, here it comes!"
+DJ_TROT,radio,"눈물 젖은 두만강… 아니, 한강이죠!","Tear-soaked river… well, it's the Han!"
+DJ_LOFI,radio,"늦은 밤, 창밖엔 네온만 남았네요.","Late night. Only the neon is left outside."
+DJ_LOFI,radio,"잠 못 드는 서울을 위한 로파이.","Lo-fi for a sleepless Seoul."
+DJ_LOFI,radio,"천천히 달리세요. 밤은 길어요.","Drive slow. The night is long."
+DJ_LOFI,radio,"빗소리 들으며 한 곡 더.","One more track with the rain."
+DJ_ROCK,radio,"홍대 인디 록! 볼륨 올려!","Hongdae Indie Rock! Turn it up!"
+DJ_ROCK,radio,"오늘 밤 지하 공연장 무료 입장이래요!","Free entry at the basement club tonight!"
+DJ_ROCK,radio,"기타 줄 끊어질 때까지 간다!","Until the strings snap!"
+DJ_ROCK,radio,"앰프는 11까지!","Amps go to eleven!"
+DJ_NEWS,radio,"교통 정보입니다. 강남대로 정체가 심합니다.","Traffic: heavy congestion on Gangnam-daero."
+DJ_NEWS,radio,"한강 다리 위 과속 단속 중입니다.","Speed checks on the Han bridges."
+DJ_NEWS,radio,"시내에서 경찰 추격전이 벌어지고 있습니다. 운전에 주의하세요.","A police chase is underway downtown. Drive carefully."
+DJ_NEWS,radio,"오늘 밤 서울 날씨, 곳곳에 비 소식.","Tonight in Seoul: scattered showers."
+DJ_NEWS,radio,"공단 도로 공사로 한 차선이 막혀 있습니다.","One lane is closed for roadworks in the industrial zone."

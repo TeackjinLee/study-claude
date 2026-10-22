@@ -3,7 +3,7 @@ extends Node
 ## 지금 코드 모형(BuildingModel)을 게임과 똑같은 2:1 사선 투영으로 찍어, 생성기에 "이 모양 위에 덧칠하라"고 넘길 그림을 만든다.
 ## 창 모드로 실행한다 (헤드리스는 그리지 않는다):
 ##   godot --path . res://tools/building_guide.tscn -- --ids=VILLA,APT
-##   ... -- --set=street            (base 15종 · special 8종 · street 10종 · landmarks 10종, 기본 base)
+##   ... -- --set=street            (base 15종 · special 8종 · street 10종 · landmarks 12종, 기본 base)
 ##   ... -- --lots=all              (그 종이 놓이는 부지 크기 전부. 기본은 첫 부지)
 ##   ... -- --lots=half_y           (부지 이름을 직접: full·half_x·half_y·quarter, 쉼표로 여럿 — 랜드마크는 구역에 통째 부지가
 ##                                    없으면 반쪽 부지에 선다. 실제 부지는 landmark_city_preview 출력의 lot=으로 본다)

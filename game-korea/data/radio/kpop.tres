@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="RadioChannel" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/radio_channel.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"kpop"
+display_name = "강남 아이돌 FM"
+frequency = "FM 95.1"
+style = &"kpop"
+bpm = 124.0
+root = 57
+minor = true
+seed = 3
+dj = &"DJ_KPOP"
+color = Color(1, 0.4, 0.75, 1)

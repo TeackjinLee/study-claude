@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="RadioChannel" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/radio_channel.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"lofi"
+display_name = "한밤의 로파이"
+frequency = "FM 101.3"
+style = &"lofi"
+bpm = 82.0
+root = 62
+minor = true
+seed = 8
+dj = &"DJ_LOFI"
+color = Color(0.55, 0.7, 1, 1)

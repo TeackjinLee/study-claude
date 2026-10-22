@@ -60,6 +60,17 @@ func _ready() -> void:
 	_add(City.sidewalk_loop(Vector2i(-2, 4))[1], null)
 
 
+## 비밀 패키지로 푼 무기: 산 은신처 문 옆 인도에 다시 생기는 상자로 둔다 (부를 때마다 통째로 바꾼다)
+func set_stock(doors: Array, weapons: Array[WeaponType]) -> void:
+	crates = crates.filter(func(c): return not c.get("stock", false))
+	for d: Array in doors:
+		var side: Vector2 = (d[1] as Vector2).orthogonal().normalized()
+		for k in weapons.size():
+			_add(d[0] + d[1] * 0.6 + side * (26.0 * (k + 1)), weapons[k])
+			crates[-1]["stock"] = true
+	queue_redraw()
+
+
 func _add(pos: Vector2, weapon: WeaponType, once := false, ammo := 0) -> void:
 	crates.append({"pos": pos, "weapon": weapon, "wait": 0.0, "once": once, "ammo": ammo})
 

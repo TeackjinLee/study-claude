@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="RampageType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/collect/rampage_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/weapons/rifle.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"industrial_rifle"
+block = Vector2i(-2, 1)
+corner = 2
+weapon = ExtResource("2")
+target = 1
+gang = &"smuggler"
+count = 15
+time_limit = 120.0
+reward = 300000

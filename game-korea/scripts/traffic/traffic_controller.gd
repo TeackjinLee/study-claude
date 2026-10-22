@@ -14,6 +14,7 @@ const GREEN_TIME := 9.0
 const YELLOW_TIME := 2.0
 const ALL_RED_TIME := 1.0
 const CYCLE := (GREEN_TIME + YELLOW_TIME + ALL_RED_TIME) * 2.0
+const WALK_BLINK := 3.0    ## 보행 초록불이 끝나기 전 이만큼 깜박인다 (그림만 — 보행자 AI는 신호를 보지 않는다)
 
 var graph: LaneGraph
 var time := 0.0
@@ -52,6 +53,19 @@ func light(cell: Vector2i, dir_in: int) -> Light:
 	if t < GREEN_TIME:
 		return Light.GREEN
 	if t < GREEN_TIME + YELLOW_TIME:
+		return Light.YELLOW
+	return Light.RED
+
+
+## leg 방향으로 뻗은 길의 횡단보도 보행 신호: GREEN 건너기 · YELLOW 초록 깜박임 · RED.
+## 건너는 사람은 그 길을 가로지르므로, 나란히 가는 차(다른 축)가 초록일 때 같이 초록이다
+func walk(cell: Vector2i, leg: int) -> Light:
+	if not signal_offsets.has(cell):
+		return Light.RED
+	var t := fposmod(time + signal_offsets[cell] - ((leg + 1) % 2) * CYCLE * 0.5, CYCLE)
+	if t < GREEN_TIME - WALK_BLINK:
+		return Light.GREEN
+	if t < GREEN_TIME:
 		return Light.YELLOW
 	return Light.RED
 

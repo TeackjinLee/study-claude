@@ -9,6 +9,12 @@ extends Node
 ##     (충돌·부딪힘·경적)가 나고, 충돌이 부딪힘보다 크고 길다. 차종마다 엔진 종류가 맞다.
 ##  6. 본편 차 소리(CarSounds): 주인공 차가 엔진 0번 자리, 가까운 NPC 차가 나머지(먼 차는 아니다), 경광등 켠 차가 사이렌.
 ##     벽에 세게 박으면 충돌 소리, NPC 경적.
+##  7. 사람 소리(VoiceSynth): 비명·신음·맞는 소리·쓰러짐·발소리가 나고 찢어지지 않는다. 비명은 여자 > 남자 높이.
+##     본편: 겁먹어 소리치는 사람은 비명, 맞으면 맞는 소리·신음, 기절하면 쓰러지는 소리, 주인공이 걸으면 발소리.
+##  9. 차 라디오(Radio·RadioSynth): 채널 5개 곡이 나고 이음매가 없다. 차에 타면 그 차 채널이 켜지고 T로 넘기며 마지막 다음은 끔,
+##     내리면 꺼지고, 오토바이엔 라디오가 없다. 켜 두면 DJ 자막이 뜬다.
+##  8. 도시 배경음(AmbienceSynth·CityAmbience): 토막은 이음매가 없다. 밤엔 풀벌레·낮엔 새, 비 오면 빗소리(새·벌레 없음),
+##     강에 가까우면 강물 소리.
 ## 실행: godot --headless --fixed-fps 60 --path . res://tests/sound_test.tscn
 
 const PISTOL: WeaponType = preload("res://data/weapons/pistol.tres")
@@ -25,6 +31,8 @@ func _ready() -> void:
 	await _test_in_game()
 	_test_car_synth()
 	await _test_car_sounds()
+	_test_voice_synth()
+	_test_ambience()
 	if _failures.is_empty():
 		print("sound_test: PASS")
 		get_tree().quit(0)
@@ -106,16 +114,135 @@ func _test_in_game() -> void:
 	# 창 모드로 돌렸을 때만: 다 구워지면 실제로 목소리가 운다
 	if not sfx._silent:
 		for i in 300:
-			if sfx._streams.size() == GunSynth.KINDS.size() + CarSynth.SHOTS.size():
+			if sfx._streams.size() == GunSynth.KINDS.size() + CarSynth.SHOTS.size() + VoiceSynth.SHOTS.size():
 				break
 			await _frames(1)
-		_expect(sfx._streams.size() == GunSynth.KINDS.size() + CarSynth.SHOTS.size(), "효과음을 5초 안에 다 굽는다")
+		_expect(sfx._streams.size() == GunSynth.KINDS.size() + CarSynth.SHOTS.size() + VoiceSynth.SHOTS.size(), "효과음을 5초 안에 다 굽는다")
 		await _frames(5)
 		combat.fire(at, Vector2.RIGHT, PISTOL, true, none)
 		_expect(sfx._voices.any(func(p: AudioStreamPlayer): return p.playing), "쏘면 소리가 난다")
+	# 사람 소리
+	var peds: PedestrianManager = main.pedestrians
+	var screamer: Pedestrian = null
+	for q in peds.peds:
+		if q.active and not q.is_dead() and q.get_instance_id() % 3 == 0 and not q.npc.fearless:
+			screamer = q
+			break
+	if screamer:
+		screamer.panic(Vector2.RIGHT)
+		_expect(String(_last(sfx)).begins_with("scream"), "겁먹어 소리치면 비명 (%s)" % _last(sfx))
+	var victim: Pedestrian = null
+	for q in peds.peds:
+		if q.active and not q.is_dead() and not q.npc.protected and q != screamer:
+			victim = q
+			break
+	if victim:
+		n = sfx.heard.size()
+		peds.damage(victim, 1.0, Vector2.RIGHT, true, true)
+		var kinds: Array = sfx.heard.slice(n).map(func(h): return h[0])
+		_expect(kinds.has(&"hit") and kinds.any(func(k): return String(k).begins_with("grunt")), "맞으면 맞는 소리·신음 (%s)" % [kinds])
+		await _frames(SFX_GAP)
+		peds.damage(victim, 999.0, Vector2.RIGHT, true, false)
+		_expect(_last(sfx) == &"fall", "기절하면 쓰러지는 소리 (%s)" % _last(sfx))
+	var player: Player = main.player
+	player.screen_walk = false
+	n = sfx.heard.size()
+	Input.action_press("steer_right")
+	await _frames(40)
+	Input.action_release("steer_right")
+	_expect(sfx.heard.slice(n).any(func(h): return h[0] == &"step"), "주인공이 걸으면 발소리")
+	_expect(main.ambience != null, "본편에 배경음 노드가 있다")
+	await _test_radio(main)
 	main.queue_free()
 	await _frames(2)
 	_expect(Sfx.current == null, "본편이 사라지면 효과음 노드도 비운다")
+
+
+const SFX_GAP := 3
+
+
+func _test_voice_synth() -> void:
+	for kind: StringName in VoiceSynth.SHOTS:
+		var a := VoiceSynth.render(kind, 0)
+		var peak := 0.0
+		for v in a:
+			peak = maxf(peak, absf(v))
+		_expect(a.size() > 0 and peak > 0.1 and peak <= 1.0, "%s: 소리가 나고 찢어지지 않는다 (%.2f)" % [kind, peak])
+		_expect(a == VoiceSynth.render(kind, 0), "%s: 같은 값이면 같은 소리" % kind)
+	_expect(_pitch(VoiceSynth.render(&"scream_f")) > _pitch(VoiceSynth.render(&"scream_m")) * 1.3, "여자 비명이 남자보다 높다")
+	_expect(VoiceSynth.scream_of(preload("res://data/npc/civ_f.tres")) == &"scream_f", "시민(여) 비명")
+	var child: NpcType = preload("res://data/npc/child.tres")
+	_expect(VoiceSynth.scream_of(child) == &"" and VoiceSynth.grunt_of(child) == &"", "아이는 소리를 내지 않는다")
+	_expect(not VoiceSynth.SHOTS.keys().any(func(k): return String(k).ends_with("_c")), "아이 목소리는 만들지 않는다")
+
+
+## 영점 교차로 잰 높이 (Hz)
+func _pitch(s: PackedFloat32Array) -> float:
+	var cross := 0
+	for i in range(1, s.size()):
+		if (s[i - 1] < 0.0) != (s[i] < 0.0):
+			cross += 1
+	return cross * 0.5 / (s.size() / VoiceSynth.MIX_RATE)
+
+
+func _test_radio(main: Node2D) -> void:
+	var radio: Radio = main.radio
+	var director: Director = main.director
+	var tunes := []
+	var djs := []
+	radio.tuned.connect(func(ch): tunes.append(ch))
+	radio.dj_line.connect(func(ch, text): djs.append(text))
+	_expect(radio.channel == null, "걸을 때는 라디오가 없다")
+	var car: Vehicle = main.vehicles[0]
+	director.enter_immediately(car)
+	await _frames(3)
+	_expect(director.current_vehicle != null and radio.channel == Radio.CHANNELS[Radio.default_index(director.current_vehicle)],
+		"차에 타면 그 차 채널 (%s)" % radio.channel)
+	var first: RadioChannel = radio.channel
+	radio.next()
+	_expect(radio.channel != first and tunes.size() >= 2, "T로 다음 채널")
+	while radio.channel != null:
+		radio.next()
+	_expect(tunes[-1] == null, "마지막 다음은 끔")
+	radio.next()
+	_expect(radio.channel == Radio.CHANNELS[0], "끔 다음은 처음 채널")
+	radio._dj_wait = 0.0
+	await _frames(2)
+	_expect(not djs.is_empty() and Dialogue.lines(Radio.CHANNELS[0].dj, &"radio").has(djs[-1]), "DJ 자막 (%s)" % [djs])
+	director.exit_vehicle()
+	await _frames(3)
+	_expect(radio.channel == null, "내리면 꺼진다")
+	var bike_car := Vehicle.new()
+	bike_car.stats = preload("res://data/vehicles/etc_bike.tres")
+	_expect(not Radio.has_radio(bike_car), "오토바이엔 라디오가 없다")
+	bike_car.free()
+	for ch in Radio.CHANNELS:
+		var song := RadioSynth.song(ch)
+		var peak := 0.0
+		for v in song:
+			peak = maxf(peak, absf(v))
+		_expect(song.size() > RadioSynth.MIX_RATE * 8.0 and peak > 0.3 and peak <= 1.0, "%s 곡이 난다" % ch.id)
+		_expect(absf(song[0] - song[song.size() - 1]) < 0.25, "%s: 되풀이 이음매" % ch.id)
+		_expect(Dialogue.has(ch.dj, &"radio"), "%s DJ 자막이 있다" % ch.id)
+
+
+func _test_ambience() -> void:
+	for kind: StringName in AmbienceSynth.LOOPS:
+		var a := AmbienceSynth.loop(kind)
+		_expect(a.size() == int(float(AmbienceSynth.LOOPS[kind]) * AmbienceSynth.MIX_RATE), "%s 토막 길이" % kind)
+		var jump := absf(a[0] - a[a.size() - 1])
+		var typical := 0.0
+		for i in range(1, 2000):
+			typical = maxf(typical, absf(a[i] - a[i - 1]))
+		_expect(jump <= typical + 0.02, "%s: 되풀이 이음매가 없다 (%.3f / %.3f)" % [kind, jump, typical])
+	var night := CityAmbience.mix(23.0, false, INF)
+	var day := CityAmbience.mix(13.0, false, INF)
+	var rain := CityAmbience.mix(13.0, true, INF)
+	_expect(night[&"night"] > 0.0 and day[&"night"] == 0.0, "풀벌레는 밤에")
+	_expect(day[&"birds"] > 0.0 and night[&"birds"] == 0.0, "새는 낮에")
+	_expect(rain[&"rain"] > 0.0 and rain[&"birds"] == 0.0 and day[&"rain"] == 0.0, "비 오면 빗소리, 새는 없다")
+	_expect(CityAmbience.mix(13.0, false, 100.0)[&"river"] > 0.5 and day[&"river"] == 0.0, "강가에서는 강물 소리")
+	_expect(day[&"city"] > 0.0 and night[&"city"] > 0.0, "도시 웅웅은 늘")
 
 
 func _test_car_synth() -> void:

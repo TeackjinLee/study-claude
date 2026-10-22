@@ -77,9 +77,24 @@ func _ready() -> void:
 		await _player_jump_shots(main)
 		get_tree().quit()
 		return
+	if "--only=citizen" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _citizen_shots(main)
+		get_tree().quit()
+		return
 	if "--only=punch" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _punch_shots(main)
+		get_tree().quit()
+		return
+	if "--only=menu" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _menu_shots(main)
+		get_tree().quit()
+		return
+	if "--only=collect" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _collect_shots(main)
 		get_tree().quit()
 		return
 	if "--only=m6" in OS.get_cmdline_user_args():
@@ -493,6 +508,65 @@ func _m6_play_shots(main: Node2D) -> void:
 	main.jobs.end("촬영")
 	main.director.exit_vehicle()
 	main.set_chapter(1)
+
+
+## 수집 요소 (`-- --only=collect`): 골목 안 비밀 패키지(collect_package, 강남 첫 패키지 · collect_package2, 종로),
+## 인도의 광란 해골 아이콘(collect_rampage), 밟아서 시작한 광란 HUD(collect_rampage_on)
+func _collect_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	main.street_events.enabled = false
+	main.sky.paused_clock = true
+	main.sky.set_hour(14.0)
+	main.set_chapter(4)
+	var spots := HiddenPackages.SET.spots
+	player.global_position = spots[0] + Vector2(-22, 0)
+	cam.snap()
+	await _frames(30)
+	await _save("collect_package")
+	player.global_position = spots[12] + Vector2(-22, 0)
+	cam.snap()
+	await _frames(30)
+	await _save("collect_package2")
+	var r: RampageType = RampageList.ALL[0]
+	player.global_position = r.position() + Vector2(-70, 0)
+	cam.snap()
+	await _frames(30)
+	await _save("collect_rampage")
+	player.global_position = r.position()
+	await _frames(40)
+	await _save("collect_rampage_on")
+
+
+## 일시정지 메뉴 (`-- --only=menu`): menu_main · menu_map(서울 지도) · menu_settings · menu_settings_en(영어로 바꾼 설정) ·
+## hud_en(영어 HUD, 차에 타서 라디오 채널 이름과 DJ 자막)
+func _menu_shots(main: Node2D) -> void:
+	var menu: PauseMenu = main.pause_menu
+	main.street_events.enabled = false
+	menu.open()
+	await get_tree().process_frame
+	await _save("menu_main")
+	menu._show_map()
+	for i in 3:
+		await get_tree().process_frame
+	await _save("menu_map")
+	menu._show_settings()
+	await get_tree().process_frame
+	await _save("menu_settings")
+	Settings.values["lang"] = "en"
+	Settings.apply()
+	menu._show_settings()
+	await get_tree().process_frame
+	await _save("menu_settings_en")
+	menu.visible = false
+	get_tree().paused = false
+	main.director.enter_immediately(main.vehicles[0])
+	await _frames(20)
+	main.radio._dj_wait = 0.0
+	await _frames(10)
+	await _save("hud_en")
+	Settings.values["lang"] = "ko"
+	Settings.apply()
 
 
 func _save(name: String) -> void:
@@ -1333,3 +1407,44 @@ func _iso_shots(main: Node2D) -> void:
 	await _frames(20)
 	await _save("iso_heli")
 	main.police.reset()
+
+
+
+## 거리 시민 걷기·달리기 (`-- --only=citizen`): 주인공 가까운 시민(남·여)을 카메라로 따라가며 0.1초마다 8장씩 —
+## 걷는 장면(citizen_<id>_walk_N), 놀라 달아나는 장면(citizen_<id>_run_N)
+func _citizen_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	cam.target = null
+	cam.zoom = Vector2(3.0, 3.0)
+	for id in ["civ_m", "civ_f"]:
+		var ped: Pedestrian = null
+		for wait in 40:
+			var best := INF
+			for p in main.pedestrians.peds:
+				if is_instance_valid(p) and p.npc and p.velocity.length() > 10.0:
+					var d: float = p.global_position.distance_to(player.global_position)
+					if d < best:
+						best = d
+						ped = p
+			if ped:
+				break
+			await _frames(15)
+		if ped == null:
+			print("  %s: 걷는 사람을 못 찾음" % id)
+			continue
+		ped.npc = load("res://data/npc/%s.tres" % id)   # 가까이 걷는 보행자를 그 시민 모습으로
+		for k in 8:
+			cam.global_position = ped.global_position
+			await _frames(6)
+			await _save("citizen_%s_walk_%d" % [id, k])
+		ped.panic(ped.global_position + Vector2(40, 30), true)
+		await _frames(10)
+		for k in 8:
+			cam.global_position = ped.global_position
+			await _frames(6)
+			await _save("citizen_%s_run_%d" % [id, k])
+		print("  %s: 걷기·달리기 %.0f px/s" % [id, ped.velocity.length()])

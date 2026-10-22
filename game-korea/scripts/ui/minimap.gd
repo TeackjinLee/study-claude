@@ -80,7 +80,7 @@ func _draw() -> void:
 	draw_colored_polygon(tri, Color.WHITE)
 	draw_arc(c, RADIUS, 0.0, TAU, 64, Color(0.45, 1.0, 0.55, 0.8), 2.0)
 	var dist := CityMap.district_at(me)
-	draw_string(ThemeDB.fallback_font, Vector2(0, RADIUS * 2 + 22), dist.display_name if dist else "한강",
+	draw_string(ThemeDB.fallback_font, Vector2(0, RADIUS * 2 + 22), Locale.t(dist.display_name if dist else "한강"),
 		HORIZONTAL_ALIGNMENT_CENTER, RADIUS * 2, 16, Color(0.85, 0.9, 1.0, 0.9))
 	var north := c + Vector2.UP.rotated(_turn()) * (RADIUS - 12.0)
 	draw_string(ThemeDB.fallback_font, north + Vector2(-4, 5), "N",

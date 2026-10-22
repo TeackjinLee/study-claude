@@ -125,6 +125,12 @@ var ems: EmsDispatcher                    ## 구급대 (기절한 사람을 구�
 var sky: DayNight
 var jobs: SideJobs
 var street_events: StreetEvents
+var packages: HiddenPackages
+var rampages: Rampages
+var ambience: CityAmbience
+var radio: Radio
+var pause_menu: PauseMenu
+const TITLE_SCENE := "res://scenes/title.tscn"
 var car_sounds: CarSounds
 var wallet := Wallet.new()
 var respect := Respect.new()
@@ -155,6 +161,8 @@ func _ready() -> void:
 		return
 	# 시험용: `godot --path . -- --chapter=N`으로 켜면 N장(그 장까지 열린 구역)부터 바로 시작한다.
 	# 본편으로 켰을 때만 본다 — 테스트는 Main을 다른 노드 밑에 붙이므로 같은 인자(traffic_test --chapter)에 영향받지 않는다
+	if get_parent() == get_tree().root:
+		Settings.load_and_apply()     # 소리 크기·언어·화면 (테스트는 Main을 다른 노드 밑에 붙여 사용자 설정을 읽지 않는다)
 	var start := start_chapter_arg() if get_parent() == get_tree().root else 0
 	if start > 0:
 		chapter = start
@@ -324,7 +332,23 @@ func _ready() -> void:
 	street_events.combat = combat
 	street_events.missions = missions
 	street_events.jobs = jobs
+	street_events.city = city
 	add_child(street_events)
+	packages = HiddenPackages.new()
+	packages.director = director
+	packages.player = player
+	packages.wallet = wallet
+	add_child(packages)
+	rampages = Rampages.new()
+	rampages.director = director
+	rampages.player = player
+	rampages.wallet = wallet
+	rampages.pedestrians = pedestrians
+	rampages.combat = combat
+	rampages.missions = missions
+	rampages.jobs = jobs
+	rampages.gangs = GANGS
+	add_child(rampages)
 	car_sounds = CarSounds.new()
 	car_sounds.vehicles = vehicles
 	car_sounds.director = director
@@ -333,6 +357,12 @@ func _ready() -> void:
 	sky = DayNight.new()
 	sky.pedestrians = pedestrians
 	add_child(sky)
+	ambience = CityAmbience.new()
+	ambience.sky = sky
+	add_child(ambience)
+	radio = Radio.new()
+	radio.director = director
+	add_child(radio)
 
 	hud = Hud.new()
 	hud.director = director
@@ -345,17 +375,32 @@ func _ready() -> void:
 	hud.sky = sky
 	hud.jobs = jobs
 	hud.events = street_events
+	hud.rampages = rampages
 	add_child(hud)
 	jobs.shift_started.connect(func(j: SideJobType): hud.banner(j.display_name + " 부업", j.intro, 2.5, Hud.GOLD))
-	jobs.level_done.connect(func(j: SideJobType, n: int, reward: int): hud.notify("%s %d단계 — ₩%s" % [j.display_name, n, Hud.won(reward)]))
+	jobs.level_done.connect(func(j: SideJobType, n: int, reward: int): hud.notify(Locale.t("%s %d단계 — ₩%s") % [Locale.t(j.display_name), n, Hud.won(reward)]))
 	jobs.shift_ended.connect(func(j: SideJobType, n: int, reason: String):
 		if reason != "완료":
-			hud.notify("%s 끝 — %s (%d단계)" % [j.display_name, reason, n]))
+			hud.notify(Locale.t("%s 끝 — %s (%d단계)") % [Locale.t(j.display_name), reason, n]))
 	jobs.job_mastered.connect(_on_job_mastered)
 	street_events.started.connect(func(e: StreetEventType, _c: StreetCriminal): hud.notify(e.start_text))
 	street_events.resolved.connect(func(e: StreetEventType, pay: int, alive: bool):
-		hud.banner("%s %s" % [e.display_name, "검거" if alive else "제압"], "보상 ₩%s" % Hud.won(pay), 2.5, Hud.GOLD))
-	street_events.failed.connect(func(e: StreetEventType): hud.notify("%s를 놓쳤다" % e.display_name))
+		hud.banner(Locale.t("%s %s") % [Locale.t(e.display_name), "검거" if alive else "제압"], Locale.t("보상 ₩%s") % Hud.won(pay), 2.5, Hud.GOLD))
+	street_events.failed.connect(func(e: StreetEventType): hud.notify(Locale.t("%s를 놓쳤다") % e.display_name))
+	packages.collected.connect(func(n: int, total: int, pay: int): hud.notify(Locale.t("비밀 패키지 %d/%d — ₩%s") % [n, total, Hud.won(pay)]))
+	packages.milestone.connect(func(w: WeaponType, n: int):
+		hud.banner(Locale.t("비밀 패키지 %d개") % n, Locale.t("%s 해금 — 은신처에 늘 놓인다") % Locale.t(w.display_name), 3.0, Hud.GOLD)
+		_stock_hideouts())
+	packages.completed.connect(func(pay: int): hud.banner("비밀 패키지 모두 찾았다", Locale.t("보너스 ₩%s") % Hud.won(pay), 3.5, Hud.GOLD))
+	rampages.started.connect(func(r: RampageType):
+		hud.banner("광란!", Locale.t("%d초 안에 %s") % [int(r.time_limit), r.goal_text(rampages.gang_name(r.gang))], 2.5, Hud.BANNER_RED))
+	rampages.finished.connect(func(r: RampageType, passed: bool, pay: int):
+		if passed:
+			hud.banner("광란 성공", Locale.t("보상 ₩%s · %d/%d") % [Hud.won(pay), rampages.done.size(), rampages.all().size()], 3.0, Hud.GOLD)
+		else:
+			hud.banner("광란 실패", Locale.t("%d / %d") % [rampages.kills, r.count], 2.5))
+	radio.tuned.connect(hud.show_radio)
+	radio.dj_line.connect(hud.show_dj)
 	_update_goal()
 	director.notice.connect(hud.notify)
 	pickups.picked.connect(hud.notify)
@@ -367,11 +412,17 @@ func _ready() -> void:
 	save_menu = SaveMenu.new()
 	add_child(save_menu)
 	save_menu.chosen.connect(_on_slot_chosen)
+	pause_menu = PauseMenu.new()
+	pause_menu.main = self
+	add_child(pause_menu)
+	pause_menu.quit_to_title.connect(func(): get_tree().change_scene_to_file.call_deferred(TITLE_SCENE))
+	if not IsoView.enabled:
+		city.set_iso(false)       # 설정에서 위에서 보기를 골라 두었다
 
 	var from_title := entry
 	entry = ""
 	if start > 0:
-		hud.banner("%d장 · %s" % [chapter, chapter_type().title], "시험 시작 (--chapter=%d) — 저장 불러오기 없음" % chapter, 3.5, Hud.GOLD)
+		hud.banner(Locale.t("%d장 · %s") % [chapter, chapter_type().title], Locale.t("시험 시작 (--chapter=%d) — 저장 불러오기 없음") % chapter, 3.5, Hud.GOLD)
 	if get_parent() == get_tree().root:
 		_give_arg_weapons()
 	elif from_title != "":
@@ -494,6 +545,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func set_iso(on: bool) -> void:
 	IsoView.enabled = on
 	city.set_iso(on)
+	Settings.values["iso"] = on
 	hud.notify("2.5D 화면" if on else "위에서 보는 화면")
 
 
@@ -527,7 +579,7 @@ func _on_control_changed(target: Node2D) -> void:
 # ── 부업 ──────────────────────────────────────────────────
 
 func _on_job_mastered(j: SideJobType) -> void:
-	hud.banner("%s 부업 완료!" % j.display_name, "보너스: " + j.bonus_text, 4.0, Hud.GOLD)
+	hud.banner(Locale.t("%s 부업 완료!") % Locale.t(j.display_name), "보너스: " + Locale.t(j.bonus_text), 4.0, Hud.GOLD)
 	_apply_job_bonuses()
 
 
@@ -550,14 +602,14 @@ func _check_chapter() -> void:
 	if chapter >= CHAPTERS.size():
 		finished = true
 		_update_goal()
-		hud.banner("엔딩", "%s 모았다 — 서울은 이제 네 것이다" % ("₩" + Hud.won(chapter_type().target)), 6.0, Hud.GOLD)
+		hud.banner("엔딩", Locale.t("%s 모았다 — 서울은 이제 네 것이다") % ("₩" + Hud.won(chapter_type().target)), 6.0, Hud.GOLD)
 		autosave()
 		return
 	set_chapter(chapter + 1)
 	var names: Array[String] = []
 	for d in CityMap.districts_of_chapter(chapter):
 		names.append(d.display_name)
-	hud.banner("%d장 · %s" % [chapter, chapter_type().title], "새 구역: " + " · ".join(names), 4.5, Hud.GOLD)
+	hud.banner(Locale.t("%d장 · %s") % [chapter, chapter_type().title], "새 구역: " + " · ".join(names), 4.5, Hud.GOLD)
 	hud.notify(chapter_type().intro)
 	autosave()
 
@@ -566,9 +618,9 @@ func _update_goal() -> void:
 	if hud == null:
 		return
 	if finished:
-		hud.goal_text = "엔딩 — 자유 플레이"
+		hud.goal_text = Locale.t("엔딩 — 자유 플레이")
 	else:
-		hud.goal_text = "%d장 %s · 목표 ₩%s" % [chapter, chapter_type().title, Hud.won(chapter_type().target)]
+		hud.goal_text = Locale.t("%d장 %s · 목표 ₩%s") % [chapter, Locale.t(chapter_type().title), Hud.won(chapter_type().target)]
 
 
 ## 다른 구역에 들어서면 이름을 띄운다 (GTA2처럼)
@@ -605,6 +657,7 @@ func _on_busted(fine: int) -> void:
 	var paid := wallet.pay(fine / 2 if jobs.has_bonus(&"vigilante") else fine)
 	missions.fail("체포")
 	jobs.end("체포")
+	rampages.abort()
 	_respawn("체포!", "벌금 ₩%s · 무기 압수" % Hud.won(paid), City.nearest_police_station(director.controlled_target().global_position))
 
 
@@ -615,6 +668,7 @@ func _on_died() -> void:
 	var paid := wallet.pay(0 if jobs.has_bonus(&"ambulance") else HOSPITAL_FEE)
 	missions.fail("기절")
 	jobs.end("기절")
+	rampages.abort()
 	_respawn("기절!", "치료비 ₩%s · 무기 분실" % Hud.won(paid), City.nearest_hospital(director.controlled_target().global_position))
 
 
@@ -645,9 +699,9 @@ func _on_mission_started(m: MissionType) -> void:
 func _on_mission_finished(m: MissionType, passed: bool, reason: String) -> void:
 	if passed:
 		var g := gangs.gang(m.gang)
-		hud.banner("미션 성공!", "₩%s · %s 존경도 +%d" % [Hud.won(m.reward), g.display_name, m.respect], 3.0, Hud.GOLD)
+		hud.banner("미션 성공!", Locale.t("₩%s · %s 존경도 +%d") % [Hud.won(m.reward), Locale.t(g.display_name), m.respect], 3.0, Hud.GOLD)
 	elif _respawning or reason == "기절" or reason == "체포":
-		hud.notify("미션 실패 — %s" % reason)
+		hud.notify(Locale.t("미션 실패 — %s") % reason)
 	else:
 		hud.banner("미션 실패", reason)
 
@@ -680,7 +734,7 @@ func _on_hideout_stepped(h: Hideout) -> void:
 		open_save_menu()
 		return
 	if wallet.money < h.type.price:
-		hud.notify("%s — ₩%s 필요" % [h.type.display_name, Hud.won(h.type.price)])
+		hud.notify(Locale.t("%s — ₩%s 필요") % [Locale.t(h.type.display_name), Hud.won(h.type.price)])
 		return
 	_buying = h
 	save_menu.open_confirm("%s — ₩%s에 살까?" % [h.type.display_name, Hud.won(h.type.price)], "산다", "그만둔다")
@@ -693,8 +747,18 @@ func buy_hideout(h: Hideout) -> bool:
 	wallet.pay(h.type.price)
 	h.owned = true
 	current_hideout = h
-	hud.notify("%s을(를) 샀다 — 여기서 저장할 수 있다" % h.type.display_name)
+	hud.notify(Locale.t("%s을(를) 샀다 — 여기서 저장할 수 있다") % h.type.display_name)
+	_stock_hideouts()
 	return true
+
+
+## 비밀 패키지로 푼 무기를 산 은신처마다 다시 생기는 상자로 놓는다
+func _stock_hideouts() -> void:
+	var doors := []
+	for h in hideouts:
+		if h.owned:
+			doors.append([h.type.door, h.type.along])
+	pickups.set_stock(doors, packages.unlocked())
 
 
 func hideout_by_id(id: StringName) -> Hideout:
@@ -736,7 +800,7 @@ func save_game(slot: int) -> bool:
 		hud.notify("저장 실패")
 		return false
 	player.revive()
-	hud.notify("슬롯 %d에 저장했다 — 체력 회복" % slot)
+	hud.notify(Locale.t("슬롯 %d에 저장했다 — 체력 회복") % slot)
 	return true
 
 
@@ -762,6 +826,10 @@ func _snapshot() -> SaveGame:
 		s.jobs[String(id)] = jobs.best[id]
 	for id: StringName in jobs.bonuses:
 		s.job_bonuses.append(String(id))
+	for i: int in packages.got:
+		s.packages.append(i)
+	for id: StringName in rampages.done:
+		s.rampages.append(String(id))
 	s.hideout = String(current_hideout.type.id)
 	for h in hideouts:
 		if h.owned and h.type.price > 0:
@@ -797,6 +865,9 @@ func load_game(slot: int) -> bool:
 	_apply_job_bonuses()
 	for h in hideouts:
 		h.owned = h.type.price == 0 or s.hideouts.has(String(h.type.id))
+	packages.restore(s.packages)
+	rampages.restore(s.rampages)
+	_stock_hideouts()
 	var at := hideout_by_id(StringName(s.hideout))
 	current_hideout = at if at and at.owned else hideout
 	director.exit_vehicle()
@@ -804,6 +875,6 @@ func load_game(slot: int) -> bool:
 	player.global_position = current_hideout.type.door + current_hideout.type.along
 	player.facing = PI
 	camera.snap()
-	hud.notify("%s — %s에서 이어 한다" % ["자동 저장" if slot == SaveGame.AUTO_SLOT else "슬롯 %d" % slot,
+	hud.notify(Locale.t("%s — %s에서 이어 한다") % ["자동 저장" if slot == SaveGame.AUTO_SLOT else "슬롯 %d" % slot,
 		current_hideout.type.display_name])
 	return true

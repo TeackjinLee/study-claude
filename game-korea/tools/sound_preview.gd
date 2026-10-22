@@ -1,6 +1,6 @@
 extends SceneTree
 ## 합성한 효과음을 들어 보는 도구: output/sound/<종류>.wav (종류마다 변형 셋을 차례로)와 sfx_all.wav (전부 이어서),
-## 차 소리 engine_<종류>.wav(가속)·siren_<종류>.wav·skid.wav.
+## 차 소리 engine_<종류>.wav(가속)·siren_<종류>.wav·skid.wav, 사람 소리 voice_<종류>.wav, 배경음 ambience_<종류>.wav, 라디오 radio_<채널>.wav.
 ## 실행: godot --headless --path . -s res://tools/sound_preview.gd
 
 const GAP := 0.35
@@ -20,7 +20,41 @@ func _init() -> void:
 		print(kind, ": ", snappedf(GunSynth.render(kind).size() / GunSynth.MIX_RATE, 0.01), "s")
 	Sfx.to_wav(all).save_to_wav("res://output/sound/sfx_all.wav")
 	_car_sounds()
+	_voice_sounds()
+	_ambience()
+	_radio()
 	quit()
+
+
+## 차 라디오(RadioSynth): radio_<채널>.wav (곡 토막을 두 번 이어 — 이음매가 들리면 안 된다)
+func _radio() -> void:
+	for ch in Radio.CHANNELS:
+		var song := RadioSynth.song(ch)
+		var two := song.duplicate()
+		two.append_array(song)
+		Sfx.to_wav(two).save_to_wav("res://output/sound/radio_%s.wav" % ch.id)
+	print("라디오: output/sound/radio_*.wav")
+
+
+## 사람 소리(VoiceSynth): voice_<종류>.wav (변형 셋을 차례로)
+func _voice_sounds() -> void:
+	for kind: StringName in VoiceSynth.SHOTS:
+		var one := PackedFloat32Array()
+		for variant in VoiceSynth.VARIANTS:
+			one.append_array(VoiceSynth.render(kind, variant))
+			one.append_array(_silence(GAP))
+		Sfx.to_wav(one).save_to_wav("res://output/sound/voice_%s.wav" % kind)
+	print("사람 소리: output/sound/voice_*.wav")
+
+
+## 도시 배경음(AmbienceSynth): ambience_<종류>.wav (토막을 두 번 이어 — 이음매가 들리면 안 된다)
+func _ambience() -> void:
+	for kind: StringName in AmbienceSynth.LOOPS:
+		var loop := AmbienceSynth.loop(kind)
+		var two := loop.duplicate()
+		two.append_array(loop)
+		Sfx.to_wav(two).save_to_wav("res://output/sound/ambience_%s.wav" % kind)
+	print("배경음: output/sound/ambience_*.wav")
 
 
 ## 차 소리: 한 번 울리는 것(충돌·부딪힘·경적·첨벙), 엔진 가속(공회전 → 기어 올리며 최고 속도 → 떼기), 사이렌, 타이어 끌림

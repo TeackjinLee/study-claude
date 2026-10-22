@@ -211,6 +211,10 @@ func damage(p: Pedestrian, amount: float, away: Vector2, by_player: bool, knock:
 		p.hurt(amount, away, knock)   # 다치지 않고 도망만 친다
 		return
 	var killed := p.hurt(amount, away, knock)
+	if not VoiceSynth.SILENT.has(p.npc.id):
+		if knock:
+			Sfx.play(&"hit", p.global_position)
+		Sfx.play(&"fall" if killed else VoiceSynth.grunt_of(p.npc), p.global_position)
 	person_hurt.emit(p, by_player, killed)
 	spread_fear(p, p.global_position - away.normalized() * 40.0)
 

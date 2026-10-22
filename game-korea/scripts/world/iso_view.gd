@@ -13,7 +13,7 @@ const LIFT := Vector2(-1.2820513, -1.2820513)
 const Z_MIN := 100
 const Z_MAX := 4000
 const DEPTH_MIN := -12600.0
-const DEPTH_STEP := 6.0
+const DEPTH_STEP := 7.0   ## 잠실(동쪽 확장)까지 Z_MAX 안에 들게 (6이면 넘는다 — z_index 한도 4096)
 ## 정렬 위에 덮이는 효과 (폭발·탄환 / 헬기)
 const Z_EFFECTS := 4050
 const Z_AIR := 4080

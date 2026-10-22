@@ -1,6 +1,6 @@
 extends Node
 ## M6 콘텐츠 확장 검증.
-##  1. 지도: 구역 7개·한강·다리 3개. 장마다 열린 도로가 하나로 이어져 있고, 들어간 교차로에서 늘 나갈 길이 있다.
+##  1. 지도: 구역 9개(잠실·광진 포함)·한강·다리 4개. 장마다 열린 도로가 하나로 이어져 있고, 들어간 교차로에서 늘 나갈 길이 있다.
 ##     1장엔 다리가 통제되고, 4장엔 잠긴 곳이 없다.
 ##  2. 장: 목표 금액을 모으면 다음 장이 열리고(구역·바리케이드), 자동 저장 칸에 저장된다. 불러오면 그 장이다.
 ##  3. 은신처: 아직 안 산 곳은 살지 묻고, 사면 거기서 저장하고 불러오면 거기서 시작한다.
@@ -87,14 +87,14 @@ func _free(main: Node2D) -> void:
 # ── 지도 ──────────────────────────────────────────────────
 
 func _test_map() -> void:
-	_expect(CityMap.DISTRICTS.size() == 7, "구역 7개 (%d)" % CityMap.DISTRICTS.size())
+	_expect(CityMap.DISTRICTS.size() == 9, "구역 9개 (%d)" % CityMap.DISTRICTS.size())
 	var bridge_segments := 0
 	for k in CityMap.BRIDGES:
 		for j in range(CityMap.MIN.y, CityMap.MAX.y + 1):
 			if CityMap.is_bridge(Vector2i(k, j), 2):
 				bridge_segments += 1
 	_expect(bridge_segments > 0 and PoliceDispatcher.bridge_ends().size() == CityMap.BRIDGES.size() * 2 + 2,
-		"다리 3개, 끝 %d곳 (여의도 섬을 지나는 다리는 끝이 넷)" % PoliceDispatcher.bridge_ends().size())
+		"다리 4개, 끝 %d곳 (여의도 섬을 지나는 다리는 끝이 넷)" % PoliceDispatcher.bridge_ends().size())
 	for chapter in range(1, CityMap.LAST_CHAPTER + 1):
 		CityMap.set_chapter(chapter)
 		var nodes := []

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="RampageType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/collect/rampage_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/weapons/bat.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"gangnam_bat"
+block = Vector2i(4, 1)
+corner = 2
+weapon = ExtResource("2")
+target = 0
+count = 10
+time_limit = 60.0
+reward = 50000

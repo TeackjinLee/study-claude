@@ -44,6 +44,8 @@ class Piece extends RefCounted:
 	var text := ""                          ## 대표 간판·동 번호
 	var signs := PackedStringArray()        ## 1층 가게 간판 후보
 	var accent := Color.WHITE
+	## 커튼월(glass) 유리 색. 비어 있으면(a 0) 기본 짙은 유리 (BuildingView.GLASS)
+	var glass_tint := Color(0, 0, 0, 0)
 	var on_top: Array = []                  ## 이 덩어리 위에 얹혀 같이 그리는 덩어리 (윗층·옥상 소품·굴뚝)
 	var seed := 0
 	var floor_height := FH
@@ -735,6 +737,19 @@ static func ground_obstacles(pieces: Array[Piece]) -> Array[Rect2]:
 			out.append(Rect2(p.rect.get_center()-Vector2(3,3),Vector2(6,6)))
 		else:
 			out.append(p.rect)
+	return out
+
+
+## 위에 그려져 가리는 것 (벽·지붕·차양·나무 수관·바닥판 — 바닥판도 조각이 사람 높이 z로 그리고,
+## 통째 그림 건물은 조각 윤곽만큼 그림을 덮는다). 비밀 패키지를 그 밑에 두지 않으려고 쓴다
+static func cover_rects(pieces: Array) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for p: Piece in pieces:
+		out.append_array(cover_rects(p.on_top))
+		var r := p.rect.grow(p.eave)
+		if p.roof == &"tree":
+			r = Rect2(p.rect.get_center() - Vector2(p.rise, p.rise), Vector2(p.rise, p.rise) * 2.0).merge(p.rect)
+		out.append(r)
 	return out
 
 

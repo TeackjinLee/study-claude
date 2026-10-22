@@ -179,9 +179,11 @@ func fire(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclude: 
 		var end := to
 		if not air.is_empty() and IsoView.enabled:
 			end = to + IsoView.lift(_air_height(air[0]) - 12.0)   # 궤적은 떠 있는 헬기 그림까지 올라간다
-		var start := from
+		elif IsoView.enabled:
+			end = to + IsoView.lift(IsoView.ground(to, lv))       # 다리·고가·언덕 위에서는 그 땅 높이에서
+		var start := from + (IsoView.lift(IsoView.ground(from, lv)) if IsoView.enabled else Vector2.ZERO)
 		if shown is Vector2:
-			start = to_local(shown) - IsoView.lift(12.0)   # _draw가 궤적을 가슴 높이(12)로 올려 그리므로 그만큼 뺀다
+			start = to_local(shown) - IsoView.lift(12.0)   # _draw가 궤적을 가슴 높이(12)로 올려 그리므로 그만큼 뺀다 (그림 속 총구는 땅 높이를 담고 있다)
 		_tracers.append([start, end, w.tracer_color, 0.0])
 	Sfx.play(w.sound, from)
 	gunfire.emit(from, by_player)
@@ -313,7 +315,7 @@ func _launch(from: Vector2, dir: Vector2, w: WeaponType, by_player: bool, exclud
 		# 그리는 자리: _draw가 가슴 높이(12)로 올려 그리므로 그만큼 뺀 점 (총알 궤적과 같다)
 		var tip: Vector2 = to_local(shown) - IsoView.lift(12.0) if shown is Vector2 else from
 		var back: Vector2 = to_local(rear) - IsoView.lift(12.0) if rear is Vector2 else tip - d * ROCKET_TUBE
-		p["off"] = tip - from
+		p["off"] = tip - from - _ground_lift(from)    # 그림 속 탄두 자리는 땅 높이를 담고 있다 — 땅 높이는 _rocket_at이 다시 더한다
 		p["puff_at"] = 0.0
 		_backblasts.append([tip, back, d, 0.0])
 
@@ -699,6 +701,8 @@ func _draw() -> void:
 	for p in _projectiles:
 		var w: WeaponType = p.w
 		var pos: Vector2 = p.pos
+		if w.projectile != &"rocket" and IsoView.enabled:
+			pos += IsoView.lift(IsoView.ground(pos))      # 다리·언덕 위에서 던진 것은 그 땅 높이에서
 		match w.projectile:
 			&"rocket":
 				_draw_rocket(p)
@@ -712,6 +716,8 @@ func _draw() -> void:
 	for e: Array in _flames:
 		var w: WeaponType = e[2]
 		var from: Vector2 = e[0]
+		if IsoView.enabled:
+			from += IsoView.lift(IsoView.ground(from))
 		var dir: Vector2 = e[1]
 		var k: float = e[3] / 0.25
 		for i in 5:
@@ -722,7 +728,8 @@ func _draw() -> void:
 	for e: Array in _swings:
 		var k: float = 1.0 - e[2] / SWING_TIME
 		var a: float = (e[1] as Vector2).angle()
-		draw_arc(e[0], 10.0, a - 0.9, a + 0.9, 8, Color(1, 1, 1, 0.7 * k), 2.0)
+		var at: Vector2 = e[0] + (IsoView.lift(IsoView.ground(e[0])) if IsoView.enabled else Vector2.ZERO)
+		draw_arc(at, 10.0, a - 0.9, a + 0.9, 8, Color(1, 1, 1, 0.7 * k), 2.0)
 	for e: Array in _blasts:
 		_draw_blast(e[0] + IsoView.lift(IsoView.ground(e[0])), e[1], e[2])   # 다리 위 폭발은 상판 높이에서
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -810,7 +817,12 @@ func _draw_cannon() -> void:
 ## 바닥 불빛·충격파 고리는 바닥에, 나머지는 화면 기준으로 세워 그린다
 ## 날아가는 로켓의 그리는 자리: 그림 속 탄두 자리(off)에서 ROCKET_SETTLE을 날며 맞히는 길로 내려앉는다
 func _rocket_at(p: Dictionary) -> Vector2:
-	return (p.pos as Vector2) + (p.get("off", Vector2.ZERO) as Vector2) * maxf(0.0, 1.0 - float(p.travel) / ROCKET_SETTLE)
+	return (p.pos as Vector2) + _ground_lift(p.pos) + (p.get("off", Vector2.ZERO) as Vector2) * maxf(0.0, 1.0 - float(p.travel) / ROCKET_SETTLE)
+
+
+## 다리·고가·언덕 위 땅 높이만큼 (위에서 보기면 0)
+static func _ground_lift(at: Vector2) -> Vector2:
+	return IsoView.lift(IsoView.ground(at)) if IsoView.enabled else Vector2.ZERO
 
 
 ## 그리는 자리 at(가슴 높이를 뺀 점)에서 화면 px로 그리는 좌표계 — 연기·불꽃을 눕히지 않고 둥글게

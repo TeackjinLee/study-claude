@@ -11,6 +11,7 @@ extends Node
 
 const THIEF: StreetEventType = preload("res://data/events/thief.tres")
 const ROBBER: StreetEventType = preload("res://data/events/robber.tres")
+const STORE: StreetEventType = preload("res://data/events/store_robbery.tres")
 const CIV: NpcType = preload("res://data/npc/civ_m.tres")
 const FIST: WeaponType = preload("res://data/weapons/fist.tres")
 
@@ -132,6 +133,37 @@ func _test_in_game() -> void:
 	_expect(main.wallet.money == money + half, "보상 ₩%d" % half)
 	_expect(police.wanted.level == 0, "강도를 죽인 건 시민 살해가 아니다 (★%d)" % police.wanted.level)
 	player.revive()
+
+	# ── 편의점 강도 ──
+	main.set_chapter(4)
+	var lots: Array[Rect2] = events.store_lots()
+	_expect(not lots.is_empty(), "도시에 편의점이 있다")
+	var home := player.global_position
+	var lot: Rect2 = lots[0]
+	player.global_position = lot.get_center() + Vector2(0.0, StreetEvents.STORE_RANGE.x + 80.0)
+	var store := events.start(STORE)
+	_expect(store != null, "편의점 강도가 벌어진다")
+	if store:
+		var clerk := store.victim
+		_expect(clerk.npc == STORE.clerk, "피해자는 편의점 점원")
+		var nearest := INF
+		for r in lots:
+			nearest = minf(nearest, r.get_center().distance_to(clerk.global_position))
+		_expect(nearest < City.BLOCK * 0.5, "점원은 편의점 앞 인도에 선다 (%.0f)" % nearest)
+		for i in 400:
+			await _frames(1)
+			if store.phase == StreetCriminal.Phase.ACT:
+				break
+		_expect(store.phase == StreetCriminal.Phase.ACT and log.has(["started", &"store_robbery"]), "강도가 점원을 위협한다")
+		await _frames(30)
+		_expect(Dialogue.lines(&"*", &"store_held").has(clerk.speech), "점원 대사 (%s)" % clerk.speech)
+		money = main.wallet.money
+		main.pedestrians.damage(store, FIST.damage * 3.0, store.global_position - player.global_position, true, true)
+		await _frames(2)
+		_expect(log.has(["resolved", &"store_robbery", STORE.reward, true]), "넘어뜨리면 검거 보상 (%s)" % [log])
+		_expect(main.wallet.money == money + STORE.reward, "보상 ₩%d" % STORE.reward)
+	player.global_position = home
+	main.set_chapter(1)
 
 	# ── 놓치기 ──
 	victim = _civilian(main, block, player.global_position, 240.0)

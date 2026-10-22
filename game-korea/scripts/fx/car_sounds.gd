@@ -48,18 +48,22 @@ func _ready() -> void:
 	_silent = DisplayServer.get_name() == "headless"
 	if _silent:
 		return
+	AudioSetup.ensure()
 	for i in ENGINE_VOICES:
 		var pair: Array = []
 		for k in 2:
 			var p := AudioStreamPlayer.new()
+			p.bus = AudioSetup.SFX
 			add_child(p)
 			pair.append(p)
 		_engine_players.append(pair)
 	for i in SIREN_VOICES:
 		var p := AudioStreamPlayer.new()
+		p.bus = AudioSetup.SFX
 		add_child(p)
 		_siren_players.append(p)
 	_skid_player = AudioStreamPlayer.new()
+	_skid_player.bus = AudioSetup.SFX
 	add_child(_skid_player)
 	_thread = Thread.new()
 	_thread.start(_bake_all, Thread.PRIORITY_LOW)

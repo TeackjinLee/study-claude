@@ -3,8 +3,9 @@ extends RefCounted
 ## 말풍선 대사 (docs/02 §5.3). 대사는 data/dialogue/lines.csv 한 곳에 둔다 — 줄마다 npc,situation,ko,en.
 ## npc는 NpcType.id, *는 모든 사람 (그 사람 줄이 없으면 * 줄을 쓴다). 번역 칸이 비면 한국어를 쓴다.
 ## 상황: talk 주인공이 곁에 서 있으면 · flee 겁먹어 도망칠 때 · taxi 택시 부업 손님 ·
-## robbed 소매치기당한 사람 · held 강도에게 붙잡힌 사람 · thanks 범인이 잡혔을 때 피해자 ·
-## snatch 도둑이 낚아챌 때 · threat 강도가 위협할 때 · escape 범인이 달아날 때 · caught 범인이 잡혔을 때
+## robbed 소매치기당한 사람 · held 강도에게 붙잡힌 사람 · store_held 편의점 강도에게 붙잡힌 점원 · thanks 범인이 잡혔을 때 피해자 ·
+## snatch 도둑이 낚아챌 때 · threat 강도가 위협할 때 · escape 범인이 달아날 때 · caught 범인이 잡혔을 때 ·
+## radio 차 라디오 DJ 자막 (npc = RadioChannel.dj)
 ## 고를 때 rng를 쓰지 않는다(salt로 고른다) — 보행자 rng를 더 뽑으면 다른 결과가 바뀐다.
 ## (.csv는 Godot가 번역 파일로 가져가므로 lines.csv.import에 importer="keep"을 둔다)
 

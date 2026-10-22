@@ -20,6 +20,8 @@ var hideout := ""            ## 이 은신처에서 저장했다 (불러오면 �
 var hideouts: Array[String] = []   ## 산 은신처 id
 var jobs := {}               ## 부업 id → 한 교대에 끝낸 가장 많은 단계
 var job_bonuses: Array[String] = []
+var packages: Array[int] = []      ## 주운 비밀 패키지 번호
+var rampages: Array[String] = []   ## 끝낸 광란 모드 id
 
 
 static func slot_path(prefix: String, slot: int) -> String:
@@ -38,7 +40,7 @@ func summary(mission_total: int) -> String:
 func to_dict() -> Dictionary:
 	return {"version": VERSION, "money": money, "respect": respect, "completed": completed, "weapons": weapons,
 		"saved_at": saved_at, "chapter": chapter, "finished": finished, "hideout": hideout, "hideouts": hideouts,
-		"jobs": jobs, "job_bonuses": job_bonuses}
+		"jobs": jobs, "job_bonuses": job_bonuses, "packages": packages, "rampages": rampages}
 
 
 static func from_dict(d: Dictionary) -> SaveGame:
@@ -61,6 +63,10 @@ static func from_dict(d: Dictionary) -> SaveGame:
 		s.jobs[k] = int(d.jobs[k])
 	for id in d.get("job_bonuses", []):
 		s.job_bonuses.append(str(id))
+	for i in d.get("packages", []):
+		s.packages.append(int(i))
+	for id in d.get("rampages", []):
+		s.rampages.append(str(id))
 	return s
 
 
