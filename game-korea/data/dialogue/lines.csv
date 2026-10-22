@@ -1,0 +1,81 @@
+npc,situation,ko,en
+# 말풍선 대사 (docs/02 §5.3). npc = NpcType.id, * = 모든 사람(그 사람 줄이 없을 때). 상황은 Dialogue.gd 맨 위 목록.
+# 번역 칸(en)이 비면 한국어를 쓴다. 쉼표가 든 대사는 큰따옴표로 감싼다.
+*,flee,도망쳐!,Run!
+*,flee,으악!,Aaah!
+*,flee,살려줘!,Help!
+*,flee,엄마야!,Oh my god!
+*,taxi,택시!,Taxi!
+*,robbed,내 가방!,My bag!
+*,robbed,도둑이야!,Thief!
+*,robbed,저놈 잡아요!,Stop him!
+*,held,살려 주세요…,Please don't hurt me…
+*,held,다 드릴게요!,Take it all!
+*,held,쏘지 마세요!,Don't shoot!
+*,thanks,고맙습니다!,Thank you!
+*,thanks,"휴, 살았다…","Phew, saved…"
+*,thanks,경찰보다 빠르네요!,Faster than the cops!
+CIV_M,talk,오늘 날씨 좋네,Nice weather today
+CIV_M,talk,지하철 몇 번 출구지?,Which subway exit?
+CIV_M,talk,점심 뭐 먹지…,What's for lunch…
+CIV_M,talk,여기 차 조심해요,Watch out for cars here
+CIV_M,talk,"아, 버스 놓쳤다","Ugh, missed the bus"
+CIV_F,talk,요즘 집값 미쳤어,Housing prices are insane
+CIV_F,talk,카페 어디 있지?,Where's a café?
+CIV_F,talk,택시가 안 잡히네,Can't catch a cab
+CIV_F,talk,"어머, 깜짝이야","Oh, you scared me"
+CIV_F,talk,오늘 세일한대!,There's a sale today!
+OFFICE,talk,야근 또야…,Overtime again…
+OFFICE,talk,회의 늦겠다!,I'm late for a meeting!
+OFFICE,talk,부장님 전화다…,It's my boss calling…
+OFFICE,talk,커피 수혈이 필요해,I need coffee
+OFFICE,talk,월급날 아직이야?,Is it payday yet?
+DELIVERY,talk,비켜요! 배달 늦어요!,Move! Delivery's late!
+DELIVERY,talk,콜 또 떴다,Another order
+DELIVERY,talk,별점 5점 부탁해요,Five stars please
+STUDENT,talk,헐 대박,No way
+STUDENT,talk,학원 가기 싫다,Don't wanna go to cram school
+STUDENT,talk,떡볶이 먹으러 갈래?,Wanna get tteokbokki?
+BOSS,talk,내 구역에서 뭐 하나?,What are you doing on my turf?
+BUSKER,talk,♪ 라라라~,♪ La la la~
+BUSKER,talk,신청곡 받아요!,Taking requests!
+BUSKER,talk,♪♪,♪♪
+CHILD,talk,아저씨 차 멋있다!,Cool car mister!
+CHILD,talk,엄마!,Mom!
+CHILD,talk,학교 가기 싫어,I don't wanna go to school
+DJ,talk,오늘 밤 클럽 와!,Come to the club tonight!
+DJ,talk,Drop the beat!,Drop the beat!
+ELDER,talk,"젊은이, 천천히 다녀","Slow down, young man"
+ELDER,talk,요즘 애들은 쯧쯧,Kids these days…
+ELDER,talk,허리야…,My back…
+ELDER,talk,우리 때는 말이야,Back in my day
+FIREFIGHTER,talk,물러서세요!,Stand back!
+FLYER,talk,오픈 기념 50% 할인!,Grand opening — 50% off!
+FLYER,talk,전단지 받아 가세요~,Take a flyer~
+FOREIGNER,talk,Excuse me?,Excuse me?
+FOREIGNER,talk,"Wow, Seoul!","Wow, Seoul!"
+FOREIGNER,talk,Where is the subway?,Where is the subway?
+FOREIGNER,talk,Kimchi!,Kimchi!
+HOMELESS,talk,…,…
+HOMELESS,talk,천 원만…,Spare some change…
+HOMELESS,talk,박스 좀 있어?,Got any boxes?
+MERCHANT,talk,골라 골라!,Take your pick!
+MERCHANT,talk,떨이요 떨이!,Clearance sale!
+MERCHANT,talk,싸다 싸!,Cheap cheap!
+TRAFFIC_COP,talk,신호 지키세요!,Obey the signals!
+TRAFFIC_COP,talk,거기 서요!,Stop right there!
+THIEF,talk,안 훔쳤어요!,I didn't steal anything!
+THIEF,snatch,이건 내 거!,Mine now!
+THIEF,snatch,잘 가져갈게~,Thanks for this~
+THIEF,escape,못 잡지롱!,Can't catch me!
+THIEF,escape,비켜!,Out of my way!
+THIEF,caught,돌려줄게요!,I'll give it back!
+THIEF,caught,한 번만 봐주세요!,Give me a break!
+ROBBER,talk,돈 내놔!,Hand over the money!
+ROBBER,threat,돈 내놔!,Hand over the money!
+ROBBER,threat,지갑 꺼내!,Wallet. Now!
+ROBBER,threat,움직이면 쏜다!,Move and I shoot!
+ROBBER,escape,따라오면 쏜다!,Follow me and you're dead!
+ROBBER,escape,비켜!,Out of my way!
+ROBBER,caught,항복! 항복!,I give up!
+ROBBER,caught,쏘지 마!,Don't shoot!

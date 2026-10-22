@@ -195,9 +195,9 @@ func _talk(delta: float) -> void:
 		return
 	var now := Time.get_ticks_msec() / 1000.0
 	for p in peds:
-		if p.active and not p.is_dead() and not p.npc.lines.is_empty() and p.state in [Pedestrian.State.WALK, Pedestrian.State.IDLE] \
-				and p.global_position.distance_to(player.global_position) < TALK_RANGE and now >= _talked.get(p, 0.0):
-			p.say(p.npc.lines[(p.get_instance_id() + int(now)) % p.npc.lines.size()], 3.0)
+		if p.active and not p.is_dead() and p.state in [Pedestrian.State.WALK, Pedestrian.State.IDLE] \
+				and p.global_position.distance_to(player.global_position) < TALK_RANGE and now >= _talked.get(p, 0.0) \
+				and p.say_line(&"talk", 3.0, int(now)):
 			_talked[p] = now + TALK_COOLDOWN
 			_still = 0.0
 			return
@@ -222,7 +222,7 @@ func scare(pos: Vector2, radius: float) -> void:
 
 
 func is_alive_civilian(p: Pedestrian) -> bool:
-	return not p.is_dead() and not (p is PoliceOfficer) and not (p is GangMember)
+	return not p.is_dead() and not (p is PoliceOfficer) and not (p is GangMember) and not (p is StreetCriminal)
 
 
 ## 오래된 시신을 치우고, 죽은 시민 수만큼 화면 밖에서 새로 걷게 한다

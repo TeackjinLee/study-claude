@@ -14,7 +14,6 @@ idle_chance = 0.45
 reaction = 1.0
 spawn_weight = 0.9
 health = 20.0
-lines = PackedStringArray("Excuse me?", "Wow, Seoul!", "Where is the subway?", "Kimchi!")
 districts = Array[StringName]([&"hongdae", &"jongno"])
 hours = Vector2i(9, 23)
 shirt_colors = Array[Color]([Color(0.9, 0.55, 0.2, 1), Color(0.3, 0.6, 0.85, 1), Color(0.95, 0.95, 0.9, 1)])

@@ -230,6 +230,8 @@ func _on_vehicle_stolen(_v: Vehicle, driver: Pedestrian) -> void:
 func _on_person_hurt(p: Pedestrian, by_player: bool, killed: bool) -> void:
 	if not by_player:
 		return
+	if p is StreetCriminal and p.offender():
+		return   # 거리 이벤트의 도둑·강도를 막았다 — 범죄가 아니다 (StreetEvents가 보상한다)
 	if p is PoliceOfficer:
 		var kill := WantedSystem.Crime.KILL_OFFICER
 		if p.npc == SWAT_NPC:

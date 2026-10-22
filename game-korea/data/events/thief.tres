@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="StreetEventType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/events/street_event_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/npc/thief.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"thief"
+display_name = "소매치기"
+npc = ExtResource("2")
+act_time = 0.0
+victim_situation = &"robbed"
+flee_speed = 178.0
+alert_range = 0.0
+give_up_distance = 700.0
+escape_time = 45.0
+reward = 30000
+kill_reward_scale = 0.5
+wanted_relief = 1
+weight = 1.5
+start_text = "도둑이야! 가방을 낚아챘다 — 잡으면 보상"

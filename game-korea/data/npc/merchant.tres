@@ -9,7 +9,6 @@ display_name = "상인"
 idle_chance = 0.7
 reaction = 0.9
 spawn_weight = 0.7
-lines = PackedStringArray("골라 골라!", "떨이요 떨이!", "싸다 싸!")
 districts = Array[StringName]([&"jongno", &"outskirts"])
 shirt_colors = Array[Color]([Color(0.867, 0.851, 0.800, 1)])
 pants_colors = Array[Color]([Color(0.569, 0.522, 0.459, 1)])

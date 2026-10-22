@@ -33,8 +33,6 @@ extends Resource
 @export var protected := false
 ## 겁먹지 않는다 (노숙자: 직접 맞기 전엔 무시)
 @export var fearless := false
-## 플레이어가 곁에 서 있으면 하는 말 (docs/02 §5.3)
-@export var lines: PackedStringArray = PackedStringArray()
 ## 이 구역에서만 걷는다 (DistrictType.id). 비우면 어디서나
 @export var districts: Array[StringName] = []
 ## 이 시각(게임 시각, 0~24시) 사이에만 나온다. x > y면 밤을 넘긴다 (예: 20 → 4)

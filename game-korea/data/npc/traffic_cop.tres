@@ -13,7 +13,6 @@ idle_chance = 0.95
 reaction = 1.2
 spawn_weight = 0.4
 health = 30.0
-lines = PackedStringArray("신호 지키세요!", "거기 서요!")
 shirt_colors = Array[Color]([Color(0.95, 0.95, 0.92, 1)])
 pants_colors = Array[Color]([Color(0.1, 0.13, 0.28, 1)])
 hair_colors = Array[Color]([Color(0.07, 0.06, 0.06, 1)])

@@ -9,7 +9,6 @@ display_name = "소방관"
 idle_chance = 0.1
 reaction = 1.1
 spawn_weight = 0.0
-lines = PackedStringArray("물러서세요!")
 shirt_colors = Array[Color]([Color(0.725, 0.341, 0.129, 1)])
 pants_colors = Array[Color]([Color(0.663, 0.310, 0.141, 1)])
 hair_colors = Array[Color]([Color(0.07, 0.06, 0.06, 1)])

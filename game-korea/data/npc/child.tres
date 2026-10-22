@@ -16,7 +16,6 @@ spawn_weight = 0.8
 health = 20.0
 body_scale = 0.72
 protected = true
-lines = PackedStringArray("아저씨 차 멋있다!", "엄마!", "학교 가기 싫어")
 districts = Array[StringName]([&"outskirts", &"riverside"])
 hours = Vector2i(8, 19)
 shirt_colors = Array[Color]([Color(0.98, 0.85, 0.15, 1), Color(0.95, 0.75, 0.1, 1)])

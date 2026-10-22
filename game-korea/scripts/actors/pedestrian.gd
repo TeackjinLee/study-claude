@@ -125,7 +125,7 @@ func panic(away: Vector2, forced := false) -> bool:
 	_set_state(State.FLEE, FLEE_TIME * rng.randf_range(0.8, 1.2))
 	# 셋 중 하나는 소리친다 (사람마다 정해져 있다 — 무작위를 쓰지 않아 다른 결과가 바뀌지 않는다)
 	if not was_fleeing and get_instance_id() % 3 == 0:
-		say("도망쳐!", 1.2)
+		say_line(&"flee", 1.2)
 	return not was_fleeing
 
 
@@ -133,6 +133,15 @@ func panic(away: Vector2, forced := false) -> bool:
 func say(text: String, seconds := 2.5) -> void:
 	speech = text
 	speech_time = seconds
+
+
+## 이 사람의 그 상황 대사(data/dialogue/lines.csv)로 말풍선을 띄운다. 대사가 있었으면 true
+func say_line(situation: StringName, seconds := 2.5, salt := 0) -> bool:
+	var text := Dialogue.pick(npc.id, situation, get_instance_id() + salt)
+	if text == "":
+		return false
+	say(text, seconds)
+	return true
 
 
 ## 차에 받히거나 주먹에 맞아 넘어진다

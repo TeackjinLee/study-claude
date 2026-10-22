@@ -13,7 +13,6 @@ idle_chance = 0.95
 reaction = 0.9
 spawn_weight = 0.5
 health = 20.0
-lines = PackedStringArray("♪ 라라라~", "신청곡 받아요!", "♪♪")
 districts = Array[StringName]([&"hongdae", &"riverside"])
 shirt_colors = Array[Color]([Color(0.3, 0.25, 0.2, 1), Color(0.85, 0.85, 0.8, 1)])
 pants_colors = Array[Color]([Color(0.2, 0.22, 0.3, 1)])

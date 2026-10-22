@@ -19,6 +19,7 @@ var police: PoliceDispatcher
 var missions: MissionSystem
 var city: City
 var jobs: SideJobs
+var events: StreetEvents
 var _time := 0.0
 
 
@@ -68,6 +69,9 @@ func _draw() -> void:
 	if goal != null:
 		var r := 5.0 + 1.5 * sin(_time * 6.0)
 		_dot(goal, me, c, Color(1.0, 0.85, 0.2), r, true)
+	var thief := events.target_position() if events else Vector2.INF
+	if thief != Vector2.INF:
+		_dot(thief, me, c, Color(1.0, 0.3, 0.2), 4.0 + 1.0 * sin(_time * 10.0), true)   # 쫓는 범인 (거리 이벤트)
 	# 주인공: 진행 방향을 가리키는 흰 삼각형
 	var heading := director.current_vehicle.motor.heading if director.current_vehicle else director.player.facing
 	var tri := PackedVector2Array([Vector2(0, -7), Vector2(5, 5), Vector2(-5, 5)])

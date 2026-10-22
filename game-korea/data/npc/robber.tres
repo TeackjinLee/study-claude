@@ -15,7 +15,6 @@ reaction = 1.2
 spawn_weight = 0.0
 health = 30.0
 weapon = ExtResource("2")
-lines = PackedStringArray("돈 내놔!")
 shirt_colors = Array[Color]([Color(0.12, 0.12, 0.12, 1)])
 pants_colors = Array[Color]([Color(0.2, 0.2, 0.22, 1)])
 hair_colors = Array[Color]([Color(0.12, 0.12, 0.12, 1)])

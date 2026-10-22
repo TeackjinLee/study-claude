@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="StreetEventType" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/events/street_event_type.gd" id="1"]
+[ext_resource type="Resource" path="res://data/npc/robber.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"robber"
+display_name = "노상강도"
+npc = ExtResource("2")
+act_time = 6.0
+victim_situation = &"held"
+flee_speed = 165.0
+alert_range = 160.0
+give_up_distance = 650.0
+escape_time = 40.0
+reward = 60000
+kill_reward_scale = 0.5
+wanted_relief = 1
+weight = 1.0
+start_text = "강도다! 총으로 시민을 위협한다 — 막으면 보상"

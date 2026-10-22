@@ -14,7 +14,6 @@ reaction = 1.0
 spawn_weight = 0.6
 health = 20.0
 body_scale = 0.86
-lines = PackedStringArray("오픈 기념 50% 할인!", "전단지 받아 가세요~")
 districts = Array[StringName]([&"hongdae", &"gangnam", &"jongno"])
 shirt_colors = Array[Color]([Color(0.95, 0.4, 0.6, 1), Color(0.4, 0.8, 0.95, 1)])
 pants_colors = Array[Color]([Color(0.85, 0.18, 0.25, 1), Color(0.2, 0.3, 0.65, 1)])
