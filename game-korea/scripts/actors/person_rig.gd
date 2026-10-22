@@ -33,7 +33,7 @@ static func draw(ci: CanvasItem, facing: float, phase: float, gait: float, shirt
 		size := 1.0, look: NpcType = null, seed := 0, weapon: WeaponType = null, down := false) -> void:
 	if draw_parts(ci, facing, phase, gait, size, look, weapon, down):
 		return
-	if draw_sheet_frame(ci, facing, phase, gait, size, look, down):
+	if draw_sheet_frame(ci, facing, phase, gait, size, look, down, weapon):
 		return
 	var w := Wear.new(look, seed, shirt, pants, hair)
 	var b := Body.new()
@@ -879,14 +879,18 @@ static func draw_from_actor(ci: CanvasItem, facing: float, phase: float, size: f
 
 
 static func draw_sheet_frame(ci: CanvasItem, facing: float, phase: float, gait: float, size: float,
-		look: NpcType, down: bool) -> bool:
+		look: NpcType, down: bool, weapon: WeaponType = null) -> bool:
 	if not use_sprites:
 		return false
 	if down and _draw_dir8_fall(ci, facing, size, look):
 		return true
 	if not down and ci.has_meta(&"dir8_fall"):
 		ci.remove_meta(&"dir8_fall")
-	if not down and _draw_dir8_punch(ci, facing, size, look):
+	if not down and _draw_jump(ci, size, look):
+		return true
+	if not down and (_draw_video_punch(ci, facing, size, look, gait) or _draw_dir8_punch(ci, facing, size, look)):
+		return true
+	if not down and _draw_gun(ci, facing, phase, size, look, gait, weapon):
 		return true
 	if not down and (_draw_dir8(ci, facing, phase, gait, size, look) or _draw_dir4(ci, facing, phase, gait, size, look)):
 		return true
@@ -1053,6 +1057,7 @@ static func _part(t: Dictionary, name: String, from: String, to: String, tint: C
 const DIR4_FRAMES := 24                ## 걷기·달리기 한 바퀴 장 수 (12장 원본은 두 번씩, 8장 원본은 세 번씩 — 다듬기 도구가 넣는다)
 const DIR4_CELL := Vector2(128, 112)   ## 옆으로 달리는 보폭이 넓어 칸이 가로로 크다
 const DIR4_FOOT := Vector2(64, 108)
+const GUN_POSES := ["rifle", "pistol", "rocket"]   ## 총 자세 그림 (WeaponType.pose, assets/characters/<id>_<자세>_dir8.png)
 const DIR4_HOLD := deg_to_rad(14.0)   ## 직전 방향을 이만큼 더 넓게 봐 준다 (대각선에서 앞·옆이 번갈아 바뀌지 않게)
 static var _dir4 := {}
 
@@ -1198,7 +1203,23 @@ static func dir8_for(look: NpcType) -> Dictionary:
 						"fall_frames": int(data.get("fall_frames", 0)), "fall_col": int(data.get("fall_col", 0)),
 						"fall_ok": _dir8_ok(data.get("fall_dirs", [])),
 						"punch_frames": int(data.get("punch_frames", 0)), "punch_col": int(data.get("punch_col", 0)),
-						"punch_ok": _dir8_ok(data.get("punch_dirs", []))}
+						"punch_ok": _dir8_ok(data.get("punch_dirs", [])), "punch_attacks": data.get("punch_attacks", []),
+						"attack_ok": _dir8_ok(data.get("attack_dirs", []))}
+				# 영상 주먹 공격은 따로 한 장 (걷기 시트 옆에 붙이면 GPU 텍스처 가로 한도 16384px를 넘는다)
+				var attacks := SPRITE_DIR + id + "_attacks_dir8.png"
+				if ResourceLoader.exists(attacks):
+					info["attack_tex"] = load(attacks)
+				# 총 자세(소총·권총)도 자세마다 따로 한 장 (.json <자세>_dirs·<자세>_clips — 조준 · 발사 [· 겨눈 채 걷기], <자세>_muzzle 총구 자리)
+				# 점프(jump_clips — 웅크림 · 공중 · 받기, 장마다 떠오른 높이 lift)도 같은 방식
+				for pose: String in GUN_POSES + ["jump"]:
+					var gun := SPRITE_DIR + id + "_" + pose + "_dir8.png"
+					if ResourceLoader.exists(gun) and data.has(pose + "_clips"):
+						info[pose + "_tex"] = load(gun)
+						info[pose + "_ok"] = _dir8_ok(data.get(pose + "_dirs", []))
+						for c: Dictionary in data[pose + "_clips"]:
+							info[pose + "_" + String(c["name"])] = c
+						info[pose + "_muzzle"] = data.get(pose + "_muzzle", {})
+						info[pose + "_breech"] = data.get(pose + "_breech", {})   # 로켓포 발사관 뒤끝 (후폭풍)
 		_dir8[id] = info
 	return _dir8[id]
 
@@ -1379,5 +1400,172 @@ static func _draw_dir8_punch(ci: CanvasItem, facing: float, size: float, look: N
 	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(flip * s, s)))
 	ci.draw_texture_rect_region(info["tex"], Rect2(-DIR4_FOOT, DIR4_CELL),
 			Rect2(Vector2(int(info["punch_col"]) + int(seg[i]), row) * DIR4_CELL, DIR4_CELL))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	return true
+
+
+## 총 자세 그림 (주인공만, `WeaponType.pose` — rifle 소총 · pistol 권총 · rocket 로켓포). 서 있으면 조준(aim 되풀이), 쏜 뒤(메타 shot_at)
+## 발사 장면을 처음부터, 겨눈 채 걷는 장면(walk)이 있으면 걸을 때 걸음 박자(phase)로 넘긴다. 뛰면 평소 그림
+static func _draw_gun(ci: CanvasItem, facing: float, phase: float, size: float, look: NpcType, gait: float, weapon: WeaponType) -> bool:
+	var pose := _gun_pose(look, gait, weapon)
+	if pose == "":
+		return false
+	var info := dir8_for(null)
+	var ok: Array = info[pose + "_ok"]
+	var dir := IsoView.to_screen_dir(Vector2.UP.rotated(facing))
+	var k := dir8_pick(dir, ci.get_meta(&"dir8_" + pose, -1), ok)
+	if k < 0:
+		return false
+	ci.set_meta(&"dir8_" + pose, k)
+	var now := Time.get_ticks_msec() / 1000.0
+	var fire: Dictionary = info[pose + "_fire"]
+	var aim: Dictionary = info[pose + "_aim"]
+	var since := now - float(ci.get_meta(&"shot_at", -100.0))
+	var col: int
+	if gait > 0.3:
+		var walk: Dictionary = info[pose + "_walk"]
+		var n := int(walk["frames"])
+		col = int(walk["col"]) + posmod(int(floor(phase * CADENCE * n / TAU)), n)
+	elif since < float(fire["duration"]):
+		col = int(fire["col"]) + mini(int(since / float(fire["duration"]) * int(fire["frames"])), int(fire["frames"]) - 1)
+	else:
+		col = int(aim["col"]) + posmod(int(now / float(aim["duration"]) * int(aim["frames"])), int(aim["frames"]))
+	var row: int = ok[k][0]
+	var flip := -1.0 if ok[k][1] else 1.0
+	var g := PersonDrawer._ground(ci)
+	var scale := SPRITE_HEIGHT * size / SPRITE_BODY
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g))
+	ci.draw_colored_polygon(_ellipse_pts(Vector2.ZERO, 7.5 * size, 2.8 * size), Color(0, 0, 0, 0.32))
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(flip * scale, scale)))
+	ci.draw_texture_rect_region(info[pose + "_tex"], Rect2(-DIR4_FOOT, DIR4_CELL), Rect2(Vector2(col, row) * DIR4_CELL, DIR4_CELL))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	return true
+
+
+## 이 무기·걸음으로 그릴 총 자세 이름 ("" = 평소 그림): 주인공만, 그림이 있고, 서 있거나 겨눈 채 걷는 장면이 있으면 걸을 때도
+static func _gun_pose(look: NpcType, gait: float, weapon: WeaponType) -> String:
+	if look != null or weapon == null or weapon.pose == &"" or gait > 1.5:
+		return ""
+	var pose := String(weapon.pose)
+	var info := dir8_for(null)
+	if not info.has(pose + "_tex") or (gait > 0.3 and not info.has(pose + "_walk")):
+		return ""
+	return pose
+
+
+## 총 자세 그림의 총구 자리 (전역 좌표, 그릴 때 쓰는 높이까지 올린 점). 총 자세 그림이 아니면(뛰기, 겨눈 채 걷는 장면이 없는 걷기,
+## 위에서 보기, 총구를 못 잰 방향) null — 총알 궤적·총구 불꽃을 그림 속 총구에서 시작하게 한다 (Combat.fire의 shown).
+## 로켓포는 탄두 끝(로켓이 나가는 곳)이다
+static func gun_muzzle(ci: Node2D, facing: float, size: float, gait: float, weapon: WeaponType) -> Variant:
+	return _gun_point(ci, facing, size, gait, weapon, "_muzzle")
+
+
+## 로켓포 그림의 발사관 뒤끝 (전역 좌표, gun_muzzle과 같은 방식) — 후폭풍이 여기서 나온다. 없으면 null
+static func gun_breech(ci: Node2D, facing: float, size: float, gait: float, weapon: WeaponType) -> Variant:
+	return _gun_point(ci, facing, size, gait, weapon, "_breech")
+
+
+static func _gun_point(ci: Node2D, facing: float, size: float, gait: float, weapon: WeaponType, key: String) -> Variant:
+	var pose := _gun_pose(null, gait, weapon)
+	if not IsoView.enabled or pose == "":
+		return null
+	var info := dir8_for(null)
+	var ok: Array = info[pose + "_ok"]
+	var k := dir8_pick(IsoView.to_screen_dir(Vector2.UP.rotated(facing)), ci.get_meta(&"dir8_" + pose, -1), ok)
+	if k < 0:
+		return null
+	ci.set_meta(&"dir8_" + pose, k)   # 다음에 그릴 방향도 이것으로 — 궤적과 그림의 총구가 어긋나지 않게
+	var m: Array = (info.get(pose + key, {}) as Dictionary).get(DIR8[ok[k][0]], [])
+	if m.size() < 2:
+		return null
+	var scale := SPRITE_HEIGHT * size / SPRITE_BODY
+	var px := Vector2((-1.0 if ok[k][1] else 1.0) * float(m[0]), float(m[1])) * scale
+	return ci.global_position + IsoView.screen_frame(Vector2.ZERO, PersonDrawer._ground(ci)) * px
+
+
+## 영상 주먹 공격 목록 (.json punch_attacks — tools/punch_video_sheet.py → prepare_character_sprites.py). 없으면 기본 한 가지
+static func punch_attacks() -> Array:
+	var attacks: Array = dir8_for(null).get("punch_attacks", [])
+	if not attacks.is_empty():
+		return attacks
+	return [{"duration": 0.4, "frames": 3, "hit_frame": 1}]
+
+
+## 영상 주먹 공격 그림 (주인공만). 노드 메타 punch_state = {index 공격 번호, elapsed 지난 시간, facing 시작 때 방향}이면
+## 그 공격 칸을 지난 시간 비율로 넘기고, 공격이 없어도 combat_stance(전투 대기)면 서 있을 때 싸움 자세(첫 공격 첫 칸)를 그린다.
+## 방향은 영상에 있는 방향(↓ ↙ → ↖)과 그 좌우 뒤집기(↘ ← ↗)를 쓰고, 영상에 없는 ↑는 가까운 방향 그림을 쓴다 —
+## 예전 펀치 시트(제미나이 그림)를 섞으면 방향을 틀 때 그림체·크기가 바뀌어 보였다
+static func _draw_video_punch(ci: CanvasItem, facing: float, size: float, look: NpcType, gait: float) -> bool:
+	if look != null or (not ci.has_meta(&"punch_state") and (not ci.get_meta(&"combat_stance", false) or gait > 0.0)):
+		return false
+	var info := dir8_for(null)
+	var attacks: Array = info.get("punch_attacks", [])
+	if attacks.is_empty() or not info.has("attack_tex"):
+		return false
+	var state: Dictionary = ci.get_meta(&"punch_state", {})
+	var attack: Dictionary = attacks[int(state.get("index", 0)) % attacks.size()]
+	var ok: Array = info["attack_ok"]
+	var dir := IsoView.to_screen_dir(Vector2.UP.rotated(float(state.get("facing", facing))))
+	var k := dir8_pick(dir, ci.get_meta(&"dir8_punch", -1), ok)
+	if k < 0:
+		return false
+	ci.set_meta(&"dir8_punch", k)
+	var progress := clampf(float(state.get("elapsed", 0.0)) / float(attack["duration"]), 0.0, 0.99999)
+	var col := int(attack["col"]) + (int(progress * int(attack["frames"])) if not state.is_empty() else 0)
+	var row: int = ok[k][0]
+	var flip := -1.0 if ok[k][1] else 1.0
+	var g := PersonDrawer._ground(ci)
+	var scale := SPRITE_HEIGHT * size / SPRITE_BODY
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g))
+	ci.draw_colored_polygon(_ellipse_pts(Vector2.ZERO, 7.5 * size, 2.8 * size), Color(0, 0, 0, 0.32))
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(flip * scale, scale)))
+	ci.draw_texture_rect_region(info["attack_tex"], Rect2(-DIR4_FOOT, DIR4_CELL), Rect2(Vector2(col, row) * DIR4_CELL, DIR4_CELL))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	return true
+
+
+## 점프 그림 (주인공만, 영상 jump.mp4 — tools/punch_video_sheet.py → prepare_character_sprites.py). 노드 메타 jump_state =
+## {elapsed 지난 시간, facing 뛴 방향}이면 웅크림(발이 떨어지기 전 장들)을 Player.JUMP_PRE, 공중(takeoff~land 앞)을 JUMP_AIR,
+## 받으며 일어섬(land부터)을 JUMP_POST 동안 넘긴다. 그림은 모두 땅에 내려 둔 장이라 공중에서는 영상에서 떠오른 높이(lift, 칸 px)를
+## JUMP_LIFT배로 올려 그리고, 그림자는 땅에 두고 높을수록 작게 한다. 영상에 없는 ↖는 ↗를 뒤집는다
+const JUMP_LIFT := 1.6
+static func _draw_jump(ci: CanvasItem, size: float, look: NpcType) -> bool:
+	if look != null or not ci.has_meta(&"jump_state"):
+		return false
+	var info := dir8_for(null)
+	if not info.has("jump_tex"):
+		return false
+	var clip: Dictionary = info["jump_jump"]
+	var ok: Array = info["jump_ok"]
+	var state: Dictionary = ci.get_meta(&"jump_state")
+	var k := dir8_pick(IsoView.to_screen_dir(Vector2.UP.rotated(float(state["facing"]))), ci.get_meta(&"dir8_jump", -1), ok)
+	if k < 0:
+		return false
+	ci.set_meta(&"dir8_jump", k)
+	var t := float(state["elapsed"])
+	var n := int(clip["frames"])
+	var up := int(clip["takeoff"])
+	var land := int(clip["land"])
+	var f: float   # 장 차례 (소수 — 공중 높이를 장 사이로 잇는다)
+	if t < Player.JUMP_PRE:
+		f = t / Player.JUMP_PRE * up
+	elif t < Player.JUMP_PRE + Player.JUMP_AIR:
+		f = up + (t - Player.JUMP_PRE) / Player.JUMP_AIR * (land - up)
+	else:
+		f = land + minf((t - Player.JUMP_PRE - Player.JUMP_AIR) / Player.JUMP_POST, 0.9999) * (n - land)
+	var i := mini(int(f), n - 1)
+	var row: int = ok[k][0]
+	var lifts: Array = (clip["lift"] as Dictionary).get(DIR8[row], [])
+	var scale := SPRITE_HEIGHT * size / SPRITE_BODY
+	var h := 0.0
+	if lifts.size() == n and f > up and f < land:
+		h = lerpf(float(lifts[i]), float(lifts[mini(i + 1, land)]) if i + 1 < land else 0.0, f - i) * scale * JUMP_LIFT
+	var flip := -1.0 if ok[k][1] else 1.0
+	var g := PersonDrawer._ground(ci)
+	var shrink := 1.0 - clampf(h / (12.0 * size), 0.0, 0.45)
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g))
+	ci.draw_colored_polygon(_ellipse_pts(Vector2.ZERO, 7.5 * size * shrink, 2.8 * size * shrink), Color(0, 0, 0, 0.32 * shrink))
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g + h).scaled_local(Vector2(flip * scale, scale)))
+	ci.draw_texture_rect_region(info["jump_tex"], Rect2(-DIR4_FOOT, DIR4_CELL), Rect2(Vector2(int(clip["col"]) + i, row) * DIR4_CELL, DIR4_CELL))
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	return true

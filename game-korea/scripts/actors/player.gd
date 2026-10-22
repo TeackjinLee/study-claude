@@ -12,6 +12,7 @@ const WALK_SPEED := 110.0
 const RUN_SPEED := 190.0
 const RADIUS := 7.0
 
+var control := PlayerControl.new()   ## 로컬 입력 또는 외부 입력을 이 플레이어에만 전달한다
 var input_enabled := true
 var health := MAX_HEALTH
 var arsenal := Arsenal.new(FIST)
@@ -31,6 +32,14 @@ var _push := Vector2.ZERO        ## 맞아서 밀려나는 속도
 var _hurt := 0.0                 ## 맞은 뒤 붉게 번쩍이는 남은 시간
 var level := 0                   ## 고가차도 층 (CityMap.level_zone)
 var _col_base := Vector2i(Layers.PEOPLE, Layers.WORLD | Layers.VEHICLES)
+## 제자리 점프 (Space·패드 A — 차에서는 핸드브레이크): 웅크림 JUMP_PRE · 공중 JUMP_AIR · 받으며 일어섬 JUMP_POST.
+## 그림만 뜬다(PersonRig._draw_jump — 영상 점프의 장면과 떠오른 높이) — 충돌·층은 땅 그대로, 뛴 순간의 걸음 속도와 방향을 끝까지 지킨다
+const JUMP_PRE := 0.16
+const JUMP_AIR := 0.5
+const JUMP_POST := 0.3
+var _jump := -1.0                ## 점프가 시작된 뒤 지난 시간 (−1 = 점프 아님)
+var _jump_vel := Vector2.ZERO
+var _jump_key := false           ## 지난 틱에 점프 키를 누르고 있었는지 (누르는 순간에만 뛴다)
 
 
 func _ready() -> void:
@@ -45,8 +54,17 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	apply_movement(control.read(screen_walk), delta)
+
+
+## 입력 출처와 무관한 도보 시뮬레이션. 외부 move_world는 화면 변환을 다시 하지 않는다.
+func apply_movement(command: PlayerInputCommand, delta: float) -> void:
+	var pressed := command.handbrake and not _jump_key   # 차에서 핸드브레이크를 누른 채 내려도 뛰지 않게 늘 잰다
+	_jump_key = command.handbrake
 	if input_enabled:
 		_track_level()
+	if not input_enabled or knocked_down or _stun > 0.0:
+		_end_jump()
 	if not input_enabled or knocked_down:
 		velocity = Vector2.ZERO
 		return
@@ -58,20 +76,43 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		_sort()
 		return
-	var dir := Vector2(Input.get_axis("steer_left", "steer_right"), Input.get_axis("accelerate", "brake"))
-	if dir.length() > 1.0:
-		dir = dir.normalized()
-	if IsoView.enabled and screen_walk:
-		dir = IsoView.walk_dir(dir)
-	var speed := RUN_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
+	if _jump >= 0.0 or (pressed and not has_meta(&"punch_state")):
+		_jump_step(command, delta)
+		return
+	# 주먹을 지르는 동안은 제자리 (영상 그림의 발이 땅에 붙어 있다 — 움직이면 발이 미끄러져 보인다)
+	var dir := Vector2.ZERO if has_meta(&"punch_state") else command.move_world
+	var speed := RUN_SPEED if command.sprint else WALK_SPEED
 	velocity = dir * speed
 	_aim_hold = maxf(_aim_hold - delta, 0.0)
 	if dir != Vector2.ZERO:
-		if _aim_hold <= 0.0:
+		if _aim_hold <= 0.0 and not has_meta(&"punch_state"):
 			facing = Vector2.UP.angle_to(dir)
 		walk_phase += delta * velocity.length() / 9.0
 	move_and_slide()
 	_sort()
+
+
+## 점프 한 틱: 처음이면 지금 걸음(입력 방향 × 걷기·달리기 속도)을 정하고, 끝날 때까지 그 속도로 간다
+func _jump_step(command: PlayerInputCommand, delta: float) -> void:
+	if _jump < 0.0:
+		_jump = 0.0
+		_jump_vel = command.move_world * (RUN_SPEED if command.sprint else WALK_SPEED)
+		if _jump_vel != Vector2.ZERO and _aim_hold <= 0.0:
+			facing = Vector2.UP.angle_to(_jump_vel)
+	else:
+		_jump += delta
+	if _jump >= JUMP_PRE + JUMP_AIR + JUMP_POST:
+		_jump = -1.0
+		remove_meta(&"jump_state")
+		return
+	set_meta(&"jump_state", {"elapsed": _jump, "facing": facing})
+	velocity = _jump_vel
+	move_and_slide()
+	_sort()
+
+
+func jumping() -> bool:
+	return _jump >= 0.0
 
 
 func _process(delta: float) -> void:
@@ -80,6 +121,12 @@ func _process(delta: float) -> void:
 		self_modulate = Color(1.0, 0.55, 0.5) if _hurt > 0.0 else Color.WHITE
 	queue_redraw()   # 그림은 화면 프레임마다 한 번
 	_sort()
+
+
+func _end_jump() -> void:
+	_jump = -1.0
+	if has_meta(&"jump_state"):
+		remove_meta(&"jump_state")
 
 
 ## 2.5D: 깊이(월드 x+y)로 그리는 순서를 정한다
@@ -92,6 +139,7 @@ func _sort() -> void:
 func set_in_vehicle(inside: bool) -> void:
 	visible = not inside
 	input_enabled = not inside
+	_end_jump()
 	_set_collision(0 if inside else Layers.PEOPLE, 0 if inside else Layers.WORLD | Layers.VEHICLES)
 
 
@@ -179,6 +227,8 @@ func punch() -> void:
 
 ## dir 쪽을 바라보고, hold초 동안은 걷는 방향으로 돌지 않는다
 func face(dir: Vector2, hold := 0.0) -> void:
+	if has_meta(&"punch_state"):
+		return
 	if dir != Vector2.ZERO:
 		facing = Vector2.UP.angle_to(dir)
 	_aim_hold = maxf(_aim_hold, hold)
@@ -222,7 +272,7 @@ func _draw() -> void:
 			PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, true)
 		return
 	# 보행자 사이에서 주인공을 찾기 쉽게 발밑에 노란 고리
-	draw_arc(Vector2.ZERO, 11.0, 0.0, TAU, 24, Color(1.0, 0.85, 0.2, 0.55), 2.0)
+	draw_arc(PersonDrawer._base(self), 11.0, 0.0, TAU, 24, Color(1.0, 0.85, 0.2, 0.55), 2.0)   # 비탈·다리 위면 땅 높이에
 	if IsoView.enabled:
 		var gait: float = 0.0 if velocity.length_squared() < 1.0 else (2.0 if velocity.length() > WALK_SPEED + 20.0 else 1.0)
 		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, 1.0, null, 0, arsenal.current(), false)

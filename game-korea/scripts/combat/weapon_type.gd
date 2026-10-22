@@ -40,5 +40,10 @@ extends Resource
 
 @export_group("Look")
 @export var tracer_color := Color(1.0, 0.9, 0.5)
+## 주인공이 걸어 다니며 쏠 때 총알이 나오는 곳 — 몸에서 앞으로 이만큼(px). 소총 그림은 총구가 멀다
+@export var muzzle := 10.0
+## 주인공 그림 자세: "" 평소 그림 · rifle 개머리판을 어깨에 대고 몸을 조금 숙여 겨눈다(서 있을 때) · pistol 두 손으로 앞으로 겨눈다
+## (서 있을 때·걸을 때) — 자세마다 시트 assets/characters/<id>_<자세>_dir8.png, PersonRig._draw_gun
+@export var pose: StringName = &""
 ## 쏠 때 소리 (GunSynth.KINDS의 종류 — pistol·smg·rifle·shotgun·mg·rocket·cannon, ""면 소리 없음)
 @export var sound: StringName = &""

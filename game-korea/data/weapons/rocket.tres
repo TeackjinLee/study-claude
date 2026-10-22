@@ -19,4 +19,5 @@ projectile = &"rocket"
 projectile_speed = 720.0
 explosion_scale = 1.1
 tracer_color = Color(1, 0.8, 0.5, 1)
+pose = &"rocket"
 sound = &"rocket"

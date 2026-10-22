@@ -1,6 +1,6 @@
 // tools/gen_motion_index.py가 만든다 — 손으로 고치지 않는다
 window.GAME_DIR8 = {
- "version": 1792299077,
+ "version": 1792671841,
  "chars": [
   {
    "name": "주인공",
@@ -11,23 +11,22 @@ window.GAME_DIR8 = {
    "meta": {
     "dirs": [
      "s",
-     "sw",
-     "w",
-     "nw",
-     "n"
+     "se",
+     "e",
+     "n",
+     "ne",
+     "nw"
     ],
     "frames": 24,
     "run_dirs": [
      "s",
      "se",
      "e",
-     "ne",
      "n",
      "nw",
-     "w",
-     "sw"
+     "ne"
     ],
-    "run_frames": 8,
+    "run_frames": 16,
     "turns": [],
     "fall_dirs": [
      "s",
@@ -40,7 +39,7 @@ window.GAME_DIR8 = {
      "sw"
     ],
     "fall_frames": 8,
-    "fall_col": 33,
+    "fall_col": 41,
     "punch_dirs": [
      "s",
      "se",
@@ -52,7 +51,208 @@ window.GAME_DIR8 = {
      "sw"
     ],
     "punch_frames": 12,
-    "punch_col": 41
+    "punch_col": 49,
+    "punch_attacks": [
+     {
+      "name": "jab",
+      "col": 0,
+      "frames": 15,
+      "hit_frame": 9,
+      "duration": 0.48
+     },
+     {
+      "name": "straight",
+      "col": 15,
+      "frames": 15,
+      "hit_frame": 4,
+      "duration": 0.48
+     },
+     {
+      "name": "uppercut",
+      "col": 30,
+      "frames": 26,
+      "hit_frame": 14,
+      "duration": 0.85
+     },
+     {
+      "name": "counter",
+      "col": 56,
+      "frames": 44,
+      "hit_frame": 21,
+      "duration": 1.25
+     }
+    ],
+    "attack_dirs": [
+     "s",
+     "sw",
+     "e",
+     "nw"
+    ],
+    "rifle_dirs": [
+     "se",
+     "e",
+     "nw",
+     "w"
+    ],
+    "rifle_clips": [
+     {
+      "name": "aim",
+      "col": 0,
+      "frames": 20,
+      "duration": 0.84,
+      "loop": true
+     },
+     {
+      "name": "fire",
+      "col": 20,
+      "frames": 8,
+      "duration": 0.3,
+      "loop": false
+     }
+    ],
+    "rifle_muzzle": {
+     "se": [
+      41.0,
+      -60.5
+     ],
+     "e": [
+      50.0,
+      -76.0
+     ],
+     "nw": [
+      -24.9,
+      -80.0
+     ],
+     "w": [
+      -39.0,
+      -71.0
+     ]
+    },
+    "pistol_dirs": [
+     "s",
+     "se",
+     "e",
+     "nw",
+     "n",
+     "ne",
+     "w",
+     "sw"
+    ],
+    "pistol_clips": [
+     {
+      "name": "aim",
+      "col": 0,
+      "frames": 1,
+      "duration": 1.0,
+      "loop": true
+     },
+     {
+      "name": "fire",
+      "col": 1,
+      "frames": 7,
+      "duration": 0.3,
+      "loop": false
+     },
+     {
+      "name": "walk",
+      "col": 8,
+      "frames": 37,
+      "duration": 1.54,
+      "loop": true
+     }
+    ],
+    "pistol_muzzle": {
+     "s": [
+      -2,
+      -70
+     ],
+     "se": [
+      2,
+      -66
+     ],
+     "n": [
+      -6,
+      -72
+     ],
+     "e": [
+      42.0,
+      -76.0
+     ],
+     "nw": [
+      -21.0,
+      -82.0
+     ],
+     "ne": [
+      23.0,
+      -81.0
+     ],
+     "w": [
+      -37.0,
+      -77.0
+     ],
+     "sw": [
+      -30.0,
+      -74.0
+     ]
+    },
+    "rocket_dirs": [
+     "s",
+     "se",
+     "e",
+     "nw"
+    ],
+    "rocket_clips": [
+     {
+      "name": "aim",
+      "col": 0,
+      "frames": 24,
+      "duration": 2.0,
+      "loop": true
+     },
+     {
+      "name": "fire",
+      "col": 24,
+      "frames": 18,
+      "duration": 0.9,
+      "loop": false
+     }
+    ],
+    "rocket_muzzle": {
+     "s": [
+      6.4,
+      -68.7
+     ],
+     "se": [
+      21.4,
+      -70.9
+     ],
+     "e": [
+      26.2,
+      -75.0
+     ],
+     "nw": [
+      -30.7,
+      -78.5
+     ]
+    },
+    "rocket_breech": {
+     "s": [
+      -11.7,
+      -79.5
+     ],
+     "se": [
+      -19.9,
+      -79.3
+     ],
+     "e": [
+      -21.5,
+      -78.0
+     ],
+     "nw": [
+      20.6,
+      -77.6
+     ]
+    }
    }
   },
   {

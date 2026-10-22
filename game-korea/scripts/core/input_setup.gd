@@ -10,7 +10,7 @@ const KEYS := {
 	"enter_exit": [KEY_F],
 	"sprint": [KEY_SHIFT],
 	"reset": [KEY_R],
-	"fire": [KEY_CTRL, KEY_J],
+	"fire": [KEY_Z, KEY_J],
 	"weapon_prev": [KEY_Q],
 	"weapon_next": [KEY_E],
 	"vehicle_1": [KEY_1],

@@ -3,7 +3,9 @@ extends Node2D
 ## 실행: godot --path . res://tools/person_gallery.tscn
 ## 저장: ... -- --shot  →  .screenshots/person_gallery.png
 ## 몇 종만 크게: ... -- --shot --ids=office,boss  →  .screenshots/person_gallery_office.png (설계도와 비교할 때)
-## 관절 있는 사람(PersonRig) 비교: ... -- --rig [--ids=civ_m,police,office] (주인공은 player). --walk면 8방향 걷기만, --run이면 8방향 달리기만, --fall이면 8방향 넘어짐만(2초마다 다시), --punch면 8방향 주먹 콤보만 크게  — 한 줄에 기존 그림 · 새 뼈대 8방향 걷기 · 달리기 · 서 있기.
+## 관절 있는 사람(PersonRig) 비교: ... -- --rig [--ids=civ_m,police,office] (주인공은 player). --walk면 8방향 걷기만, --run이면 8방향 달리기만, --fall이면 8방향 넘어짐만(2초마다 다시), --punch면 8방향 주먹 콤보만 크게
+##   (--rig --ids=player --punch: 영상 공격마다 한 줄, --shot이면 타격 장면 → .screenshots/person_rig.png)
+##   (--rig --rifle: 주인공 소총 조준·발사 8방향)  — 한 줄에 기존 그림 · 새 뼈대 8방향 걷기 · 달리기 · 서 있기.
 ##   움직이는 걸 창으로 보거나, --shot이면 .screenshots/person_rig.png
 ## 설계도(성인 12종 앞·뒤)와 맞춰 보기: ... -- --sheet [--shot]  →  .screenshots/person_sheet.png (--all이면 그림이 있는 종 전부)
 
@@ -39,10 +41,30 @@ class RigDoll:
 	var punch_loop := false   ## 주먹 콤보를 0.35초마다 이어 지른다 (--punch)
 	var _punch_t := 0.0
 	var _punch_n := 0
+	var attack := -1          ## 주인공 영상 공격 번호 (--punch): 이 공격만 되풀이한다 — 게임처럼 punch_state를 넘긴다
+	var attack_at := -1.0     ## 0 이상이면 공격의 이 시각(초)에 멈춘다 (--shot)
+	var weapon: WeaponType    ## 주인공이 든 무기 (--rifle: 소총 조준·발사 그림)
+	var fire_every := 0.0     ## 0보다 크면 이 초마다 쏜다 (--rifle 발사 줄)
+	var _fire_t := 0.0
 
 	func _process(delta: float) -> void:
 		phase += delta * (0.0 if gait <= 0.0 else 6.5 + 3.5 * maxf(gait - 1.0, 0.0))
-		if punch_loop:
+		if fire_every > 0.0:
+			_fire_t -= delta
+			if _fire_t <= 0.0:
+				_fire_t = fire_every
+				set_meta(&"shot_at", Time.get_ticks_msec() / 1000.0)
+		if attack >= 0:
+			var spec: Dictionary = PersonRig.punch_attacks()[attack]
+			_punch_t = attack_at if attack_at >= 0.0 else _punch_t + delta
+			if _punch_t >= float(spec["duration"]) + 0.4:
+				_punch_t = 0.0
+			set_meta(&"combat_stance", true)
+			if _punch_t < float(spec["duration"]):
+				set_meta(&"punch_state", {"index": attack, "elapsed": _punch_t, "facing": facing})
+			elif has_meta(&"punch_state"):
+				remove_meta(&"punch_state")   # 공격 사이: 전투 대기 자세
+		elif punch_loop:
 			_punch_t -= delta
 			if _punch_t <= 0.0:
 				_punch_t = 0.35 if _punch_n % 3 != 2 else 0.9   # 훅 다음엔 잠깐 쉰다
@@ -59,7 +81,7 @@ class RigDoll:
 		if npc == null:
 			# 주인공 (--ids=player)
 			PersonRig.draw(self, facing, phase, gait, Color(0.2, 0.2, 0.22), Color(0.3, 0.33, 0.4), Color(0.08, 0.08, 0.08),
-				1.0, null, 0, null, down)
+				1.0, null, 0, weapon, down)
 			return
 		PersonRig.draw(self, facing, phase, gait, npc.shirt_colors[0], npc.pants_colors[0], npc.hair_colors[0],
 			npc.body_scale, npc, 0, null, down)
@@ -140,7 +162,17 @@ func _rig_compare() -> void:
 	var run_only := "--run" in OS.get_cmdline_user_args()
 	var fall_only := "--fall" in OS.get_cmdline_user_args()
 	var punch_only := "--punch" in OS.get_cmdline_user_args()
-	var walk_only := "--walk" in OS.get_cmdline_user_args() or run_only or fall_only or punch_only
+	# 주인공 --rifle: 소총 조준(위 줄)·발사(아래 줄) 8방향
+	var rifle_only := "--rifle" in OS.get_cmdline_user_args()
+	if rifle_only:
+		ids = PackedStringArray(["player", "player"])
+	# 주인공 --punch: 영상 공격(잽·스트레이트·어퍼컷·카운터)마다 한 줄. --shot이면 타격 장면에서 멈춘다
+	var attacks: Array = PersonRig.punch_attacks() if punch_only and ids.size() == 1 and ids[0] == "player" else []
+	if attacks.size() > 1:
+		ids = PackedStringArray()
+		for a in attacks:
+			ids.append("player")
+	var walk_only := "--walk" in OS.get_cmdline_user_args() or run_only or fall_only or punch_only or rifle_only
 	var cols := 8 if walk_only else 11
 	var view := get_viewport().get_visible_rect().size
 	var cell := Vector2(view.x / cols, (view.y - TOP) / ids.size())
@@ -155,6 +187,10 @@ func _rig_compare() -> void:
 		title.text = "인물 (PersonRig) — 8방향 넘어짐 (2초마다 다시)"
 	if punch_only:
 		title.text = "인물 (PersonRig) — 8방향 주먹 콤보 (잽 · 스트레이트 · 훅)"
+		if attacks.size() > 1:
+			title.text = "주인공 — 8방향 영상 주먹 공격 (줄마다 한 가지, --shot은 타격 장면)"
+	if rifle_only:
+		title.text = "주인공 — 8방향 소총 조준 · 발사"
 	title.position = Vector2(20, 14)
 	title.add_theme_font_size_override("font_size", 22)
 	layer.add_child(title)
@@ -183,7 +219,16 @@ func _rig_compare() -> void:
 				wd.gait = 2.0 if run_only else 1.0
 				if punch_only:
 					wd.gait = 0.0
-					wd.punch_loop = true
+					wd.punch_loop = attacks.size() <= 1
+					if attacks.size() > 1:
+						wd.attack = row
+						if "--shot" in OS.get_cmdline_user_args():
+							var a: Dictionary = attacks[row]
+							wd.attack_at = float(a["duration"]) * (float(a["hit_frame"]) + 0.5) / float(a["frames"])
+				if rifle_only:
+					wd.gait = 0.0
+					wd.weapon = load("res://data/weapons/rifle.tres")
+					wd.fire_every = 0.5 if row == 1 else 0.0
 				if fall_only:
 					wd.gait = 0.0
 					wd.down = true
@@ -215,6 +260,11 @@ func _rig_compare() -> void:
 			rd.global_position = at
 		var label := Label.new()
 		label.text = "%s  %s" % ["주인공" if npc == null else npc.display_name, ids[row]]
+		if rifle_only:
+			label.text = "주인공  소총 " + ("조준" if row == 0 else "발사 (0.5초마다)")
+		if attacks.size() > 1:
+			label.text = "주인공  %s (타격 %d/%d장, %.2f초)" % [attacks[row]["name"], int(attacks[row]["hit_frame"]) + 1,
+					int(attacks[row]["frames"]), float(attacks[row]["duration"])]
 		label.position = Vector2(4, TOP + row * cell.y + 2)
 		label.add_theme_font_size_override("font_size", 13)
 		layer.add_child(label)
@@ -223,7 +273,9 @@ func _rig_compare() -> void:
 			await get_tree().process_frame
 		if fall_only:
 			await get_tree().create_timer(PersonRig.DIR8_FALL_FRAME * 9.0).timeout   # 다 누운 뒤
-		if punch_only:
+		if rifle_only:
+			await get_tree().create_timer(0.12).timeout   # 발사 줄이 반동 장면일 때
+		if punch_only and attacks.size() <= 1:
 			await get_tree().create_timer(0.35 + PersonRig.PUNCH_FRAME * 1.5).timeout   # 스트레이트를 뻗은 때
 		await RenderingServer.frame_post_draw
 		var path := ProjectSettings.globalize_path("res://.screenshots/person_rig.png")
