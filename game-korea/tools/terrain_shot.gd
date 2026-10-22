@@ -1,6 +1,6 @@
 extends Node
 ## 서울 지형(Terrain) 화면을 .screenshots/terrain_*.png로 찍는다 (창이 잠깐 뜬다).
-## 실행: godot --path . res://tools/terrain_shot.tscn [-- --day]
+## 실행: godot --path . res://tools/terrain_shot.tscn [-- --day] [--chapter=1 (잠긴 구역 그늘)]
 
 const OUT_DIR := "res://.screenshots/"
 ## [이름, 블록, 블록 안 위치(0~1), 줌]
@@ -24,6 +24,9 @@ func _ready() -> void:
 	var main: Node2D = load("res://scenes/main.tscn").instantiate()
 	main.save_prefix = "user://screenshot_save_"   # 실제 세이브는 건드리지 않는다
 	main.chapter = 4
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--chapter="):   # 잠긴 구역 그늘이 단 위에 제대로 앉는지 볼 때 (예: --chapter=1)
+			main.chapter = int(a.get_slice("=", 1))
 	add_child(main)
 	await _frames(30)
 	var cam: ChaseCamera = main.camera

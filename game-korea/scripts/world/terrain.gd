@@ -17,6 +17,7 @@ const FOUNDATION_LINE := Color(0.3, 0.29, 0.28)
 const FOUNDATION_CAP := Color(0.6, 0.59, 0.56)   ## 축대 위 갓돌
 const STONE_ROW := 9.0                          ## 축대 돌 한 줄 높이 (화면 px)
 const STONE_LEN := 26.0                         ## 축대 돌 한 장 길이 (월드 px)
+const STEP_RAMP := 14.0                         ## 단 가장자리에서 사람·차가 단 높이까지 오르는 거리 (월드 px, 단 안쪽)
 
 const SHADER := """
 shader_type canvas_item;
@@ -179,6 +180,7 @@ static func clear_terraces() -> void:
 
 
 ## 그 자리 땅 높이 (2.5D 화면 px, 단 위면 단 높이). 꺼져 있거나 위에서 보기면 0
+## 단 가장자리 STEP_RAMP 안은 땅에서 단 높이로 부드럽게 오른다 — 부지 경계를 넘는 순간 사람·차가 툭 올라서 보이지 않게
 static func height(pos: Vector2) -> float:
 	if not enabled or not IsoView.enabled:
 		return 0.0
@@ -186,9 +188,21 @@ static func height(pos: Vector2) -> float:
 		var list: Variant = _terraces.get(CityMap.block_at(pos))
 		if list != null:
 			for t: Array in list:
-				if (t[0] as Rect2).has_point(pos):
-					return t[1]
+				var r: Rect2 = t[0]
+				if r.has_point(pos):
+					var edge := minf(minf(pos.x - r.position.x, r.end.x - pos.x), minf(pos.y - r.position.y, r.end.y - pos.y))
+					if edge >= STEP_RAMP:
+						return t[1]
+					return lerpf(slope(pos), t[1], smoothstep(0.0, STEP_RAMP, edge))
 	return slope(pos)
+
+
+## 지금 놓인 단 사각형들 (잠긴 구역 그늘처럼 단을 비워 그릴 때)
+static func terraces_in(b: Vector2i) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for t: Array in _terraces.get(b, []):
+		out.append(t[0])
+	return out
 
 
 ## 단을 빼고 본 땅 높이 (지형 그대로 — 셰이더가 바닥을 올리는 높이)
@@ -308,6 +322,33 @@ static func _cuts(a: float, b: float, o: float) -> PackedFloat32Array:
 	return out
 
 
+## r을 칠하되 holes(단 부지)는 비운다 — 격자 선과 구멍 경계에서 잘라, 단 경계를 걸친 꼭짓점이 없게 한다
+static func rect_except(ci: CanvasItem, r: Rect2, color: Color, holes: Array[Rect2]) -> void:
+	var hx := PackedFloat32Array()
+	var hy := PackedFloat32Array()
+	for h in holes:
+		# 셰이더는 단의 왼쪽·위 변을 단 안으로 친다 — 그 변에서 자르면 바깥 칸 꼭짓점까지 단 높이로 들려, 조금 바깥에서 자른다
+		for v in [h.position.x - 0.02, h.end.x]:
+			if v > r.position.x and v < r.end.x:
+				hx.append(v)
+		for v in [h.position.y - 0.02, h.end.y]:
+			if v > r.position.y and v < r.end.y:
+				hy.append(v)
+	var xs := _merge(_cuts(r.position.x, r.end.x, DATA.origin.x), hx)
+	var ys := _merge(_cuts(r.position.y, r.end.y, DATA.origin.y), hy)
+	for j in ys.size() - 1:
+		for i in xs.size() - 1:
+			var cell := Rect2(xs[i], ys[j], xs[i + 1] - xs[i], ys[j + 1] - ys[j])
+			var c := cell.get_center()
+			var inside := false
+			for h in holes:
+				if h.has_point(c):
+					inside = true
+					break
+			if not inside:
+				ci.draw_rect(cell, color)
+
+
 static func rect(ci: CanvasItem, r: Rect2, color: Color, filled := true, width := -1.0) -> void:
 	if not filled:
 		var p := [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]
@@ -374,7 +415,7 @@ static func line(ci: CanvasItem, a: Vector2, b: Vector2, color: Color, width := 
 
 
 ## 단(바닥 높이 pad)의 앞 면 a→b 밑 축대: 땅에서 pad까지. 단 노드 안(pad만큼 올린 좌표)에서 부른다. n은 면 바깥 법선
-static func foundation_face(ci: CanvasItem, a: Vector2, b: Vector2, pad: float, n: Vector2) -> void:
+static func foundation_face(ci: CanvasItem, a: Vector2, b: Vector2, pad: float, n: Vector2, overlay := Color(0, 0, 0, 0)) -> void:
 	var horizontal := is_equal_approx(a.y, b.y)
 	var xs := _cuts(a.x, b.x, DATA.origin.x) if horizontal else _cuts(a.y, b.y, DATA.origin.y)
 	var top := PackedVector2Array()
@@ -427,3 +468,10 @@ static func foundation_face(ci: CanvasItem, a: Vector2, b: Vector2, pad: float, 
 	if not lines.is_empty():
 		ci.draw_multiline(lines, joint, 1.0)
 	ci.draw_polyline(top, FOUNDATION_CAP.darkened(shade * 0.5), 2.0)   # 단 끝 갓돌
+	if overlay.a > 0.0:   # 잠긴 구역 그늘을 축대 면에도
+		var tint := PackedColorArray([overlay])
+		for k in top.size() - 1:
+			var q0 := top[k] + IsoView.lift(1.0)
+			var q1 := top[k + 1] + IsoView.lift(1.0)
+			ci.draw_primitive(PackedVector2Array([q0, q1, top[k + 1] + IsoView.lift(-depth[k + 1]), top[k] + IsoView.lift(-depth[k])]),
+				tint, PackedVector2Array())
