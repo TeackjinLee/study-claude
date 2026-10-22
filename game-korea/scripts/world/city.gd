@@ -770,7 +770,7 @@ func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 		# 2.5D: 바닥(마당·화단·담장)만 그리고, 벽과 지붕은 BuildingView가 세워 그린다
 		for idx in buildings.size():
 			if area.has_point(_owners[idx]):
-				BuildingModel.draw_ground(ci, buildings[idx], _ground_kind(idx), idx)
+				BuildingModel.draw_ground(ci, buildings[idx], _ground_kind(idx), idx, roundi(building_height(idx) / IsoView.FLOOR_HEIGHT))
 		return
 	for idx in buildings.size():
 		if area.has_point(_owners[idx]):

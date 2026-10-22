@@ -235,10 +235,58 @@ def warp(img: np.ndarray, size: tuple, sc: float, tx: float, ty: float) -> np.nd
     return np.asarray(im.transform(size, Image.AFFINE, (1 / sc, 0, -tx / sc, 0, 1 / sc, -ty / sc), Image.BILINEAR))
 
 
+ORDER_GAP = 8
+
+
+def window_order(a: np.ndarray, base: str) -> np.ndarray:
+    """불빛 덩어리(창 하나·간판 하나)마다 켜지는 차례 (0~255 회색). 게임이 건물마다 차례를 밀어 창이 하나둘 켜지고,
+    절반쯤은 밤새 꺼진 채로 둔다(코드 그림의 창처럼). 0은 늘 먼저 켜는 큰 덩어리(간판·가게 앞·입구등 띠)다."""
+    m = a > 0.35
+    h, w = m.shape
+    lab = np.where(m, np.arange(1, h * w + 1).reshape(h, w), 0)
+    # 이웃 가운데 큰 번호로 퍼뜨려 덩어리마다 번호 하나로 (scipy 없이)
+    while True:
+        nxt = lab.copy()
+        nxt[1:] = np.maximum(nxt[1:], lab[:-1])
+        nxt[:-1] = np.maximum(nxt[:-1], lab[1:])
+        nxt[:, 1:] = np.maximum(nxt[:, 1:], lab[:, :-1])
+        nxt[:, :-1] = np.maximum(nxt[:, :-1], lab[:, 1:])
+        nxt[~m] = 0
+        if np.array_equal(nxt, lab):
+            break
+        lab = nxt
+    # 문턱 밑의 옅은 번짐도 가까운 덩어리를 따른다
+    soft = a > 0.0
+    for _ in range(6):
+        nxt = lab.copy()
+        for sl_a, sl_b in (((slice(1, None),), (slice(None, -1),)), ((slice(None, -1),), (slice(1, None),)),
+                           ((slice(None), slice(1, None)), (slice(None), slice(None, -1))),
+                           ((slice(None), slice(None, -1)), (slice(None), slice(1, None)))):
+            nxt[sl_a] = np.where(nxt[sl_a] == 0, lab[sl_b], nxt[sl_a])
+        nxt[~soft] = 0
+        lab = nxt
+    ids, area = np.unique(lab[lab > 0], return_counts=True)
+    order = np.zeros((h, w), np.uint8)
+    if ids.size == 0:
+        return order
+    real = area[area >= 100]   # 점 같은 부스러기는 빼고 창 크기를 잰다
+    big = area > (np.median(real) if real.size else 100.0) * 4.0
+    rng = np.random.default_rng(sum(base.encode()))
+    val = rng.integers(1, 256, ids.size).astype(np.uint8)
+    val[big] = 0
+    flat = lab.ravel()
+    lut = np.zeros(flat.max() + 1, np.uint8)
+    lut[ids] = val
+    order = lut[flat].reshape(h, w)
+    print(f"  불빛 덩어리 {ids.size}개 (늘 켜는 큰 덩어리 {int(big.sum())}개)")
+    return order
+
+
 def guide_key(name: str) -> str:
-    """컨셉을 달리 그린 그림(<ID>_<부지>_<컨셉> — 공원)은 같은 부지 가이드 <ID>_<부지>를 쓴다."""
-    m = re.match(r"^(.*_(?:full|half_x|half_y|quarter))_[a-z0-9]+$", name)
-    return m.group(1) if m else name
+    """컨셉을 달리 그린 그림(<ID>_<부지>_<컨셉> — 공원)은 같은 부지 가이드 <ID>_<부지>를 쓴다.
+    층수를 바꿔 그린 그림(<ID>_<부지>_<컨셉>_f<층>)은 그 층수 가이드 <ID>_<부지>_f<층>을 쓴다."""
+    m = re.match(r"^(.*_(?:full|half_x|half_y|quarter))_[a-z0-9]+(_f\d+)?$", name)
+    return m.group(1) + (m.group(2) or "") if m else name
 
 
 def prepare(name: str, debug: bool) -> None:
@@ -381,9 +429,18 @@ def prepare(name: str, debug: bool) -> None:
         lum = lit.max(2).astype(float)
         a = np.clip((lum - 45.0) / 70.0, 0.0, 1.0)
         a[~keep] = 0.0
-        Image.fromarray(bleed(np.dstack([lit, (a * 255).astype(np.uint8)]), 3)).save(DST / f"{base}_lights.png")
+        lights = bleed(np.dstack([lit, (a * 255).astype(np.uint8)]), 3)
+        # 오른쪽에 창마다 켜지는 차례 그림을 붙인다 (사이 ORDER_GAP px는 비운다 — 낮 그림 쪽을 읽을 때 섞이지 않게)
+        order = window_order(a, base)
+        out = np.zeros((h, 2 * w + ORDER_GAP, 4), np.uint8)
+        out[:, :w] = lights
+        out[:, w + ORDER_GAP:, :3] = order[..., None]
+        out[:, w + ORDER_GAP:, 3] = 255
+        Image.fromarray(out).save(DST / f"{base}_lights.png")
     info = {"id": guide["id"], "lot": guide["lot"], "lot_size": guide["lot_size"], "seed": guide["seed"],
             "size": [w, h], "origin": [round(origin[0], 2), round(origin[1], 2)], "scale": round(scale, 5)}
+    if "floors" in guide:
+        info["floors"] = guide["floors"]
     margin = piece_margins(name, guide, keep, origin, scale, rgba[..., :3])
     if margin is not None:
         margin = forced_margins(name, margin)

@@ -15,6 +15,9 @@ var scale := 1.0               ## 화면(줌 1) 1px당 그림 px
 var size := Vector2.ONE
 var lot_size := Vector2(520, 520)   ## 가이드를 찍은 부지 크기
 var seed := 7                  ## 가이드를 찍은 모형 시드 — 그림과 모양을 맞추려고 이 시드로 짓는다
+var floors := 0                ## 가이드를 찍은 층수 (0이면 종류의 층수 그대로)
+## 불빛 그림 오른쪽에 창마다 켜지는 차례가 붙어 있다 (불빛 그림이 낮 그림보다 두 배 넘게 넓다 — BuildingView.LIGHT_SHADER)
+var window_order := false
 ## 생성기는 난간·접시·나무 끝을 모형보다 조금 크게 그린다. 조각 윤곽을 화면에서 위로 hull_lift, 좌우로 hull_grow(px)만큼
 ## 넓혀 그 끝이 잘리지 않게 한다 (다듬기 도구가 잘리는 그림을 재서 정한다)
 var hull_lift := 0.0
@@ -49,13 +52,29 @@ static func of(t: BuildingType, lot: Rect2) -> BuildingSprite:
 
 
 ## 건물 한 채의 그림: 하나뿐인 그림(<id>_<부지>)이 있으면 그것, 없으면 컨셉 그림들 가운데 seed(건물 번호)로 골라
-## 이웃 건물끼리 돌려 쓴다. 컨셉 그림은 모두 같은 가이드(같은 모형 시드) 위에 재질·색만 달리 칠한 것이다
-static func pick(t: BuildingType, lot: Rect2, seed: int) -> BuildingSprite:
+## 이웃 건물끼리 돌려 쓴다. 컨셉 그림은 모두 같은 가이드(같은 모형 시드) 위에 재질·색만 달리 칠한 것이다.
+## floors(도시가 ±1 바꾼 층수)를 주면 그 층수로 그린 컨셉(<id>_<부지>_<컨셉>_f<층>)부터 고르고, 없으면 종류의 층수 그림
+static func pick(t: BuildingType, lot: Rect2, seed: int, floors := 0) -> BuildingSprite:
 	var one := of(t, lot)
 	if one:
 		return one
 	var list := variants(t, lot)
-	return null if list.is_empty() else list[posmod(seed, list.size())]
+	if list.is_empty():
+		return null
+	var base := maxi(t.floors, 1)
+	var same := list.filter(func(s: BuildingSprite) -> bool: return s.floors_or(base) == (floors if floors > 0 else base))
+	if same.is_empty():
+		same = list.filter(func(s: BuildingSprite) -> bool: return s.floors_or(base) == base)
+	if same.is_empty():
+		same = list
+	# 층은 건물 번호 셋마다 돌아가므로(City.building_height) 층이 바뀌는 종류는 번호/3으로 돌려야 같은 층끼리도 컨셉이 바뀐다
+	var k := seed / 3 if t.floors >= 3 else seed
+	return same[posmod(k, same.size())]
+
+
+## 이 그림을 지을 층수 (가이드에 적힌 층수, 없으면 base)
+func floors_or(base: int) -> int:
+	return floors if floors > 0 else base
 
 ## 같은 종류·부지에 컨셉을 달리 그린 그림들 (<id>_<부지>_<컨셉>.json — 공원). 이름 순, 없으면 빈 배열.
 static func variants(t: BuildingType, lot: Rect2) -> Array:
@@ -94,11 +113,13 @@ static func lot_name(s: Vector2) -> String:
 func _load(key: String, info: Dictionary) -> void:
 	day = BuildingSkin.texture(DIR + key + ".png")
 	lights = BuildingSkin.texture(DIR + key + "_lights.png")
+	window_order = lights != null and day != null and lights.get_width() > day.get_width() * 1.5
 	origin = Vector2(info["origin"][0], info["origin"][1])
 	scale = info["scale"]
 	size = Vector2(info["size"][0], info["size"][1])
 	lot_size = Vector2(info["lot_size"][0], info["lot_size"][1])
 	seed = int(info.get("seed", seed))
+	floors = int(info.get("floors", 0))
 	hull_lift = float(info.get("hull_lift", 0.0))
 	hull_grow = float(info.get("hull_grow", 0.0))
 	var pm: Dictionary = info.get("hull_pieces", {})

@@ -111,6 +111,9 @@ func _shop_word(text: String, k: int) -> String:
 ## 창 불빛은 UV.x = 2로 표시하고 UV.y - 2에 켜지는 차례를 담는다 — 켜진 비율(lights_on)보다 차례가 빠른 창만 보인다.
 ## 값은 DayNight가 시각에 맞춰 넣으므로 다시 그리지 않는다 (DayNight 없는 갤러리는 기본값: 다 켜짐, 보정 없음).
 ## 벽면 그림(BuildingSkin)의 불빛은 UV.x를 4 당겨(−4~−3) 표시하고, 꼭짓점 색 r에 켜지는 차례를 담는다.
+## 통째 그림(BuildingSprite)의 불빛은 UV.x를 8 당겨(−8~−7) 표시한다: 불빛 그림 오른쪽 반(ORDER_GAP 띄고)에 창마다 켜지는
+## 차례(회색)가 있어, 꼭짓점 색 g(건물마다 다른 값)만큼 밀어 창이 하나둘 켜지고 절반쯤은 꺼진 채 남는다. 0은 간판처럼 늘 켜는 덩어리 —
+## 꼭짓점 색 r을 차례로 쓴다. 예전 그림(오른쪽 반 없음)은 벽면 그림 모드로 그린다
 const LIGHT_SHADER := """
 shader_type canvas_item;
 uniform vec3 boost = vec3(1.0);
@@ -120,7 +123,16 @@ void vertex() {
 	vcol = COLOR;
 }
 void fragment() {
-	if (UV.x < -1.5) {
+	if (UV.x < -5.5) {
+		vec2 ts = vec2(textureSize(TEXTURE, 0));
+		float w = (ts.x - 8.0) * 0.5;
+		vec2 uv = vec2((UV.x + 8.0) * w / ts.x, UV.y);
+		COLOR = texture(TEXTURE, uv);
+		ivec2 at = ivec2(clamp(vec2((UV.x + 8.0) * w + w + 8.0, UV.y * ts.y), vec2(0.0), ts - 1.0));
+		float m = texelFetch(TEXTURE, at, 0).r;
+		float o = m < 0.002 ? vcol.r : fract(m + vcol.g) * 1.8;
+		COLOR.a *= 1.0 - smoothstep(lights_on - 0.04, lights_on, o);
+	} else if (UV.x < -1.5) {
 		COLOR = texture(TEXTURE, vec2(UV.x + 4.0, UV.y));
 		COLOR.a *= 1.0 - smoothstep(lights_on - 0.04, lights_on, vcol.r);
 	} else if (UV.x > 1.5) {
@@ -1456,8 +1468,9 @@ func _sprite_hull(p: BuildingModel.Piece, r: Rect2) -> void:
 		return
 	var uvs := PackedVector2Array()
 	for v in pts:
-		uvs.append(sp.uv(v, p.lot) + (Vector2(-4.0, 0.0) if lights else Vector2.ZERO))
+		uvs.append(sp.uv(v, p.lot) + (Vector2(-8.0 if sp.window_order else -4.0, 0.0) if lights else Vector2.ZERO))
 	var c := Color.WHITE
 	if lights:
-		c = Color(BuildingModel.hash01(p.seed, int(p.rect.position.x) * 7 + int(p.rect.position.y)) * 0.6, 1.0, 1.0)
+		var k := int(p.rect.position.x) * 7 + int(p.rect.position.y)
+		c = Color(BuildingModel.hash01(p.seed, k) * 0.6, BuildingModel.hash01(p.seed, k + 1), 1.0)
 	draw_polygon(pts, PackedColorArray([c]), uvs, tex)

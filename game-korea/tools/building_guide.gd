@@ -8,6 +8,7 @@ extends Node
 ##   ... -- --lots=half_y           (부지 이름을 직접: full·half_x·half_y·quarter, 쉼표로 여럿 — 랜드마크는 구역에 통째 부지가
 ##                                    없으면 반쪽 부지에 선다. 실제 부지는 landmark_city_preview 출력의 lot=으로 본다)
 ##   ... -- --scale=2 --seed=7      (그림 배율: 게임 줌 1 화면 px의 몇 배 · 모형 무작위 시드)
+##   ... -- --floors=4              (층수를 바꿔 찍는다 — <ID>_<부지>_f4. 도시가 층을 ±1 바꾼 건물에 붙일 그림용)
 ##   ... -- --facade                (통째 그림 대신 벽면 정면도 템플릿)
 ##   ... -- --hulls                 (받은 통째 그림이 있는 종류: 게임이 그림을 오려 그리는 조각 윤곽을 흰색으로 —
 ##                                    <ID>_<부지>_hulls.png. prepare_building_sprites.py --debug가 윤곽 밖에 남아 안 그려지는 곳을 빨갛게 본다)
@@ -108,7 +109,7 @@ func _ids() -> Array:
 
 func _whole(t: BuildingType, lot_name: String, size: Vector2, seed: int, scale: float) -> void:
 	var lot := Rect2(-size * 0.5, size)
-	var h := maxf(t.floors, 1) * IsoView.FLOOR_HEIGHT
+	var h := _floors(t) * IsoView.FLOOR_HEIGHT
 	var pieces := BuildingModel.build(lot, t, seed, h)
 	# 그림 범위: 인도까지 넣은 부지 바닥 + 덩어리마다 바닥~꼭대기
 	var box := Rect2(IsoView.BASIS * lot.position, Vector2.ZERO)
@@ -119,7 +120,7 @@ func _whole(t: BuildingType, lot_name: String, size: Vector2, seed: int, scale: 
 	var px := Vector2i((box.size * scale).ceil())
 	var xf := IsoView.BASIS.scaled(Vector2(scale, scale))
 	xf.origin = -box.position * scale
-	var name := "%s_%s" % [String(t.id), lot_name]
+	var name := _name(t, lot_name)
 	var ground := not ("--no-ground" in OS.get_cmdline_user_args())
 	var ref := await _shot(pieces, lot, t, seed, xf, px, false, ground)
 	var guide := await _shot(pieces, lot, t, seed, xf, px, true, ground)
@@ -136,7 +137,7 @@ func _whole(t: BuildingType, lot_name: String, size: Vector2, seed: int, scale: 
 		# 월드 (x, y)·높이 h → 그림 좌표 = origin + scale × (0.78(x−y), 0.39(x+y) − h). 월드 원점은 부지 가운데
 		"origin": [xf.origin.x, xf.origin.y],
 		"basis": [[IsoView.BASIS.x.x, IsoView.BASIS.x.y], [IsoView.BASIS.y.x, IsoView.BASIS.y.y]],
-		"floor_height": IsoView.FLOOR_HEIGHT * t.visual_floor_scale,
+		"floor_height": IsoView.FLOOR_HEIGHT * t.visual_floor_scale, "floors": _floors(t),
 		"pieces": _piece_list(pieces, 0),
 	}
 	_write_json(name, info)
@@ -146,7 +147,7 @@ func _whole(t: BuildingType, lot_name: String, size: Vector2, seed: int, scale: 
 ## 통째 그림을 붙였을 때 조각마다 오려 그리는 윤곽(BuildingSprite.outline)을 가이드와 같은 좌표로 흰색으로 찍는다.
 ## 바닥(부지 사각형)은 빼서, 윤곽에도 바닥에도 안 드는 그림 = 게임에서 잘려 안 보이는 곳을 찾게 한다
 func _hulls(t: BuildingType, lot_name: String, size: Vector2, seed: int, scale: float) -> void:
-	var name := "%s_%s" % [String(t.id), lot_name]
+	var name := _name(t, lot_name)
 	var path := ProjectSettings.globalize_path("%s/%s.json" % [OUT, name])
 	if not FileAccess.file_exists(path):
 		push_warning("가이드 없음: %s" % name)
@@ -155,7 +156,7 @@ func _hulls(t: BuildingType, lot_name: String, size: Vector2, seed: int, scale: 
 	var lot := Rect2(-size * 0.5, size)
 	BuildingSprite.enabled = true
 	BuildingSprite.margins = false   # 넓히기 전 모형 그대로의 윤곽 (다듬기 도구가 넓힐 몫을 잰다)
-	var pieces := BuildingModel.build(lot, t, seed, maxf(t.floors, 1) * IsoView.FLOOR_HEIGHT)
+	var pieces := BuildingModel.build(lot, t, seed, _floors(t) * IsoView.FLOOR_HEIGHT)
 	BuildingSprite.enabled = false
 	if pieces.is_empty() or pieces[0].sprite == null:
 		push_warning("통째 그림 없음: %s" % name)
@@ -190,6 +191,18 @@ func _hulls(t: BuildingType, lot_name: String, size: Vector2, seed: int, scale: 
 		_hull_tops(p, xf, polys)
 	_write_json(name + "_hulls", {"pieces": polys})
 	print("윤곽 저장: %s_hulls" % name)
+
+
+## 찍을 층수 (--floors가 없으면 종류의 층수)
+func _floors(t: BuildingType) -> int:
+	var f := int(_arg("floors", "0"))
+	return f if f > 0 else maxi(t.floors, 1)
+
+
+## 가이드 이름: <ID>_<부지>, 층수를 바꿔 찍으면 <ID>_<부지>_f<층>
+func _name(t: BuildingType, lot_name: String) -> String:
+	var name := "%s_%s" % [String(t.id), lot_name]
+	return name + ("_f%d" % _floors(t) if int(_arg("floors", "0")) > 0 else "")
 
 
 func _hull_tops(p: BuildingModel.Piece, xf: Transform2D, polys: Array) -> void:

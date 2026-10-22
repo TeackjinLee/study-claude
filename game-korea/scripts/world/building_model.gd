@@ -100,11 +100,11 @@ static func top_color(t: BuildingType, seed: int) -> Color:
 static func build(r: Rect2, t: BuildingType, seed: int, height: float) -> Array[Piece]:
 	var out: Array[Piece] = []
 	# 통째 그림이 있으면 가이드를 찍은 시드로 짓는다 (나무 키 같은 무작위 모양이 그림과 맞게)
-	var sprite := BuildingSprite.pick(t, r, seed)
+	var sprite := BuildingSprite.pick(t, r, seed, roundi(height / IsoView.FLOOR_HEIGHT)) if t else null
 	if sprite:
 		seed = sprite.seed
-		# 그림은 가이드 높이(층수 그대로)로 그렸다 — 도시가 건물마다 층을 ±1 바꿔도 그림과 맞게 가이드 높이로 짓는다
-		height = maxf(t.floors, 1) * IsoView.FLOOR_HEIGHT
+		# 그림은 가이드 높이로 그렸다 — 도시가 바꾼 층수의 그림이 없으면 그 그림의 층수로 짓는다
+		height = sprite.floors_or(maxi(t.floors, 1)) * IsoView.FLOOR_HEIGHT
 	height *= t.visual_floor_scale
 	match t.style:
 		&"apt": _apt(out, r, t, seed, height)
@@ -476,9 +476,10 @@ static func _tree(at: Vector2, seed: int, s: float) -> Piece:
 
 # ── 바닥 (청크가 그린다: 사람·차보다 늘 밑) ────────────────
 
-static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int) -> void:
+## floors는 도시가 정한 층수 — build와 같은 그림을 고르게 넘긴다
+static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int, floors := 0) -> void:
 	# 통째 그림: 부지 사각형만큼 그림을 바닥에 편다 (인도는 도시가 그린다). 건물이 선 자리는 BuildingView가 덮는다
-	var sprite := BuildingSprite.pick(t, r, seed) if IsoView.enabled else null
+	var sprite := BuildingSprite.pick(t, r, seed, floors) if IsoView.enabled else null
 	if sprite:
 		draw_sprite_ground(ci, r, sprite)
 		return
