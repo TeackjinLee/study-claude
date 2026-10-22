@@ -1,7 +1,7 @@
 extends Node2D
 ## 불·폭발 도감: 차 화재 단계, 폭발 순서, 땅 불, 차종별 불을 게임과 같은 2.5D 화면으로 크게 본다 (FireFx).
 ## 실행: godot --path . res://tools/fire_gallery.tscn
-## 저장: ... -- --shot  →  .screenshots/fire_gallery.png
+## 저장: ... -- --shot  →  .screenshots/fire_gallery.png  (--code면 넘김 그림 대신 코드 그림 → fire_gallery_code.png)
 
 const TOP := 64.0
 const ZOOM := 2.0
@@ -28,6 +28,7 @@ var fires: Fires
 
 func _ready() -> void:
 	IsoView.enabled = true
+	FireFx.sprites = not "--code" in OS.get_cmdline_user_args()
 	RenderingServer.set_default_clear_color(Color(0.09, 0.1, 0.12))
 	var view := get_viewport().get_visible_rect().size
 	get_viewport().canvas_transform = IsoView.canvas(view, Vector2.ZERO, ZOOM)
@@ -39,7 +40,7 @@ func _ready() -> void:
 	add_child(floor)
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	_label(layer, "서울 거리 프로젝트 · 불·폭발 도감 (코드로 그린 불꽃·연기·불씨)", Vector2(20, 14), 22)
+	_label(layer, "서울 거리 프로젝트 · 불·폭발 도감 (%s)" % ("넘김 그림 assets/fx" if FireFx.sprites else "코드로 그린 불꽃·연기·불씨"), Vector2(20, 14), 22)
 	var row := (view.y - TOP) / 3.0
 	# 1행: 차 화재 단계
 	var cell := view.x / CARS.size()
@@ -75,7 +76,7 @@ func _ready() -> void:
 		for i in 4:
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
-		var path := ProjectSettings.globalize_path("res://.screenshots/fire_gallery.png")
+		var path := ProjectSettings.globalize_path("res://.screenshots/fire_gallery%s.png" % ("" if FireFx.sprites else "_code"))
 		get_viewport().get_texture().get_image().save_png(path)
 		print("불·폭발 도감 저장: ", path)
 		get_tree().quit()
