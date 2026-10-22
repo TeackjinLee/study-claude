@@ -1,0 +1,24 @@
+{
+  "id": "DOCK_WAREHOUSE",
+  "lot": "full",
+  "lot_size": [
+    520.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1663,
+    946
+  ],
+  "origin": [
+    830.38,
+    496.17
+  ],
+  "scale": 1.696,
+  "hull_pieces": {
+    "0": [
+      0,
+      8
+    ]
+  }
+}

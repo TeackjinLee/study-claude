@@ -1347,42 +1347,87 @@ func _skin_quad(x0: float, x1: float, z0: float, z1: float, uv: Rect2, tex: Text
 			Vector2(ub + off, uv.position.y), Vector2(ua + off, uv.position.y)]), tex)
 
 
-## 옥상: 위에서 본 옥상 그림을 지붕 면에 편다
+## 옥상: 위에서 본 옥상 그림을 지붕 면에 편다. 뒤쪽 두 변(북·서)의 난간은 안쪽 면과 윗면을 여기서 —
+## 옥상 설비보다 먼저 그려야 설비가 그 앞에 선다
 func _skin_roof(p: BuildingModel.Piece) -> void:
 	var uv := p.skin.roof
 	draw_primitive(_corners(p.rect, p.h1), PackedColorArray([Color(0.86, 0.86, 0.86)]),   # 옥상은 위를 봐 벽보다 밝지만, 그림이 진해 조금 누른다
 		PackedVector2Array([uv.position, Vector2(uv.end.x, uv.position.y), uv.end, Vector2(uv.position.x, uv.end.y)]), p.skin.day)
+	if p.rect.size.x > PARAPET_T * 4.0 and p.rect.size.y > PARAPET_T * 4.0:
+		for south: bool in [false, true]:
+			_skin_parapet_face(p, south, true)
+		_skin_parapet_cap(p, false)
+
+
+const PARAPET_T := 4.0   ## 벽면 그림 건물의 옥상 난간 두께 (월드 px) — 띠 한 장이면 납작해 보인다
+
+
+## 난간 한 변: 바깥 면(앞쪽 두 변) 또는 뒤쪽 변의 안쪽 면(inner — 옥상 쪽을 보고 서 있어 앞에서 보인다).
+## south: 남(앞 x축) 변 / 북 변의 안쪽 면, 아니면 동 변 / 서 변의 안쪽 면
+func _skin_parapet_face(p: BuildingModel.Piece, south: bool, inner: bool) -> void:
+	var r := p.rect
+	var floors := maxi(1, roundi((p.h1 - p.h0) / p.floor_height))
+	var fh := (p.h1 - p.h0) / floors
+	var t := PARAPET_T if inner else 0.0
+	var n := Vector2.DOWN if south else Vector2.RIGHT
+	_p = p
+	_n = n
+	_shade = IsoView.face_shade(n)
+	if inner:
+		_fa = r.position + Vector2(t, t)
+	else:
+		_fa = Vector2(r.position.x, r.end.y) if south else Vector2(r.end.x, r.position.y)
+	_along = Vector2.RIGHT if south else Vector2.DOWN
+	_len = (r.size.x if south else r.size.y) - 2.0 * t
+	_s0 = 0.0
+	_s1 = _len
+	var other := r.size.y if south else r.size.x
+	var whole := r.size.x if south else r.size.y
+	var front := whole > other + 0.5 or (absf(whole - other) <= 0.5 and south)
+	var blk: Dictionary = p.skin.blocks["front" if front else "side"]
+	var band: Rect2 = blk["parapet"]
+	var nb: int = blk["bays"]
+	var bays := maxi(1, roundi(whole / p.skin.bay_world))
+	var w := whole / bays
+	var h := p.h1 - p.h0
+	# 안쪽 면은 옥상 쪽이라 바깥 면보다 그늘지게
+	var tint := Color.WHITE.darkened(_shade * 0.75 + (0.22 if inner else 0.0))
+	for k in bays:
+		var c := k % nb
+		var uv := Rect2(band.position + Vector2(band.size.x * c / nb, 0.0), Vector2(band.size.x / nb, band.size.y))
+		_skin_quad(k * w - t, (k + 1) * w - t, h, h + fh * p.skin.parapet, uv, p.skin.day, tint, false)
+
+
+## 난간 윗면 (두께 PARAPET_T의 띠): 뒤쪽 두 변(front = false) 또는 앞쪽 두 변
+func _skin_parapet_cap(p: BuildingModel.Piece, front: bool) -> void:
+	var r := p.rect
+	var floors := maxi(1, roundi((p.h1 - p.h0) / p.floor_height))
+	var top := p.h1 + (p.h1 - p.h0) / floors * p.skin.parapet
+	var t := PARAPET_T
+	var cap := Color(0.78, 0.78, 0.76)
+	var strips: Array[Rect2] = []
+	if front:
+		strips = [Rect2(r.position.x, r.end.y - t, r.size.x, t), Rect2(r.end.x - t, r.position.y, t, r.size.y - t)]
+	else:
+		strips = [Rect2(r.position.x, r.position.y, r.size.x, t), Rect2(r.position.x, r.position.y + t, t, r.size.y - t)]
+	for q in strips:
+		draw_primitive(_corners(q, top), PackedColorArray([cap, cap, cap, cap]), PackedVector2Array())
+	# 바깥 모서리 선: 윗면과 바깥 면 경계를 또렷하게
+	var l := IsoView.lift(top)
+	var edge := cap.darkened(0.35)
+	if front:
+		draw_polyline(PackedVector2Array([Vector2(r.position.x, r.end.y) + l, r.end + l, Vector2(r.end.x, r.position.y) + l]), edge, 1.0)
+	else:
+		draw_polyline(PackedVector2Array([Vector2(r.position.x, r.end.y) + l, r.position + l, Vector2(r.end.x, r.position.y) + l]), edge, 1.0)
 
 
 ## 옥상 난간: 보이는 두 벽 위에 난간 띠를 세운다 (옥상·옥탑보다 나중에 — 앞 가장자리의 난간이 그 앞에 선다).
 ## 지붕 조각(가장 앞)이 벽 전체 길이를 한 번에 그린다
 func _skin_parapet(p: BuildingModel.Piece) -> void:
-	var r := p.rect
-	var floors := maxi(1, roundi((p.h1 - p.h0) / p.floor_height))
-	var fh := (p.h1 - p.h0) / floors
 	for south: bool in [false, true]:
-		var n := Vector2.DOWN if south else Vector2.RIGHT
-		_p = p
-		_n = n
-		_shade = IsoView.face_shade(n)
-		_fa = Vector2(r.position.x, r.end.y) if south else Vector2(r.end.x, r.position.y)
-		_along = Vector2.RIGHT if south else Vector2.DOWN
-		_len = r.size.x if south else r.size.y
-		_s0 = 0.0
-		_s1 = _len
-		var other := r.size.y if south else r.size.x
-		var front := _len > other + 0.5 or (absf(_len - other) <= 0.5 and south)
-		var blk: Dictionary = p.skin.blocks["front" if front else "side"]
-		var band: Rect2 = blk["parapet"]
-		var nb: int = blk["bays"]
-		var bays := maxi(1, roundi(_len / p.skin.bay_world))
-		var w := _len / bays
-		var h := p.h1 - p.h0
-		var tint := Color.WHITE.darkened(_shade * 0.75)
-		for k in bays:
-			var c := k % nb
-			var uv := Rect2(band.position + Vector2(band.size.x * c / nb, 0.0), Vector2(band.size.x / nb, band.size.y))
-			_skin_quad(k * w, (k + 1) * w, h, h + fh * p.skin.parapet, uv, p.skin.day, tint, false)
+		_skin_parapet_face(p, south, false)
+	if p.rect.size.x > PARAPET_T * 4.0 and p.rect.size.y > PARAPET_T * 4.0:
+		_skin_parapet_cap(p, true)
 
 
 # ── 통째 그림 (BuildingSprite) ────────────────────────────

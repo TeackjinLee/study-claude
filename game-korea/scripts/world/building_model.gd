@@ -55,6 +55,8 @@ class Piece extends RefCounted:
 	## 통째 그림 (BuildingSprite)과 그 부지. 있으면 이 덩어리 윤곽만큼 그림을 오려 그린다
 	var sprite: BuildingSprite
 	var lot := Rect2()
+	## 통째 그림 안에서 이 덩어리의 번호 (짓는 차례, 얹힌 것은 바로 뒤) — 덩어리마다 윤곽을 넓힐 몫을 찾는 열쇠
+	var sprite_index := -1
 
 	func top() -> float:
 		var h := h1 + rise
@@ -98,9 +100,11 @@ static func top_color(t: BuildingType, seed: int) -> Color:
 static func build(r: Rect2, t: BuildingType, seed: int, height: float) -> Array[Piece]:
 	var out: Array[Piece] = []
 	# 통째 그림이 있으면 가이드를 찍은 시드로 짓는다 (나무 키 같은 무작위 모양이 그림과 맞게)
-	var sprite := BuildingSprite.of(t, r)
+	var sprite := BuildingSprite.pick(t, r, seed)
 	if sprite:
 		seed = sprite.seed
+		# 그림은 가이드 높이(층수 그대로)로 그렸다 — 도시가 건물마다 층을 ±1 바꿔도 그림과 맞게 가이드 높이로 짓는다
+		height = maxf(t.floors, 1) * IsoView.FLOOR_HEIGHT
 	height *= t.visual_floor_scale
 	match t.style:
 		&"apt": _apt(out, r, t, seed, height)
@@ -112,6 +116,7 @@ static func build(r: Rect2, t: BuildingType, seed: int, height: float) -> Array[
 		&"factory": _factory(out, r, t, seed, height)
 		&"rowhouse": _rowhouse(out, r, t, seed, height)
 		&"mixed": _mixed(out, r, t, seed, height)
+		&"park": pass   # 공원은 덩어리 없이 바닥 그림뿐 (가이드 도구가 부지만 찍는다)
 		_:
 			if LandmarkBuilding.owns(t.style):
 				LandmarkBuilding.build(out, r, t, seed)
@@ -134,16 +139,19 @@ static func build(r: Rect2, t: BuildingType, seed: int, height: float) -> Array[
 			if p.roof == &"flat" and p.windows != &"none":
 				p.skin = skin
 	if sprite:
+		var n := [0]
 		for p in out:
-			_set_sprite(p, sprite, r)
+			_set_sprite(p, sprite, r, n)
 	return out
 
 
-static func _set_sprite(p: Piece, sprite: BuildingSprite, lot: Rect2) -> void:
+static func _set_sprite(p: Piece, sprite: BuildingSprite, lot: Rect2, n: Array) -> void:
 	p.sprite = sprite
 	p.lot = lot
+	p.sprite_index = n[0]
+	n[0] += 1
 	for s: Piece in p.on_top:
-		_set_sprite(s, sprite, lot)
+		_set_sprite(s, sprite, lot, n)
 
 
 static func _set_detail(p: Piece, t: BuildingType) -> void:
@@ -470,13 +478,9 @@ static func _tree(at: Vector2, seed: int, s: float) -> Piece:
 
 static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int) -> void:
 	# 통째 그림: 부지 사각형만큼 그림을 바닥에 편다 (인도는 도시가 그린다). 건물이 선 자리는 BuildingView가 덮는다
-	var sprite := BuildingSprite.of(t, r) if IsoView.enabled else null
+	var sprite := BuildingSprite.pick(t, r, seed) if IsoView.enabled else null
 	if sprite:
-		var pts := PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
-		var uvs := PackedVector2Array()
-		for v in pts:
-			uvs.append(sprite.uv(v, r))
-		ci.draw_primitive(pts, PackedColorArray([Color.WHITE]), uvs, sprite.day)
+		draw_sprite_ground(ci, r, sprite)
 		return
 	var style: StringName = t.style if t else &"special"
 	match style:
@@ -490,6 +494,12 @@ static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int) ->
 			_apt_ground(ci, r, seed)
 		&"campsite":
 			_camp_ground(ci, r, seed)
+		&"park":
+			# 가이드용 (도시의 공원은 BuildingDrawer._park가 그린다): 잔디와 십자 산책로
+			ci.draw_rect(r, GRASS)
+			var path := Color(0.62, 0.58, 0.5)
+			ci.draw_line(Vector2(r.position.x, r.get_center().y), Vector2(r.end.x, r.get_center().y), path, 14.0)
+			ci.draw_line(Vector2(r.get_center().x, r.position.y), Vector2(r.get_center().x, r.end.y), path, 10.0)
 		&"jjokbang":
 			ci.draw_rect(r, Color(0.23, 0.21, 0.19))
 			for k in 6:
@@ -504,6 +514,15 @@ static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int) ->
 				SpecialBuilding.draw_ground(ci, r, t, seed)
 			else:
 				_plinth(ci, r, seed)
+
+
+## 통째 그림의 부지 사각형만큼을 바닥에 편다
+static func draw_sprite_ground(ci: CanvasItem, r: Rect2, sprite: BuildingSprite) -> void:
+	var pts := PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+	var uvs := PackedVector2Array()
+	for v in pts:
+		uvs.append(sprite.uv(v, r))
+	ci.draw_primitive(pts, PackedColorArray([Color.WHITE]), uvs, sprite.day)
 
 
 ## 낮은 상자 (바닥에 그리는 화단·담장·팔레트): 남·동 옆면과 윗면

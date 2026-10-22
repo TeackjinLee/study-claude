@@ -182,7 +182,28 @@ func _hulls(t: BuildingType, lot_name: String, size: Vector2, seed: int, scale: 
 	var img := sub.get_texture().get_image()
 	sub.queue_free()
 	img.save_png(ProjectSettings.globalize_path("%s/%s_hulls.png" % [OUT, name]))
+	# 덩어리마다 윤곽 다각형 (가이드 px) — 다듬기 도구가 잘리는 곳을 덮을 덩어리를 골라 그 덩어리만 넓힌다
+	var polys := []
+	for p in pieces:
+		for part in BuildingView.split(p.rect):
+			polys.append({"index": p.sprite_index, "pts": _px(xf, BuildingSprite.outline(p, part))})
+		_hull_tops(p, xf, polys)
+	_write_json(name + "_hulls", {"pieces": polys})
 	print("윤곽 저장: %s_hulls" % name)
+
+
+func _hull_tops(p: BuildingModel.Piece, xf: Transform2D, polys: Array) -> void:
+	for s: BuildingModel.Piece in p.on_top:
+		polys.append({"index": s.sprite_index, "pts": _px(xf, BuildingSprite.outline(s, s.rect))})
+		_hull_tops(s, xf, polys)
+
+
+func _px(xf: Transform2D, pts: PackedVector2Array) -> Array:
+	var out := []
+	for v in pts:
+		var q := xf * v
+		out.append([snappedf(q.x, 0.1), snappedf(q.y, 0.1)])
+	return out
 
 
 ## 화면(줌 1) 범위에 덩어리 r의 바닥(h0)·꼭대기(h1) 여덟 꼭짓점을 넣는다

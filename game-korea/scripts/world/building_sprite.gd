@@ -19,6 +19,9 @@ var seed := 7                  ## 가이드를 찍은 모형 시드 — 그림�
 ## 넓혀 그 끝이 잘리지 않게 한다 (다듬기 도구가 잘리는 그림을 재서 정한다)
 var hull_lift := 0.0
 var hull_grow := 0.0
+## 덩어리마다 더 넓힐 몫 (Piece.sprite_index → Vector3(위, 좌우, 아래) 화면 px). 접시·크레인·가로등처럼 한 덩어리만
+## 크게(또는 모형보다 낮게) 그려진 곳은 그 덩어리만 넓힌다 — 건물 전체를 넓히면 뒤를 지나는 사람이 일찍 가려진다
+var piece_margins := {}
 
 static var _cache := {}
 ## false면 그림을 쓰지 않고 코드 그림으로 (가이드 도구가 코드 모형을 찍을 때)
@@ -43,6 +46,41 @@ static func of(t: BuildingType, lot: Rect2) -> BuildingSprite:
 	return sp
 
 
+
+
+## 건물 한 채의 그림: 하나뿐인 그림(<id>_<부지>)이 있으면 그것, 없으면 컨셉 그림들 가운데 seed(건물 번호)로 골라
+## 이웃 건물끼리 돌려 쓴다. 컨셉 그림은 모두 같은 가이드(같은 모형 시드) 위에 재질·색만 달리 칠한 것이다
+static func pick(t: BuildingType, lot: Rect2, seed: int) -> BuildingSprite:
+	var one := of(t, lot)
+	if one:
+		return one
+	var list := variants(t, lot)
+	return null if list.is_empty() else list[posmod(seed, list.size())]
+
+## 같은 종류·부지에 컨셉을 달리 그린 그림들 (<id>_<부지>_<컨셉>.json — 공원). 이름 순, 없으면 빈 배열.
+static func variants(t: BuildingType, lot: Rect2) -> Array:
+	if t == null or not enabled:
+		return []
+	var base := "%s_%s_" % [String(t.id).to_lower(), lot_name(lot.size)]
+	if _cache.has(base):
+		return _cache[base]
+	var out: Array = []
+	var names: Array = []
+	var dir := DirAccess.open(DIR)
+	if dir:
+		for f in dir.get_files():
+			if f.begins_with(base) and f.ends_with(".json"):
+				names.append(f.trim_suffix(".json"))
+	names.sort()
+	for key in names:
+		if not BuildingSkin.has_png(DIR + key + ".png"):
+			continue
+		var sp := BuildingSprite.new()
+		sp._load(key, JSON.parse_string(FileAccess.get_file_as_string(DIR + key + ".json")))
+		out.append(sp)
+	_cache[base] = out
+	return out
+
 static func lot_name(s: Vector2) -> String:
 	if s.x > 400.0 and s.y > 400.0:
 		return "full"
@@ -63,6 +101,10 @@ func _load(key: String, info: Dictionary) -> void:
 	seed = int(info.get("seed", seed))
 	hull_lift = float(info.get("hull_lift", 0.0))
 	hull_grow = float(info.get("hull_grow", 0.0))
+	var pm: Dictionary = info.get("hull_pieces", {})
+	for k in pm:
+		var a: Array = pm[k]
+		piece_margins[int(k)] = Vector3(a[0], a[1], a[2] if a.size() > 2 else 0.0)
 
 
 ## 월드 점 v(높이는 IsoView.lift로 이미 더한 점)의 그림 UV. 부지 크기가 가이드와 조금 달라도 부지 비율로 맞춘다
@@ -100,14 +142,18 @@ static func outline(p: BuildingModel.Piece, rect: Rect2) -> PackedVector2Array:
 			_box(pts, rect.grow(g), p.h0)
 			_box(pts, rect.grow(g), top)
 	var sp := p.sprite
-	if margins and sp and (sp.hull_lift > 0.0 or sp.hull_grow > 0.0):
-		# 화면에서 위로·옆으로 민 점을 더한다 (볼록 껍질이라 그 사이를 다 덮는다)
-		var up := IsoView.lift(sp.hull_lift)
-		var side := IsoView.BASIS.affine_inverse().basis_xform(Vector2(sp.hull_grow, 0.0))
+	var m := Vector3.ZERO
+	if margins and sp:
+		m = Vector3(sp.hull_lift, sp.hull_grow, 0.0).max(sp.piece_margins.get(p.sprite_index, Vector3.ZERO))
+	if m != Vector3.ZERO:
+		# 화면에서 위·옆·아래로 민 점을 더한다 (볼록 껍질이라 그 사이를 다 덮는다)
+		var up := IsoView.lift(m.x)
+		var side := IsoView.BASIS.affine_inverse().basis_xform(Vector2(m.y, 0.0))
+		var down := -IsoView.lift(m.z)
 		var n := pts.size()
 		for i in n:
 			var v := pts[i]
-			for d in [up, side, -side, up + side, up - side]:
+			for d in [up, side, -side, up + side, up - side, down, down + side, down - side]:
 				pts.append(v + d)
 	return Geometry2D.convex_hull(pts)
 

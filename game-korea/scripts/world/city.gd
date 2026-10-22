@@ -761,7 +761,11 @@ func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 					ci.draw_line(a + inward, b + inward, RAIL, 6.0)
 	for idx in parks.size():
 		if area.has_point(CityMap.block_at(parks[idx].get_center())):
-			BuildingDrawer.draw(ci, parks[idx], park_kinds[idx], idx, font)
+			var sp := _park_sprite(idx) if IsoView.enabled else null
+			if sp:
+				BuildingModel.draw_sprite_ground(ci, parks[idx], sp)
+			else:
+				BuildingDrawer.draw(ci, parks[idx], park_kinds[idx], idx, font)
 	if IsoView.enabled:
 		# 2.5D: 바닥(마당·화단·담장)만 그리고, 벽과 지붕은 BuildingView가 세워 그린다
 		for idx in buildings.size():
@@ -771,6 +775,19 @@ func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 	for idx in buildings.size():
 		if area.has_point(_owners[idx]):
 			_draw_building(ci, buildings[idx], idx, font)
+
+
+## 공원 그림 (부지 크기마다 컨셉이 여럿이면 같은 크기 공원끼리 차례로 돌려 써서 이웃 공원이 겹치지 않게). 없으면 null
+func _park_sprite(idx: int) -> BuildingSprite:
+	var list := BuildingSprite.variants(park_kinds[idx], parks[idx])
+	if list.is_empty():
+		return null
+	var lot := BuildingSprite.lot_name(parks[idx].size)
+	var n := 0
+	for i in idx:
+		if park_kinds[i] == park_kinds[idx] and BuildingSprite.lot_name(parks[i].size) == lot:
+			n += 1
+	return list[n % list.size()]
 
 
 # ── 2.5D 입체 건물 ────────────────────────────────────────
