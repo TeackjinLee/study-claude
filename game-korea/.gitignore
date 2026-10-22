@@ -3,3 +3,4 @@
 *.import
 .claude/worktrees/
 .DS_Store
+output/
