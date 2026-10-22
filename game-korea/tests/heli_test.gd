@@ -165,6 +165,28 @@ func _test_flight() -> void:
 	heli.altitude = alt
 	heli.health = heli.max_health()
 
+	# 헬기에서 내려쏜다: 건물 너머 땅의 사람도 맞고(위에서 쏘니 벽에 안 막힌다), 궤적은 헬기 높이에서 나온다
+	var victim: Pedestrian = main.pedestrians.peds[1]
+	victim.set_active(true)
+	victim.global_position = Vector2(b.get_center().x, b.end.y + 30.0)
+	victim.health = 100.0
+	heli.place(Vector2(b.get_center().x, b.end.y - 110.0), PI)   # 건물 위에서 남쪽(건물 너머 인도)을 본다
+	await _frames(2)
+	var weapons: PlayerWeapons = main.weapons
+	weapons.mouse_aim = false
+	var hp := victim.health
+	_expect(weapons._fire_from_heli(heli, PISTOL), "떠 있는 헬기에서 권총을 쏜다")
+	_expect(victim.health < hp, "건물 너머 앞쪽 사람을 위에서 맞힌다 (체력 %.0f → %.0f)" % [hp, victim.health])
+	var tr: Array = combat._tracers[-1]
+	var lifted := (tr[0] as Vector2) - heli.global_position
+	_expect(not IsoView.enabled or lifted.distance_to(IsoView.lift(heli.altitude + heli.ground - Combat.DOWN_MUZZLE)) < 1.0,
+		"궤적은 헬기 높이에서 나온다 %s" % lifted)
+	_expect(not weapons._fire_from_heli(heli, preload("res://data/weapons/grenade.tres")), "헬기에서 던지는 무기는 못 쓴다")
+	hp = victim.health
+	combat.fire_down(heli, victim.global_position, PISTOL, true)
+	_expect(victim.health < hp or victim.is_dead(), "fire_down: 겨눈 사람이 맞는다")
+	victim.set_active(false)
+
 	# 떠 있는 헬기는 교통이 피하지 않는다
 	var t: TrafficSystem = main.traffic
 	var piece := t.graph.segment(Vector2i(2, 4), 1)

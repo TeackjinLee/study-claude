@@ -5,13 +5,13 @@ extends CanvasLayer
 
 const KMH_PER_PX := 0.22   ## 720px/s ≈ 160km/h
 const NOTICE_TIME := 2.0
-const HINT_FOOT := "WASD 이동   Shift 달리기   Ctrl·J 공격   Q/E 무기   F 차 타기   R 출발점으로"
-const HINT_DRIVE := "W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   Ctrl·J 드라이브바이   Q/E 무기   F 내리기   1·2·3 차종"
-const HINT_SPG := "W/S 전진·후진   A/D 제자리 돌기   마우스 포탑·사거리 (Q/E 포탑)   클릭·Ctrl·J 포격   차를 깔고 넘는다   F 내리기"
-const HINT_TURRET := "W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   마우스 기관총 (Q/E 돌리기)   클릭·Ctrl·J 사격   F 내리기"
-const HINT_DIGGER := "W/S 전진·후진   A/D 제자리 돌기   마우스 상부·팔 뻗기 (Q/E 상부)   클릭·Ctrl·J 퍼 올리기 (차 집기·놓기)   F 내리기"
-const HINT_DOZER := "W/S 전진·후진   A/D 제자리 돌기   클릭·Ctrl·J 블레이드 올리기·내리기 (내리면 밀어붙인다)   F 내리기"
-const HINT_FLY := "W/S 앞으로·멈춤   A/D 돌기   Space 급선회   Ctrl·J 사격   Q/E 무기   F 착륙 (빈 땅·도로 위)"
+const HINT_FOOT := "WASD 이동   Shift 달리기   Z·J 공격   Q/E 무기   F 차 타기   R 출발점으로"
+const HINT_DRIVE := "W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   Z·J 드라이브바이   Q/E 무기   F 내리기   1·2·3 차종"
+const HINT_SPG := "W/S 전진·후진   A/D 제자리 돌기   마우스 포탑·사거리 (Q/E 포탑)   클릭·Z·J 포격   차를 깔고 넘는다   F 내리기"
+const HINT_TURRET := "W/S 가속·브레이크   A/D 조향   Space 핸드브레이크   마우스 기관총 (Q/E 돌리기)   클릭·Z·J 사격   F 내리기"
+const HINT_DIGGER := "W/S 전진·후진   A/D 제자리 돌기   마우스 상부·팔 뻗기 (Q/E 상부)   클릭·Z·J 퍼 올리기 (차 집기·놓기)   F 내리기"
+const HINT_DOZER := "W/S 전진·후진   A/D 제자리 돌기   클릭·Z·J 블레이드 올리기·내리기 (내리면 밀어붙인다)   F 내리기"
+const HINT_FLY := "W/S 앞으로·멈춤   A/D 돌기   Space 급선회   Z·J 사격   Q/E 무기   F 착륙 (빈 땅·도로 위)"
 const METERS_PER_HEIGHT := 0.4   ## 헬기 높이(화면 px) → 고도 표시(m)
 const BAR_SIZE := Vector2(180, 12)
 const GOLD := Color(1.0, 0.82, 0.3)
@@ -33,6 +33,7 @@ var respect: Respect
 var city: City
 var sky: DayNight
 var jobs: SideJobs
+var events: StreetEvents
 var _info: Label
 var _clock: Label
 var _respect: Label
@@ -133,6 +134,7 @@ func _ready() -> void:
 	_minimap.missions = missions
 	_minimap.city = city
 	_minimap.jobs = jobs
+	_minimap.events = events
 	_minimap.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	_minimap.offset_left = -24 - Minimap.RADIUS * 2
 	_minimap.offset_top = -60 - Minimap.RADIUS * 2

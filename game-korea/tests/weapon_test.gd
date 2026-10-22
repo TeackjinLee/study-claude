@@ -188,9 +188,22 @@ func _test_kills() -> void:
 	player.arsenal.cooldown = 0.0
 	var hits_before := hurt.size()
 	main.weapons.shoot()
-	await _frames(1)
+	# 맨주먹은 영상 공격 — 피해는 타격 장면(hit_frame)에 한 번 (PlayerWeapons._step_punch)
+	var jab: Dictionary = PersonRig.punch_attacks()[0]
+	await _frames(int(ceil(float(jab["duration"]) * float(jab["hit_frame"]) / float(jab["frames"]) * 60.0)) + 1)
 	_expect(p.state == Pedestrian.State.KNOCKED, "주먹에 맞으면 넘어진다")
-	await _hold_fire_until(func(): return p.is_dead(), 120)
+	# 길게 눌러도 공격은 하나라 한 번씩 눌러 친다
+	for i in 8:
+		if p.is_dead():
+			break
+		while main.weapons._punch_active:
+			await _frames(1)
+		Input.action_press("fire")
+		await _frames(2)
+		Input.action_release("fire")
+		await _frames(1)
+	while main.weapons._punch_active:
+		await _frames(1)
 	_expect(p.is_dead() and hurt.size() - hits_before == 3, "주먹 세 번에 죽는다 (%d번)" % (hurt.size() - hits_before))
 
 	# 총소리에 옆 시민이 도망친다 (아무것도 없는 쪽으로 쏴도)

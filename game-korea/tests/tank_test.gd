@@ -126,6 +126,12 @@ func _test_cannon() -> void:
 	await _frames(int(60 * 2.0 / SPG.turret_rate))
 	_expect(absf(angle_difference(tank.turret, PI * 0.5)) < 0.05, "포탑이 겨눈 쪽으로 돈다 (%.2f)" % tank.turret)
 	_expect(tank.elevation > low + 0.2, "멀리 겨누면 포신을 든다 (%.2f → %.2f)" % [low, tank.elevation])
+	# 마우스는 포탑을 돌리지 않는다 (Q·E만) — 커서까지 거리는 쓴다
+	main.weapons.mouse_aim = true
+	await _frames(30)
+	_expect(is_equal_approx(tank.turret_goal, PI * 0.5) and absf(angle_difference(tank.turret, PI * 0.5)) < 0.05,
+		"마우스로는 포탑이 돌지 않는다 (%.2f)" % tank.turret)
+	main.weapons.mouse_aim = false
 	# 표적 차를 떨어질 곳에 세우고 쏜다
 	tank.aim_range = 520.0
 	await _frames(30)
@@ -197,6 +203,12 @@ func _test_jeep() -> void:
 	jeep.turret_goal = -PI * 0.5
 	await _frames(60)
 	_expect(absf(angle_difference(jeep.turret, -PI * 0.5)) < 0.05, "전술차량 기관총이 돈다 (%.2f)" % jeep.turret)
+	# 마우스는 기관총을 돌리지 않는다 (Q·E만)
+	main.weapons.mouse_aim = true
+	await _frames(30)
+	_expect(is_equal_approx(jeep.turret_goal, -PI * 0.5) and absf(angle_difference(jeep.turret, -PI * 0.5)) < 0.05,
+		"마우스로는 기관총이 돌지 않는다 (%.2f)" % jeep.turret)
+	main.weapons.mouse_aim = false
 	var car := _vehicle(main, SEDAN, at + Vector2(-160, 0), 0.0)   # 왼쪽 (기관총이 겨눈 쪽)
 	var hp := car.health
 	for i in 40:

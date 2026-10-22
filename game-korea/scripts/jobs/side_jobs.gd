@@ -50,6 +50,7 @@ func _ready() -> void:
 	rng.seed = SEED
 	z_as_relative = false
 	z_index = 4
+	material = Terrain.material()   # 바닥 그림을 지형 높이만큼 올린다
 
 
 func active() -> bool:
@@ -245,7 +246,7 @@ func _spawn_waiting(pos: Vector2, injured: bool) -> Pedestrian:
 		p.state_time = 9999.0
 	else:
 		p._set_state(Pedestrian.State.IDLE, 9999.0)
-		p.say("택시!", 9999.0)
+		p.say_line(&"taxi", 9999.0)
 	return p
 
 
@@ -272,7 +273,7 @@ func objective_text() -> String:
 		SideJobType.Kind.BUS:
 			return "정류장에 서라 (%d/%d)" % [stage + 1, job.stops]
 		SideJobType.Kind.FIRE:
-			return "불을 꺼라 (Ctrl·J 물대포)"
+			return "불을 꺼라 (Z·J 물대포)"
 		SideJobType.Kind.VIGILANTE:
 			return "수배 차량을 부숴라"
 	return ""

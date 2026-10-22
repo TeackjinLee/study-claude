@@ -321,8 +321,33 @@ func _test_heli() -> void:
 	_expect(police.helis.size() == 1, "★5면 경찰 헬기 1대 (%d)" % police.helis.size())
 	_expect(lit, "헬기 탐조등이 주인공을 잡는다")
 	_expect(shots[0] > 0, "탐조등 안이면 경찰이 위치를 안다")
-	# 권총으로 헬기를 떨어뜨린다
 	var heli: PoliceHeli = police.helis[0]
+	# 겨누기: 키보드 자동 조준이 헬기를 고르고, 커서를 헬기 그림(떠 있는 몸통)에 대면 그 헬기를 겨눈다
+	heli.global_position = player.global_position + Vector2(0, -260)
+	var ct := main.get_viewport().canvas_transform
+	var body := ct * (heli.global_position + IsoView.lift(heli.altitude()))
+	_expect(main.weapons.target(player.global_position, Vector2.UP, 600.0, null) == heli.global_position, "자동 조준이 경찰 헬기를 고른다")
+	_expect(main.weapons.screen_point(player.global_position, body, ct) == heli.global_position, "커서를 헬기 그림에 대면 그 헬기를 겨눈다")
+	# 위로 쏘는 총알이라 사이의 건물 벽에 막히지 않는다
+	var wall := StaticBody2D.new()
+	wall.collision_layer = Layers.WORLD
+	var shape := CollisionShape2D.new()
+	shape.shape = RectangleShape2D.new()
+	(shape.shape as RectangleShape2D).size = Vector2(300, 30)
+	wall.add_child(shape)
+	main.add_child(wall)
+	var hp := heli.health
+	for i in 3:
+		wall.global_position = player.global_position.lerp(heli.global_position, 0.4)
+		await _frames(2)
+		var up := (heli.global_position - player.global_position).normalized()
+		var ex: Array[RID] = [player.get_rid()]
+		main.combat.fire(player.global_position + up * 10.0, up, PISTOL, true, ex)
+		if heli.health < hp:
+			break
+	_expect(heli.health < hp, "사이에 벽이 있어도 경찰 헬기를 맞힌다 (체력 %.0f → %.0f)" % [hp, heli.health])
+	wall.queue_free()
+	# 권총으로 헬기를 떨어뜨린다
 	player.arsenal.give(PISTOL, 60)
 	var exploded := [0]
 	for f in 60 * 15:

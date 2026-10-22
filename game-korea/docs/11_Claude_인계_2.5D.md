@@ -476,6 +476,68 @@ City 전체 건물 충돌을 부지 Rect에서 실제 Piece 장애물로 변경�
 
 - 합성기 `scripts/fx/gun_synth.gd`(노드 없는 계산부, 22050Hz 모노). 한 발 = 탁(아주 짧은 높은 바람 소리) + 몸통(걸러 낸 바람 소리, 빨리 사그라짐) + 쿵(높게 시작해 떨어지는 낮은 사인파) + 울림(아주 낮게 걸러 낸 긴 꼬리) + 건물 메아리 한 번. 폭발은 타닥거림(파편)을 더한다. 종류 8개(`KINDS`: pistol·smg·rifle·shotgun·mg·rocket·cannon·explosion)는 길이·두께·쿵 높이가 다르다 — 무거울수록 낮고 길다. 종류마다 변형 3개(`VARIANTS`)로 연발이 똑같이 들리지 않게 한다.
 - 무기는 `WeaponType.sound`(data/weapons/*.tres)로 종류를 고른다 — 권총 3종 pistol, 기관단총 2종 smg, 소총 2종 rifle, 산탄총 shotgun, 차·헬기·지프 기관총 mg, 로켓 rocket, 곡사포 cannon. 주먹·방망이·수류탄·화염병·화염방사기·물대포는 소리 없음(다음 차례).
-- 재생 `scripts/fx/sfx.gd`: Combat이 하나 붙인다(`Sfx.current`). `Combat.fire`(산탄도 한 번)·`fire_from_air`·`_launch`(로켓)·`fire_shell`·`explode`(크기 배율 — 클수록 크고 낮게)가 `Sfx.play(종류, 위치, 크기)`를 부른다. 한 번 울리는 소리라 `AudioStreamGenerator`가 아니라 처음에 `AudioStreamWAV`로 구워 둔다 — 다 굽는 데 약 1초라 `WorkerThreadPool`에서 굽고, 다 구워지기 전엔 그 종류는 소리 없이 넘어간다. 목소리 14개(`VOICES`)를 돌려 쓰고 모자라면 가장 오래 운 것을 끊는다. 카메라에서 멀수록 작다(총 `HEAR_RANGE` 1400px, 폭발 `BLAST_RANGE` 2600px). 같은 종류가 같은 곳에서 2틱 안에 또 나면 한 번만. 높이 흔들기는 Sfx 자기 rng라 게임 결과(★3 도주 등)를 바꾸지 않는다. 헤드리스에서는 소리 없이 기록(`heard`)만 남긴다.
+- 재생 `scripts/fx/sfx.gd`: Combat이 하나 붙인다(`Sfx.current`). `Combat.fire`(산탄도 한 번)·`fire_from_air`·`_launch`(로켓)·`fire_shell`·`explode`(크기 배율 — 클수록 크고 낮게)가 `Sfx.play(종류, 위치, 크기)`를 부른다. 한 번 울리는 소리라 `AudioStreamGenerator`가 아니라 처음에 `AudioStreamWAV`로 구워 둔다 — 다 굽는 데 약 1초라 따로 만든 스레드 하나에서 샘플만 계산하고 `AudioStreamWAV`는 본 스레드에서 만든다(스레드에서 소리 자원까지 만들면 강물 셰이더와 겹쳐 본 스레드가 1초쯤 멈췄다 — perf_probe 최대 프레임 1000ms → 35ms). 다 구워지기 전엔 그 종류는 소리 없이 넘어간다. 목소리 14개(`VOICES`)를 돌려 쓰고 모자라면 가장 오래 운 것을 끊는다. 카메라에서 멀수록 작다(총 `HEAR_RANGE` 1400px, 폭발 `BLAST_RANGE` 2600px). 같은 종류가 같은 곳에서 2틱 안에 또 나면 한 번만. 높이 흔들기는 Sfx 자기 rng라 게임 결과(★3 도주 등)를 바꾸지 않는다. 헤드리스에서는 소리 없이 기록(`heard`)만 남긴다.
 - 들어 보기: `godot --headless --path . -s res://tools/sound_preview.gd` → `output/sound/<종류>.wav`(변형 셋)·`sfx_all.wav`(전부).
 - 확인: `sound_test`(합성 길이·크기·사그라짐·같은 값 같은 소리·변형 다름, 낮은 소리 몫 권총 < 소총 < 포 < 폭발, 쏘는 무기 데이터에 소리, 본편에서 권총·산탄 한 번·주먹 무음·폭발 크기 기록; 창 모드로 돌리면 다 구워진 뒤 실제로 목소리가 우는지도 본다).
+
+### 2026-10-19 한강 물 (흐르는 물 셰이더)
+
+- 사용자: "한강 물이 너무 이질적" — 예전엔 짙은 남색 단색 위에 멈춘 흰 줄 몇 개(`City._draw_water`, 지웠다)였다.
+- `scripts/world/river_view.gd`: `City.material`로 바닥 물 사각형(`City._draw`)에만 거는 셰이더. 월드 좌표로 그려 위에서 보기(F9)에서도 같다.
+  - 물살: 흐름(서쪽, -x) 쪽으로 길게 늘인 무늬 — 느린 큰 물결(18px/s) · 잔물결 줄 두 겹(48·33px/s, 겹치는 곳이 밝은 줄) · 하늘 반짝임(62px/s).
+  - 깊이·강변: 시작할 때 강변까지 거리 그림(`shore_field`, 32px 칸, 물 +·땅 −, 체임퍼 두 번 훑기, 약 0.13초)을 한 번 굽는다. 블록·도로 경계가 32의 배수라 직선 강변이 정확하다. 물인 곳 = `City.water_rects()` + 다리 구간·다리 위 교차로(2.5D에서 다리 밑은 물). 강변 가까이는 얕은 녹갈색, 멀수록 짙은 청록. 땅 가장자리에 콘크리트 호안 비탈(`BANK` 34px, 블록 이음 줄, 물 쪽으로 젖어 어둡다) + 흐름 따라 끊겼다 이어지는 물거품 줄.
+  - 밤: 강변 300px 안에 도시 불빛(주황·흰·하늘색)이 흐름 쪽으로 가는 줄로 부서져 비친다. `DayNight._apply` → `RiverView.set_lights(불 켜진 비율, 화면 색, 비)`, 화면 색으로 나눠 어두워지지 않게(건물 불빛과 같은 방식).
+  - 비: 46px 칸마다 빗방울 동그라미가 퍼진다.
+  - 다리 교각 둘레 물결 테(`WATER_LIGHT`)는 물거품 색으로 바꿨다.
+- 그림 넣을 자리: `assets/water/river_tile.png`(1024 받아 512, 상하좌우 이음매 없음, 512 월드 px마다 되풀이 — 두 장을 다른 빠르기·크기로 흘려 겹친다) · `river_bank.png`(호안, 위 = 땅 쪽, 가로 되풀이 길이 = 폭 × 가로/세로). 있으면 바탕만 바뀌고 물살 줄·반짝임·불빛·물거품·비는 셰이더가 그대로 그린다. 요청서 `output/imagegen/water/GPT_WATER_PROMPT.md`(참고 `ref_river_day.png`·`ref_river_night.png`), 다듬기 `python3 tools/prepare_water_textures.py --debug`(반 칸 민 그림과 섞어 이음매 지우기·큰 밝기 얼룩 펴기·마젠타 섞이면 거부). 가짜 그림으로 넣어 그려지는 것까지 확인하고 지웠다.
+- 화면: `screenshot.tscn -- --only=river`(river_shore·river_shore_later(0.5초 뒤 — 물살이 흘렀는지)·river_wide·river_day·river_rain).
+
+### 2026-10-19 비를 불규칙하게
+
+- 사용자: "비가 균형 있게 내려 부자연스럽다" — 화면 빗줄기는 `i*73`·`i*151` 격자 자리에 같은 각도·길이·밝기의 선 160개(`DayNight._draw_rain`, 지웠다), 강물 빗방울은 46px 칸마다 같은 주기로 하나씩이었다.
+- `scripts/fx/rain_fx.gd`: `DayNight`의 화면 덮개(`ColorRect`)에 거는 셰이더. 그리기 한 번, CPU에서 다시 그리지 않는다(`RainFx.update`로 세기·카메라만 넣는다).
+  - 빗줄기 세 겹(멀리 짧고 흐리고 촘촘 · 가까이 길고 빠르고 성김). 열마다 줄 간격·빠르기·길이·밝기·가로 자리가 다르고, 줄마다 있다 없다 한다.
+  - 바람: 기울기가 천천히 흔들리고 가끔 돌풍(더 기울고 굵어진다). 빗발 얼룩: 큰 노이즈로 굵은 곳·가는 곳이 흘러간다.
+  - 땅에 튀는 물방울: 땅에 붙어 있다(카메라 변환 원점·배율을 따른다). 칸 두 겹, 칸마다 다른 때·주기·자리·크기로 납작한 고리. 빗줄기 겹도 카메라 이동만큼(가까운 겹일수록 덜) 밀린다.
+- 강물 빗방울(`RiverView`): 칸 두 겹(31·53px), 칸마다 주기 0.6~1.9초, 떨어질 때마다 자리·크기를 새로 뽑고, 빗발 얼룩으로 있다 없다 한다.
+- perf_probe(비 강제): 예전 선 그리기와 같다(프레임 중간 16.66 vs 16.68ms). 화면 `screenshot.tscn -- --only=river`의 river_rain.
+
+### 2026-10-20 차 소리 (엔진·사이렌·타이어·충돌·경적)
+
+- 합성 `scripts/fx/car_synth.gd`(노드 없음): 계속 나는 소리는 되풀이 토막으로 만든다 — 엔진(실린더가 터지는 높이의 배음 묶음 + 터질 때마다 다른 세기 + 걸러 낸 바람 소리, 토막 1초 안에 터지는 횟수가 정수, 바람 소리는 두 바퀴 걸러 이음매 없음, 힘 쓰는·뗀 두 토막), 사이렌(wail 4초·yelp 0.36초 한 바퀴, 위상이 정수 바퀴가 되게 높이를 맞춘다), 타이어 끌림(쉬익 + 떨리는 끽). 한 번 울리는 소리 `SHOTS`: crash(쿵 + 어긋난 쇳소리 배음 + 유리 부스러기)·bump·horn(두 음)·splash(철썩 + 보글보글).
+- 재생 `scripts/fx/car_sounds.gd`: 토막을 처음에 뒤 스레드에서 굽고(샘플만, 소리 자원은 본 스레드 — Sfx와 같은 까닭) 목소리를 나눠 준다 — 엔진 4(주인공 차 + 가까운 차 3, 이미 맡은 차는 그대로), 사이렌 2(경찰은 6초마다 울음 ↔ 빠른 울음), 타이어 끌림 1. 회전수는 `CarSynth.gear_rpm`을 `RPM_RATE`로 따라가고, 서서 페달을 밟으면 `REV`만큼 오르며, 점프대에서 뜨면 헛돈다. 경적은 NPC 차 `ai.honking`이 켜질 때 한 번 `Sfx`. 게임 rng를 쓰지 않는다.
+- `Sfx`가 `CarSynth.SHOTS`도 굽는다(`Sfx.known`). `Combat._on_impacted`: 부딪힌 세기 `BUMP_SOUND`(70)부터 쿵, `CRASH_SOUND`(260)부터 쾅(크기 배율 최대 1.6).
+- 확인: sound_test(토막 이음매 — 끝→처음 차이가 토막 안 가장 큰 이웃 차이보다 크지 않다, 사이렌 평균 높이, 회전수 기어 변속, 한 번 소리, 차종별 엔진 종류, 본편 목소리 배정·경적·벽 충돌·첨벙, 창 모드면 실제 재생). sound_preview 결과의 스펙트로그램으로 기어 톱니·사이렌 곡선을 봤다. perf_probe --profile: car_sounds 프레임당 0.14ms.
+- 남은 것: 좌우 소리(패닝 — 카메라가 Camera2D가 아니라 2D 위치 소리를 못 쓴다, 버스 효과로 해야 한다), 라디오, 사람 소리, 도시 배경음.
+
+### 2026-10-19 점프대 (스턴트) — 2026-10-22에 뺐다
+
+- 사용자 요청으로 점프대·뜨는 차·강물에 빠짐·첨벙 소리·수집 저장(`SaveGame.jumps`)을 모두 걷어냈다. 아래는 넣었을 때의 기록.
+
+- `data/jumps/*.tres` 10개(`JumpRamp`), 자리·모양은 `JumpRamps`(노드 없음), 그림 `RampView`, 띄우기·보상 `Stunts`. 자세한 규칙은 CLAUDE.md 점프대 절.
+- 강가 점프대(river_north 3장·river_south 4장)는 물가 T자 교차로 안(입이 물가에서 64px, gap −128)에 둔다 — 처음엔 교차로 앞 구간에 두었더니 꺾으려고 달려오던 미션 봇(smuggler_02 오토바이)이 떠서 강에 빠졌다. 곧장 달려들 때(진행 방향과 20° 안, `JumpRamps.STRAIGHT`)만 뜬다.
+- 뜬 차의 벽 검사는 물리 몸체를 나누지 않고 City 몸체의 `water_from` 메타 번호로 강물 사각형을 뺀다.
+
+### 2026-10-20 헬기에서 내려쏘기 · 포탑 마우스 막기
+
+- 사용자: "비행기 총 쏘는 게 비행기에서 나가는 것처럼, 마우스로 컨트롤" — 예전엔 떠 있는 헬기도 땅 차처럼 드라이브바이(옆으로, 땅 높이에서)였다.
+- `Combat.fire_down(헬기, 겨눈 땅, 무기, by_player)`: 궤적은 헬기 그림 높이(`altitude + ground − DOWN_MUZZLE`)에서 땅으로. 위에서 쏘니 사이의 건물 벽에 막히지 않고, 겨눈 곳 앞 `DOWN_REACH`(60)·뒤 30 사이 같은 층의 사람·차에 맞는다. 길에 다른 떠 있는 헬기(`_air_target`)가 있으면 그게 맞고(피해 그대로), 경찰 헬기(`PoliceHeli.hit_by`)도 맞는다. 산탄은 알마다.
+- `PlayerWeapons._fire_from_heli`(`_heli_gun` = flies·airborne·안 부서짐): 마우스면 커서가 가리키는 땅(`mouse_point` — 사람 그림 위면 그 사람 발밑, `screen_dir`의 고르기를 `screen_point`로 나눴다)으로 사방 어디로나, 키보드면 앞쪽 부채꼴 자동 조준(없으면 앞으로 사거리 × `HELI_AUTO_REACH`). 사거리 밖 커서는 사거리까지 당긴다. 던지는 무기·화염·물·주먹은 못 쓴다. 떠 있는 헬기에서 마우스 조준이면 십자 커서.
+- 포탑: 사용자 요청 "탱크·기관차(전술차량) 포 돌아가는 건 마우스 막아줘" — 포탑 무기가 달린 차(`_mounted`: 자주포·전술차량)는 마우스로 포탑을 돌리지 않고 Q·E로만 돌린다. 자주포 곡사포 거리는 커서까지 거리를 그대로 쓴다(포탑 방향 × 거리). 굴삭기는 예전대로 마우스로 상부·팔을 움직인다.
+- 확인: heli_test(건물 위 헬기에서 건물 너머 인도의 사람을 맞힘·궤적이 헬기 높이에서 나옴·수류탄 못 씀), tank_test(마우스 조준 중에도 자주포 포탑·전술차량 기관총이 돌지 않음), 창 모드 `screenshot.tscn -- --only=heli`의 heli_fire_down.
+
+### 2026-10-20 총알이 한 발씩 날아간다
+
+- 사용자: "총이 한 발만 나가게, 실제 총이 나가는 것처럼" — 예전 궤적은 총구에서 맞은 곳까지 선 하나가 한 번에 그어져 0.08초 남았다(레이저처럼 보였다).
+- `Combat._draw_bullet`: 총구 불꽃(`FLASH_TIME` 0.05초) → 짧은 빛줄기(`BULLET_LEN` 30px, 앞머리는 흰 심)가 `BULLET_SPEED`(2600px/s, 500px에 약 0.2초)로 맞은 곳까지 날아감 → 맞은 곳 불똥(`SPARK_TIME`). 한 발이 사라지는 때는 `_tracer_life`(거리 / 빠르기 + 불똥). 모든 즉시 맞는 총(땅·헬기·경찰 헬기)에 같이 쓴다.
+- 맞히기는 예전처럼 쏘는 순간 정한다(그림만 날아간다) — 피해 시점을 늦추면 경찰 ★3 도주 결과가 나비효과로 바뀐다.
+- 화면: `screenshot.tscn -- --only=heli`의 heli_fire_down·_2·_3(권총 한 발이 날아가는 차례).
+
+
+### 2026-10-22 랜덤 거리 이벤트 · 말풍선 대사 CSV
+
+- 대사: `data/dialogue/lines.csv`(`npc,situation,ko,en`) + `scripts/core/dialogue.gd`(`Dialogue.lines`·`pick` — salt로 고르고 rng를 안 쓴다, `lang` 칸이 비면 한국어). `NpcType.lines`를 없애고 .tres 대사를 옮겼다. 쓰는 곳: 곁에 서 있으면(`PedestrianManager._talk` → talk), 도망칠 때(`Pedestrian.panic` → flee, * 줄 넷), 택시 손님(taxi). `.csv.import`는 `importer="keep"`(번역 가져오기를 막는다).
+- 거리 이벤트: `scripts/events/` — `StreetEventType`(데이터 `data/events/thief.tres`·`robber.tres`), `StreetCriminal`(Pedestrian: APPROACH → ACT → ESCAPE, 잡히면 CAUGHT 엎드림, 놓치면 GONE), `StreetEvents`(Main 자식: 때 맞춰 피해자 고르기·범인 세우기·결과·보상·강도 사격·치우기). HUD 알림·배너, 미니맵 빨간 점(`Minimap.events`).
+- 경찰: 저지른 범인(`offender()`)을 다치게 한 것은 범죄 신고에서 뺀다. 총을 쏘면 총기 발사 신고는 그대로(보상의 수배 −1이 갚는다). 범인은 `is_alive_civilian`이 아니다(시민 수 유지·피해자 고르기에서 빠진다).
+- 확인: street_event_test(대사 CSV, 도둑 낚아채기·달아나기·검거 보상·수배 −1, 강도 위협·들킴·사살 보상 절반, 놓치기, 벌어지는 조건, CSV 대사로 말하기).
+- 남은 것: 편의점 강도처럼 건물에 붙은 이벤트, 피해자가 범인을 쫓아가기, 경찰이 끼어드는 교전.

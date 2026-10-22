@@ -111,6 +111,8 @@ var skid_marks: SkidMarks
 var vehicles: Array[Vehicle] = []
 var start_vehicle: Vehicle
 var work_zone: WorkZone       ## 도로 공사 현장 장식 (그 구역이 열리면 생긴다)
+var _registered_player_id := 0
+var session := GameSessionContext.new()   ## 기존 본편은 싱글 세션. 네트워크 역할은 SessionActors 진입점을 사용한다
 var player: Player
 var pedestrians: PedestrianManager
 var director: Director
@@ -121,6 +123,8 @@ var pickups: Pickups
 var fires: Fires
 var sky: DayNight
 var jobs: SideJobs
+var street_events: StreetEvents
+var car_sounds: CarSounds
 var wallet := Wallet.new()
 var respect := Respect.new()
 var gangs: GangManager
@@ -141,6 +145,13 @@ var _landmark_parked := {}                ## 랜드마크 차를 세운 자리 (
 
 
 func _ready() -> void:
+	# 단일 플레이어용 AI·HUD 세계를 네트워크 클라이언트에서 중복 실행하지 않는다.
+	if session.role() != GameSessionContext.Role.OFFLINE or session.players.size() != 0:
+		push_error("Main은 새 싱글 세션 전용입니다. 서버·클라이언트는 SessionActors를 사용하세요.")
+		set_process(false)
+		set_physics_process(false)
+		set_process_unhandled_input(false)
+		return
 	# 시험용: `godot --path . -- --chapter=N`으로 켜면 N장(그 장까지 열린 구역)부터 바로 시작한다.
 	# 본편으로 켰을 때만 본다 — 테스트는 Main을 다른 노드 밑에 붙이므로 같은 인자(traffic_test --chapter)에 영향받지 않는다
 	var start := start_chapter_arg() if get_parent() == get_tree().root else 0
@@ -169,6 +180,10 @@ func _ready() -> void:
 	player = Player.new()
 	add_child(player)
 	player.global_position = City.start_position()
+	session.players.add(1)
+	_registered_player_id = 1
+	session.set_local_player(1)
+	session.bind_actor(1, player)
 	pedestrians.player = player
 
 	director = Director.new()
@@ -223,6 +238,9 @@ func _ready() -> void:
 	weapons.pedestrians = pedestrians
 	weapons.vehicles = vehicles
 	add_child(weapons)
+	var local_session := session.local_player()
+	local_session.director = director
+	local_session.weapons = weapons
 
 	pickups = Pickups.new()
 	pickups.director = director
@@ -290,6 +308,20 @@ func _ready() -> void:
 	jobs.missions = missions
 	add_child(jobs)
 	Vehicle.durability_bonus = {}
+	street_events = StreetEvents.new()
+	street_events.director = director
+	street_events.player = player
+	street_events.pedestrians = pedestrians
+	street_events.police = police
+	street_events.wallet = wallet
+	street_events.combat = combat
+	street_events.missions = missions
+	street_events.jobs = jobs
+	add_child(street_events)
+	car_sounds = CarSounds.new()
+	car_sounds.vehicles = vehicles
+	car_sounds.director = director
+	add_child(car_sounds)
 
 	sky = DayNight.new()
 	sky.pedestrians = pedestrians
@@ -305,6 +337,7 @@ func _ready() -> void:
 	hud.city = city
 	hud.sky = sky
 	hud.jobs = jobs
+	hud.events = street_events
 	add_child(hud)
 	jobs.shift_started.connect(func(j: SideJobType): hud.banner(j.display_name + " 부업", j.intro, 2.5, Hud.GOLD))
 	jobs.level_done.connect(func(j: SideJobType, n: int, reward: int): hud.notify("%s %d단계 — ₩%s" % [j.display_name, n, Hud.won(reward)]))
@@ -312,6 +345,10 @@ func _ready() -> void:
 		if reason != "완료":
 			hud.notify("%s 끝 — %s (%d단계)" % [j.display_name, reason, n]))
 	jobs.job_mastered.connect(_on_job_mastered)
+	street_events.started.connect(func(e: StreetEventType, _c: StreetCriminal): hud.notify(e.start_text))
+	street_events.resolved.connect(func(e: StreetEventType, pay: int, alive: bool):
+		hud.banner("%s %s" % [e.display_name, "검거" if alive else "제압"], "보상 ₩%s" % Hud.won(pay), 2.5, Hud.GOLD))
+	street_events.failed.connect(func(e: StreetEventType): hud.notify("%s를 놓쳤다" % e.display_name))
 	_update_goal()
 	director.notice.connect(hud.notify)
 	pickups.picked.connect(hud.notify)
@@ -327,6 +364,8 @@ func _ready() -> void:
 	entry = ""
 	if start > 0:
 		hud.banner("%d장 · %s" % [chapter, chapter_type().title], "시험 시작 (--chapter=%d) — 저장 불러오기 없음" % chapter, 3.5, Hud.GOLD)
+	if get_parent() == get_tree().root:
+		_give_arg_weapons()
 	elif from_title != "":
 		# 타이틀에서 골랐다: 불러오기 메뉴를 다시 띄우지 않는다
 		if from_title == "load" and not load_game(entry_slot):
@@ -335,11 +374,18 @@ func _ready() -> void:
 		save_menu.open_load(slot_lines(), auto_line())
 
 
+func _exit_tree() -> void:
+	if _registered_player_id > 0:
+		session.players.remove(_registered_player_id)
+		_registered_player_id = 0
+
+
 ## 화면을 물리(초당 60틱)에 맞춰 60프레임으로 묶는다. 120Hz 화면에서 더 그려 봐야 같은 장면이고,
 ## 프레임마다 물리 틱 수가 0·1·2로 들쭉날쭉하면 움직임이 떨린다. 한 프레임이 늦어도 물리를 몰아서 따라잡지 않는다
 ## (MAX_CATCH_UP틱까지만) — 따라잡느라 다음 프레임이 더 늦어지는 악순환을 막는다. 헤드리스 테스트는 건드리지 않는다
 static func limit_frame_rate() -> void:
-	Engine.max_fps = Engine.physics_ticks_per_second
+	# 웹은 그리기 비용이 커서 30프레임으로 고르게 표시하되 물리는 60틱을 유지한다.
+	Engine.max_fps = 30 if OS.has_feature("web") else Engine.physics_ticks_per_second
 	Engine.max_physics_steps_per_frame = MAX_CATCH_UP
 
 
@@ -355,6 +401,25 @@ static func start_chapter_arg() -> int:
 		if a.begins_with("--chapter="):
 			return clampi(int(a.get_slice("=", 1)), 1, CityMap.LAST_CHAPTER)
 	return 0
+
+
+## 시험용: `-- --give=rifle,pistol`이면 그 무기(data/weapons/<이름>.tres)를 탄 넉넉히 쥐고, 맨 앞 것을 든 채 시작한다
+func _give_arg_weapons() -> void:
+	for a in OS.get_cmdline_user_args():
+		if not a.begins_with("--give="):
+			continue
+		var first: WeaponType = null
+		for id in a.get_slice("=", 1).split(",", false):
+			var path := "res://data/weapons/%s.tres" % id.strip_edges()
+			if not ResourceLoader.exists(path):
+				push_warning("--give: 무기 %s 없음" % id)
+				continue
+			var w: WeaponType = load(path)
+			player.arsenal.give(w, 999)
+			if first == null:
+				first = w
+		if first:
+			player.arsenal.index = player.arsenal.weapons.find(first)
 
 
 func _physics_process(delta: float) -> void:

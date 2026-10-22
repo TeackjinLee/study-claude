@@ -47,6 +47,36 @@ func _ready() -> void:
 		await _overpass_shots(main)
 		get_tree().quit()
 		return
+	if "--only=river" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _river_shots(main)
+		get_tree().quit()
+		return
+	if "--only=rifle" in OS.get_cmdline_user_args() or "--only=pistol" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _rifle_shots(main, "pistol" if "--only=pistol" in OS.get_cmdline_user_args() else "rifle")
+		get_tree().quit()
+		return
+	if "--only=rocket" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _rocket_shots(main)
+		get_tree().quit()
+		return
+	if "--only=heli_aim" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _heli_aim_shots(main)
+		get_tree().quit()
+		return
+	if "--only=player_jump" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _player_jump_shots(main)
+		get_tree().quit()
+		return
+	if "--only=punch" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _punch_shots(main)
+		get_tree().quit()
+		return
 	if "--only=m6" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _m6_shots(main)
@@ -472,6 +502,315 @@ func _frames(n: int) -> void:
 		await get_tree().physics_frame
 
 
+## 주인공 총 자세 (`-- --only=rifle` 소총 · `--only=pistol` 권총): 실제 입력(fire 누르기)으로 쏜다. 화면 →·↘·←·↖·↑ 쪽 발사 장면
+## (<무기>_<방향>)과 서서 겨눈 장면(<무기>_aim). 권총은 겨눈 채 걷는 장면(pistol_walk)도
+func _rifle_shots(main: Node2D, id := "rifle") -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	var weapons: PlayerWeapons = main.weapons
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	var rifle: WeaponType = load("res://data/weapons/%s.tres" % id)
+	player.arsenal.give(rifle, 180)
+	player.arsenal.index = player.arsenal.weapons.find(rifle)
+	cam.target = null
+	cam.global_position = player.global_position
+	cam.zoom = Vector2(4.0, 4.0)
+	await _frames(30)
+	await _save(id + "_aim")
+	for spec in [[0, "e"], [1, "se"], [2, "s"], [4, "w"], [5, "nw"], [6, "n"]]:
+		var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(spec[0] * PI / 4.0)).normalized()
+		weapons.mouse_aim = false   # 창 위에 놓인 실제 마우스가 조준을 빼앗지 않게
+		player.facing = Vector2.UP.angle_to(world_dir)
+		await _frames(5)
+		var before := player.arsenal.ammo_of(rifle)
+		Input.action_press("fire")
+		await _frames(2)   # 쏜 직후 (반동 장면·총구 불꽃이 남아 있을 때)
+		await _save(id + "_" + spec[1])
+		await _frames(40)
+		Input.action_release("fire")
+		print("  %s_%s: 0.75초 누름 → %d발" % [id, spec[1], before - player.arsenal.ammo_of(rifle)])
+		await _frames(20)
+	if id == "pistol":
+		# 겨눈 채 걷기: 화면 → 쪽으로 걸으며 마우스 없이 바라보는 쪽을 지킨다
+		player.screen_walk = true
+		Input.action_press("steer_right")
+		await _frames(25)
+		cam.global_position = player.global_position
+		await _frames(1)
+		await _save("pistol_walk")
+		Input.action_release("steer_right")
+
+
+## 주인공 로켓포 (`-- --only=rocket`): 실제 입력으로 쏜다. 서서 겨눈 장면(rocket_aim), 방향마다 쏜 순간(rocket_<방향>_0 — 앞 불꽃·뒤 불길),
+## 로켓이 날아가는 중(_1 — 꼬리 연기·후폭풍 연기·빈 발사관 반동), 조금 더 뒤(_2)
+func _rocket_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	var weapons: PlayerWeapons = main.weapons
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	var rocket: WeaponType = load("res://data/weapons/rocket.tres")
+	player.arsenal.give(rocket, 20)
+	player.arsenal.index = player.arsenal.weapons.find(rocket)
+	cam.target = null
+	cam.global_position = player.global_position
+	cam.zoom = Vector2(3.0, 3.0)
+	await _frames(30)
+	await _save("rocket_aim")
+	for spec in [[0, "e"], [1, "se"], [2, "s"], [4, "w"], [5, "nw"], [6, "n"], [7, "ne"]]:
+		var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(spec[0] * PI / 4.0)).normalized()
+		weapons.mouse_aim = false
+		player.facing = Vector2.UP.angle_to(world_dir)
+		player.revive()
+		for v: Vehicle in main.vehicles:   # 바로 옆 차에 맞아 제 로켓에 죽지 않게
+			if is_instance_valid(v) and v.global_position.distance_to(player.global_position) < 260.0:
+				v.global_position += Vector2(3000, 3000)
+		await _frames(10)
+		Input.action_press("fire")
+		await _frames(2)
+		Input.action_release("fire")
+		await _save("rocket_%s_0" % spec[1])
+		await _frames(9)
+		await _save("rocket_%s_1" % spec[1])
+		await _frames(14)
+		await _save("rocket_%s_2" % spec[1])
+		await _frames(70)
+
+
+## 경찰 헬기 겨누기 (`-- --only=heli_aim`): ★5 도보 소총. 커서를 헬기 그림에 대고 실제 입력으로 쏜다(heli_aim·heli_fire),
+## 커서를 몸통에서 얼마나 떨어뜨려도 헬기를 고르는지, 키보드 자동 조준으로도 맞는지(heli_keyboard)를 출력한다
+func _heli_aim_shots(main: Node2D) -> void:
+	var player: Player = main.player
+	var weapons: PlayerWeapons = main.weapons
+	var police: PoliceDispatcher = main.police
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	player.global_position = City.block_rect(1, 1).get_center()   # 탁 트인 드리프트 연습장
+	var rifle: WeaponType = load("res://data/weapons/rifle.tres")
+	player.arsenal.give(rifle, 600)
+	player.arsenal.index = player.arsenal.weapons.find(rifle)
+	police.last_known = player.global_position
+	police.wanted.raise_to(5)
+	var heli: PoliceHeli = null
+	for f in 60 * 20:
+		await _frames(1)
+		police._arrest = 0.0
+		player.revive()
+		if not police.helis.is_empty():
+			heli = police.helis[0]
+			if heli.global_position.distance_to(player.global_position) < 320.0:
+				break
+	if heli == null:
+		print("  경찰 헬기가 오지 않았다")
+		return
+	var vp := get_viewport()
+	var body := func() -> Vector2:
+		return vp.canvas_transform * (heli.global_position + IsoView.lift(heli.altitude()))
+	# 커서를 몸통에서 화면 오른쪽으로 떨어뜨리며 헬기를 고르는지
+	var ct := vp.canvas_transform
+	var zoom := ct.basis_xform(IsoView.LIFT).length()
+	var pick := (heli.hit_radius() * PlayerWeapons.HELI_PICK + PlayerWeapons.AIM_PICK) * zoom
+	print("  헬기 몸통 화면 길이 약 %.0fpx, 고르는 반경 %.0fpx (줌 %.2f)" % [heli.stats.size.y * zoom, pick, zoom])
+	for k in [0.0, 20.0, 40.0, 60.0, 80.0, 100.0]:
+		var m: Vector2 = body.call() + Vector2(k, 0)
+		var hit := weapons.screen_point(player.global_position, m, ct) == heli.global_position
+		print("    몸통에서 %3.0fpx: %s" % [k, "헬기를 겨눈다" if hit else "땅을 겨눈다"])
+	# 마우스: 커서를 헬기 그림에 대고 쏜다
+	var hp := heli.health
+	Input.warp_mouse(body.call())
+	weapons.mouse_aim = true
+	await _frames(3)
+	await _save("heli_aim")
+	Input.action_press("fire")
+	for f in 30:
+		Input.warp_mouse(body.call())
+		police._arrest = 0.0
+		player.revive()
+		await _frames(1)
+		if f == 1:
+			await _save("heli_fire")
+	Input.action_release("fire")
+	print("  마우스로 0.5초 쏨: 헬기 체력 %.0f → %.0f" % [hp, heli.health])
+	# 키보드: 헬기 쪽에서 30° 틀어 서서 쏜다 (자동 조준이 헬기로 돌린다)
+	await _frames(30)
+	hp = heli.health
+	weapons.mouse_aim = false
+	var to_heli := heli.global_position - player.global_position
+	player.facing = Vector2.UP.angle_to(to_heli.rotated(0.5))
+	Input.action_press("fire")
+	for f in 30:
+		weapons.mouse_aim = false   # 창 위에 놓인 실제 마우스가 조준을 빼앗지 않게
+		police._arrest = 0.0
+		player.revive()
+		await _frames(1)
+		if f == 3:
+			await _save("heli_keyboard")
+	Input.action_release("fire")
+	print("  키보드로 0.5초 쏨: 헬기 체력 %.0f → %.0f" % [hp, heli.health])
+
+
+## 주인공 주먹 (`-- --only=punch`): 실제 입력(fire 누르기)으로 친다. 화면 →·↙·↖·↑ 쪽 잽 타격 장면, → 쪽 어퍼컷·카운터 타격 장면,
+## 앞에 선 시민이 타격 장면에 한 번만 맞는지, 길게 누르면 공격 하나·빠른 연타는 다음 공격 하나만 이어지는지를 출력한다
+## 주인공 제자리 점프 (Space): 방향마다 웅크림·꼭대기·닿기 장면, 마지막은 달리며 뛰기
+func _player_jump_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	cam.target = null
+	cam.global_position = player.global_position
+	cam.zoom = Vector2(4.0, 4.0)
+	var peak := Player.JUMP_PRE + Player.JUMP_AIR * 0.5
+	for k in [2, 1, 0, 5, 6]:
+		var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(k * PI / 4.0)).normalized()
+		player.facing = Vector2.UP.angle_to(world_dir)
+		await _frames(10)
+		Input.action_press("handbrake")
+		await _frames(int(Player.JUMP_PRE * 0.7 * 60.0))
+		await _save("pjump_%s_crouch" % PersonRig.DIR8[k])
+		await _frames(int((peak - Player.JUMP_PRE * 0.7) * 60.0))
+		await _save("pjump_%s_peak" % PersonRig.DIR8[k])
+		await _frames(int((Player.JUMP_AIR * 0.5 + 0.05) * 60.0))
+		await _save("pjump_%s_land" % PersonRig.DIR8[k])
+		Input.action_release("handbrake")
+		await _frames(40)
+		print("  %s: 끝난 뒤 점프 중 %s" % [PersonRig.DIR8[k], player.jumping()])
+	# 달리며 뛰기: 뛴 방향·속도로 간다
+	var start := player.global_position
+	Input.action_press("steer_right")
+	Input.action_press("sprint")
+	await _frames(20)
+	Input.action_press("handbrake")
+	await _frames(int(peak * 60.0))
+	cam.global_position = player.global_position
+	await _save("pjump_run_peak")
+	Input.action_release("handbrake")
+	await _frames(40)
+	Input.action_release("steer_right")
+	Input.action_release("sprint")
+	print("  달리며 뛰기: %.0fpx 갔다" % start.distance_to(player.global_position))
+
+
+func _punch_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	var weapons: PlayerWeapons = main.weapons
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	var ped: Pedestrian = main.pedestrians.peds[0]
+	cam.target = null   # 카메라가 걷는 주인공 줌으로 돌아가지 않게 붙들어 둔다
+	cam.global_position = player.global_position
+	cam.zoom = Vector2(4.0, 4.0)
+	var attacks := PersonRig.punch_attacks()
+	var hit_time := func(i: int) -> float:
+		var a: Dictionary = attacks[i]
+		return float(a["duration"]) * (float(a["hit_frame"]) + 0.5) / float(a["frames"])
+	# 방향마다 잽 한 번 (앞 시민은 → 쪽에만 세운다)
+	for spec in [[0, "punch_e"], [3, "punch_sw"], [5, "punch_nw"], [6, "punch_n"]]:
+		var screen_dir := Vector2.RIGHT.rotated(spec[0] * PI / 4.0)
+		var world_dir := IsoView.BASIS.affine_inverse().basis_xform(screen_dir).normalized()
+		weapons._cancel_punch()
+		await _frames(60)   # 콤보 유지 시간이 지나 다음 입력은 잽부터
+		weapons.mouse_aim = false   # 창 위에 놓인 실제 마우스가 조준을 빼앗지 않게
+		player.facing = Vector2.UP.angle_to(world_dir)
+		ped.global_position = player.global_position + world_dir * 400.0
+		if spec[0] == 0:
+			ped.global_position = player.global_position + world_dir * 18.0
+			ped.health = 20.0
+			ped.state = Pedestrian.State.IDLE
+		var before := ped.health
+		Input.action_press("fire")
+		await _frames(int(hit_time.call(0) * 60.0))
+		await _save(spec[1])
+		await _frames(int((float(attacks[0]["duration"]) - hit_time.call(0)) * 60.0) + 120)
+		Input.action_release("fire")
+		print("  %s: 길게 2초 누름 → 공격 끝 %s, 시민 체력 %.0f → %.0f" % [spec[1], not weapons._punch_active, before, ped.health])
+	# → 쪽 어퍼컷·카운터: 빠르게 연타해 다음 공격을 이어 낸다
+	var e_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT).normalized()
+	weapons._cancel_punch()
+	await _frames(60)
+	weapons.mouse_aim = false
+	player.facing = Vector2.UP.angle_to(e_dir)
+	ped.global_position = player.global_position + e_dir * 400.0
+	var seen := []
+	for k in 4:
+		# 공격이 끝나자마자 한 번 누른다 (콤보 유지 시간 안) → 다음 공격
+		weapons.mouse_aim = false
+		Input.action_press("fire")
+		await _frames(2)
+		Input.action_release("fire")
+		seen.append(weapons._punch_index)
+		var a: Dictionary = attacks[weapons._punch_index]
+		await _frames(maxi(int(hit_time.call(weapons._punch_index) * 60.0) - 2, 1))
+		if weapons._punch_index >= 2:
+			await _save("punch_" + String(a["name"]))
+		while weapons._punch_active:
+			await _frames(1)
+	print("  한 번씩 누름: 공격 순서 ", seen, " (기대 [0, 1, 2, 3])")
+	# 빠른 연타: 다섯 번 두드려도 잽 + 예약 한 번(스트레이트)만
+	weapons._cancel_punch()
+	await _frames(60)
+	seen = []
+	for tap in 5:
+		Input.action_press("fire")
+		await _frames(2)
+		Input.action_release("fire")
+		await _frames(3)
+	while weapons._punch_active:
+		if seen.is_empty() or seen[-1] != weapons._punch_index:
+			seen.append(weapons._punch_index)
+		await _frames(1)
+	print("  다섯 번 연타: 공격 순서 ", seen, " (기대 [0, 1] — 예약은 한 번만)")
+
+
+## 한강 (`-- --only=river`): 강변 가까이(호안·물거품·밤 불빛) → 넓게 → 낮 → 북쪽 둑 옹벽 → 비 → 밤 둑 가로등 → 0.5초 뒤 (물살이 흘렀는지)
+func _river_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var cx := City.road_center(2)
+	var span: Vector2 = CityMap.bridge_spans(2)[-1]
+	cam.target = null
+	cam.global_position = Vector2(cx + 520.0, span.y - 120.0)
+	cam.zoom = Vector2(1.4, 1.4)
+	await _frames(5)
+	await _save("river_shore")
+	await _frames(30)
+	await _save("river_shore_later")
+	cam.global_position = Vector2(cx + 300.0, (span.x + span.y) * 0.5)
+	cam.zoom = Vector2(0.55, 0.55)
+	await _frames(3)
+	await _save("river_wide")
+	main.sky.paused_clock = true
+	main.sky.set_hour(13.0)
+	cam.global_position = Vector2(cx + 520.0, span.y - 160.0)
+	cam.zoom = Vector2(1.0, 1.0)
+	await _frames(5)
+	await _save("river_day")
+	# 북쪽 둑: 옹벽 면이 보이는 쪽 (`RiverBank`)
+	cam.global_position = Vector2(cx + 420.0, span.x + 220.0)
+	await _frames(5)
+	await _save("river_bank")
+	cam.zoom = Vector2(2.2, 2.2)
+	await _frames(3)
+	await _save("river_bank_close")
+	cam.zoom = Vector2(1.0, 1.0)
+	cam.global_position = Vector2(cx + 520.0, span.y - 160.0)
+	main.sky.rain = 1.0
+	main.sky.set_hour(13.0)
+	await _frames(5)
+	await _save("river_rain")
+	main.sky.rain = 0.0
+	main.sky.set_hour(21.0)
+	# 밤 북쪽 둑: 둑 가로등 불빛이 옹벽·물에 비친다
+	cam.global_position = Vector2(cx + 420.0, span.x + 220.0)
+	await _frames(5)
+	await _save("river_bank_night")
+
+
 ## 군용 차량 (`-- --only=army`): 부두에 선 자주포·전술차량 → 자주포 포탑 조준(조준점) → 포격(포구 불꽃·포탄) → 차를 깔고 올라탄 모습 → 전술차량 기관총
 func _army_shots(main: Node2D) -> void:
 	var cam: ChaseCamera = main.camera
@@ -618,7 +957,7 @@ func _heavy_shots(main: Node2D) -> void:
 	await _save("heavy_dozer")
 
 
-## 고가차도 (`-- --only=overpass`): 교통이 다니는 모습 → 고가 위 차와 밑을 지나는 차가 겹친 모습 → 경사로를 올라 고가 위를 달리는 모습
+## 고가차도 (`-- --only=overpass`): 교통이 다니는 모습 → 고가 위 차와 밑을 지나는 차가 겹친 모습 → 경사로를 올라 고가 위를 달리는 모습 → 고가 뒤에 선 주인공(가리는 상판이 흐려진다)
 func _overpass_shots(main: Node2D) -> void:
 	var cam: ChaseCamera = main.camera
 	main.player.died.disconnect(main._on_died)
@@ -679,6 +1018,22 @@ func _overpass_shots(main: Node2D) -> void:
 		elif shots[0] == "overpass_deck" and x > (o.z + 0.6) * City.PITCH:
 			await _save(shots.pop_front())
 	Input.action_release("accelerate")
+	# 고가 뒤(북쪽 인도)에 선 주인공: 가리는 상판 조각이 흐려진다
+	main.director.exit_vehicle()
+	main.player.global_position = Vector2((o.z + 0.5) * City.PITCH, City.road_center(o.y) - City.ROAD * 0.5 - 14.0)
+	cam.target = main.player
+	cam.snap()
+	cam.zoom = Vector2(1.6, 1.6)
+	await _frames(60)
+	await _save("overpass_behind")
+	# 비교: 같은 자리에서 고가 앞(남쪽 인도)에 서면 흐려지지 않는다
+	var at := cam.global_position
+	cam.target = null
+	cam.global_position = at
+	main.player.global_position += Vector2(0.0, City.ROAD + 28.0)
+	await _frames(60)
+	await _save("overpass_front")
+	cam.zoom = Vector2(ChaseCamera.BASE_ZOOM, ChaseCamera.BASE_ZOOM)
 
 
 ## NPC 헬기 (입체 모형): ★5 경찰 헬기 탐조등 → ★6 군 기동헬기 → 큰불에 물을 쏟는 119 구조헬기 (`-- --only=air`)
@@ -767,6 +1122,17 @@ func _heli_ride_shots(main: Node2D) -> void:
 		main.combat.fire(from, (heli.global_position - from).normalized(), pistol, false, none)
 	await _frames(1)
 	await _save("heli_shot")
+	# 헬기에서 내려쏜 궤적 (헬기 몸에서 땅으로)
+	await _frames(10)
+	# 한 발이 날아가는 모습: 총구 불꽃 → 빛줄기 → 맞은 곳 불똥
+	var gun: WeaponType = load("res://data/weapons/pistol.tres")
+	main.combat.fire_down(heli, heli.global_position + Vector2(-60.0, 260.0), gun, true)
+	await _frames(2)
+	await _save("heli_fire_down")
+	await _frames(4)
+	await _save("heli_fire_down_2")
+	await _frames(5)
+	await _save("heli_fire_down_3")
 	Input.action_press("accelerate")
 	Input.action_release("accelerate")
 	main.set_iso(false)

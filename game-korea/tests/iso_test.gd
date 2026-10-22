@@ -140,6 +140,30 @@ func _test_buildings() -> void:
 				if _overlaps(v, west) and IsoView.z_of(west) >= v.z_index:
 					wrong += 1
 	_expect(wrong == 0, "건물 둘레 인도의 사람이 건물과 맞는 앞뒤로 그려진다 (틀림 %d)" % wrong)
+	# 비탈 부지의 단: 가운데는 단 높이, 낮은 앞(남) 변을 넘을 때는 툭 올라서지 않고 STEP_RAMP 동안 오른다
+	var ramps := 0
+	var jumps := 0
+	for idx in city.buildings.size():
+		if not city._terraced(idx):
+			continue
+		var r := city.buildings[idx]
+		var pad: float = city._pads[idx]
+		if not is_equal_approx(Terrain.height(r.get_center()), pad):
+			jumps += 1
+		var x := r.get_center().x
+		var rise := pad - Terrain.slope(Vector2(x, r.end.y))
+		if rise < 4.0:
+			continue
+		ramps += 1
+		var prev := Terrain.height(Vector2(x, r.end.y + 10.0))
+		var y := r.end.y + 8.0
+		while y > r.end.y - Terrain.STEP_RAMP - 10.0:
+			var h := Terrain.height(Vector2(x, y))
+			if absf(h - prev) > rise * 0.3:
+				jumps += 1
+			prev = h
+			y -= 2.0
+	_expect(ramps > 0 and jumps == 0, "단 가장자리는 부드럽게 오르고 가운데는 단 높이 (단 %d, 튐 %d)" % [ramps, jumps])
 	await _free(main)
 
 

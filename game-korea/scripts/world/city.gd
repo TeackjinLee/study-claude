@@ -96,7 +96,7 @@ const GANGS: Array[GangType] = [
 
 const ASPHALT := Color(0.16, 0.17, 0.22)
 const WATER := Color(0.07, 0.13, 0.24)
-const WATER_LIGHT := Color(0.16, 0.27, 0.42, 0.6)
+const WATER_LIGHT := Color(0.62, 0.68, 0.68, 0.6)   ## 다리 교각 둘레 물거품
 const SIDEWALK_COLOR := Color(0.33, 0.34, 0.40)
 const CURB := Color(0.48, 0.49, 0.55)
 const LANE_WHITE := Color(0.85, 0.85, 0.85, 0.75)
@@ -108,6 +108,9 @@ const NEON := [
 	Color(1.0, 0.23, 0.36), Color(0.23, 0.65, 1.0), Color(0.23, 1.0, 0.54),
 	Color(1.0, 0.82, 0.23), Color(1.0, 0.36, 0.88),
 ]
+
+## 전용 서버는 같은 배치·충돌만 만들고 그림·물 셰이더·조각 노드를 생략한다.
+var presentation_enabled := true
 
 var buildings: Array[Rect2] = []         ## 충돌하는 건물 (공원 제외)
 var kinds: Array[BuildingType] = []      ## buildings와 같은 순서. 특수 건물(경찰서·병원·카센터)은 null
@@ -128,6 +131,7 @@ var water: Array[Rect2] = []             ## 강물 사각형 (미니맵용)
 var _lock_body: StaticBody2D
 var _lock_layer: Node2D
 var _bridge_layer: Node2D
+var _river_bank: RiverBank
 var _owners := {}                        ## 건물 번호 → 블록 (청크 그리기용)
 var _views := {}                         ## 건물 번호 → Array[BuildingView] (2.5D 입체 건물, 덩어리마다 조각들)
 var _tops := {}                          ## 건물 번호 → 2.5D 꼭대기 높이
@@ -183,12 +187,23 @@ class LockLayer extends Node2D:
 
 func _ready() -> void:
 	z_index = -10
+	if presentation_enabled:
+		material = RiverView.material()   # 바닥의 물 사각형에만 걸린다 (청크는 자기 그림)
 	_build_layout()
 	_build_collision()
+	if not presentation_enabled:
+		OverpassView.build(self, false)
+		refresh_locks()
+		visible = false
+		set_process(false)
+		return
 	_make_chunks()
 	_make_views()
+	_river_bank = RiverBank.new()   # 다리보다 먼저 — 상판이 둑 끝을 덮는다
+	add_child(_river_bank)
 	_bridge_layer = BridgeLayer.new()
 	_bridge_layer.city = self
+	_bridge_layer.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED   # 상판 아스팔트 결을 월드 좌표로 되풀이
 	add_child(_bridge_layer)
 	OverpassView.build(self)
 	_lock_layer = LockLayer.new()
@@ -654,6 +669,8 @@ func refresh_locks() -> void:
 					barriers.append(Rect2(a, b - a).abs())
 	if _lock_layer:
 		_lock_layer.queue_redraw()
+	for t: Node2D in _terraces.values():
+		t.queue_redraw()
 	_shade_locked_views()
 
 
@@ -661,8 +678,8 @@ func draw_locks(ci: CanvasItem) -> void:
 	var font := ThemeDB.fallback_font
 	for b in locked_blocks:
 		var r := block_rect(b.x, b.y)
-		ci.draw_rect(r, LOCK_SHADE)
-		ci.draw_rect(r.grow(-4), Color(BARRIER, 0.55), false, 4.0)
+		Terrain.rect_except(ci, r, LOCK_SHADE, Terrain.terraces_in(b))   # 단 부지는 단이 제 높이에서 칠한다
+		Terrain.rect(ci, r.grow(-4), Color(BARRIER, 0.55), false, 4.0)
 	for r in barriers:
 		ci.draw_rect(r, Color(0.1, 0.1, 0.1))
 		var long := r.size.x > r.size.y
@@ -736,8 +753,7 @@ func _draw_chunk_blocks(ci: CanvasItem, area: Rect2i) -> void:
 		for i in range(area.position.x, area.end.x):
 			var b := Vector2i(i, j)
 			if CityMap.is_water(b):
-				_draw_water(ci, block_rect(i, j), b)
-				continue
+				continue   # 물은 바닥(City._draw)의 RiverView 셰이더가 그린다
 			var dist := CityMap.district_of(b)
 			if dist == null:
 				continue
@@ -770,9 +786,9 @@ func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 					_draw_road_segment(ci, j, i, false, water_sides)
 			# 고가차도가 넘는 교차로 밑 그늘
 			if IsoView.enabled and CityMap.over_axis(c) >= 0:
-				ci.draw_rect(node_rect(c), OverpassView.UNDER)
-			# 교차로 둘레 중 강 쪽 (도로가 끊긴 쪽) 난간
-			if CityMap.node_exists(c) and not _on_deck(c):
+				OverpassView.draw_under(ci, node_rect(c), CityMap.over_axis(c))
+			# 교차로 둘레 중 강 쪽 (도로가 끊긴 쪽) 난간 (2.5D는 RiverBank)
+			if CityMap.node_exists(c) and not _on_deck(c) and not IsoView.enabled:
 				var box := node_rect(c)
 				for d in 4:
 					if CityMap.road(c, d):
@@ -880,8 +896,11 @@ func draw_terrace(ci: CanvasItem, idx: int) -> void:
 	var dist := CityMap.district_of(_owners[idx])
 	ci.draw_rect(r, dist.sidewalk if dist else SIDEWALK_COLOR)   # 비탈대로 그린 블록 바탕이 비치지 않게
 	BuildingModel.draw_ground(ci, r, _ground_kind(idx), idx, roundi(building_height(idx) / IsoView.FLOOR_HEIGHT))
-	Terrain.foundation_face(ci, Vector2(r.position.x, r.end.y), r.end, pad, Vector2.DOWN)
-	Terrain.foundation_face(ci, Vector2(r.end.x, r.position.y), r.end, pad, Vector2.RIGHT)
+	var shade := LOCK_SHADE if locked_blocks.has(_owners[idx]) else Color(0, 0, 0, 0)   # 잠긴 구역 그늘은 단이 직접 (LockLayer는 단을 비운다)
+	if shade.a > 0.0:
+		ci.draw_rect(r, shade)
+	Terrain.foundation_face(ci, Vector2(r.position.x, r.end.y), r.end, pad, Vector2.DOWN, shade)
+	Terrain.foundation_face(ci, Vector2(r.end.x, r.position.y), r.end, pad, Vector2.RIGHT, shade)
 
 
 ## 건물 하나의 2.5D 덩어리들. 특수 건물은 부지 꽉 찬 상자에 위에서 본 지붕 그림
@@ -940,6 +959,8 @@ func _special_wall(r: Rect2) -> Color:
 
 ## 2.5D ↔ 위에서 보기 전환 (IsoView.enabled를 바꾼 뒤 부른다)
 func set_iso(on: bool) -> void:
+	if not presentation_enabled:
+		return
 	Terrain.refresh()
 	Terrain.clear_terraces()
 	for idx: int in _views:
@@ -949,6 +970,9 @@ func set_iso(on: bool) -> void:
 	for c in _chunks:
 		c.queue_redraw()
 	_bridge_layer.queue_redraw()
+	_river_bank.queue_redraw()
+	_lock_layer.queue_redraw()   # 단이 생기고 없어지면 비우는 자리가 바뀐다
+	RiverView.set_drop(RiverBank.HEIGHT if on else 0.0)
 
 
 func _process(delta: float) -> void:
@@ -1049,8 +1073,11 @@ func draw_bridges(ci: CanvasItem) -> void:
 				hs.append(CityMap.deck_height_at(span, v))
 			var at := func(x: float, i: int, dh := 0.0) -> Vector2:
 				return Vector2(x, ys[i]) + IsoView.lift(maxf(hs[i] + dh, 0.0))
-			# 물 위 그림자 (상판이 떠 있는 만큼 오른쪽 아래로 드러난다)
-			ci.draw_rect(Rect2(cx - hw, span.x, ROAD, span.y - span.x), Color(0, 0, 0, 0.32))
+			# 물 위 그림자 (상판이 떠 있는 만큼 오른쪽 아래로 드러난다). 물 위는 수면(둑 밑) 높이에 진다
+			for i in ys.size() - 1:
+				var piece := Rect2(cx - hw, ys[i], ROAD, ys[i + 1] - ys[i])
+				var sink := _water_drop(piece.get_center())
+				ci.draw_rect(Rect2(piece.position + IsoView.lift(-sink), piece.size), Color(0, 0, 0, 0.32))
 			# 교각: 물에서 상판 밑까지 기둥 둘과 가로보
 			var ramp := minf(CityMap.RAMP, (span.y - span.x) * 0.4)
 			var n := maxi(1, int((span.y - span.x - ramp) / PIER_GAP))
@@ -1059,32 +1086,50 @@ func draw_bridges(ci: CanvasItem) -> void:
 				var top := CityMap.deck_height_at(span, py) - DECK_SLAB
 				if top < 6.0:
 					continue
-				# 물에 닿는 받침 (물결 테)
+				# 물에 닿는 받침 (물결 테) — 수면은 둑(RiverBank) 높이만큼 낮다
 				for sx in [-1.0, 1.0]:
 					var foot := Vector2(cx + sx * (hw - 20.0), py)
-					ci.draw_circle(foot + Vector2(4, 4), 26.0, Color(WATER_LIGHT, 0.35))
-					_pillar(ci, Rect2(foot - Vector2(16, 16), Vector2(32, 32)), 0.0, top)
+					var sink := _water_drop(foot)
+					ci.draw_circle(foot + Vector2(4, 4) + IsoView.lift(-sink), 26.0, Color(WATER_LIGHT, 0.35))
+					_pillar(ci, Rect2(foot - Vector2(16, 16), Vector2(32, 32)), -sink, top)
 				_pillar(ci, Rect2(cx - hw + 2.0, py - 12.0, ROAD - 4.0, 24.0), top - 8.0, top)
 			# 상판 옆면 (오른쪽 아래를 보는 동쪽 면)
 			for i in ys.size() - 1:
 				ci.draw_primitive(PackedVector2Array([at.call(cx + hw, i), at.call(cx + hw, i + 1),
 					at.call(cx + hw, i + 1, -DECK_SLAB), at.call(cx + hw, i, -DECK_SLAB)]),
 					PackedColorArray([CONCRETE.darkened(0.3)]), PackedVector2Array())
-			# 상판 (아스팔트)
+			# 상판: 일반 도로와 같은 아스팔트 결 그림 (월드 좌표로 되풀이 — BridgeLayer.texture_repeat)
+			var tex := RoadDetail.asphalt_texture()
+			var tsize := tex.get_size()
 			for i in ys.size() - 1:
 				ci.draw_primitive(PackedVector2Array([at.call(cx - hw, i), at.call(cx + hw, i),
 					at.call(cx + hw, i + 1), at.call(cx - hw, i + 1)]),
-					PackedColorArray([ASPHALT]), PackedVector2Array())
-			# 차선: 가운데 노랑 겹선, 흰 점선
+					PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE]),
+					PackedVector2Array([Vector2(cx - hw, ys[i]) / tsize, Vector2(cx + hw, ys[i]) / tsize,
+						Vector2(cx + hw, ys[i + 1]) / tsize, Vector2(cx - hw, ys[i + 1]) / tsize]), tex)
+			# 균열·보수 흔적과 배수구: 일반 도로 장식을 그 자리 상판 높이로 올려 그린다
+			var piece_y := span.x
+			while piece_y < span.y - 1.0:
+				var piece_end := minf(piece_y + BLOCK * 0.25, span.y)
+				ci.draw_set_transform(IsoView.lift(CityMap.deck_height_at(span, (piece_y + piece_end) * 0.5)))
+				RoadDetail.cracks(ci, Rect2(cx - hw, piece_y, ROAD, piece_end - piece_y))
+				for edge in [-1.0, 1.0]:
+					RoadDetail.drain(ci, Vector2(cx + edge * (hw - 7.0), (piece_y + piece_end) * 0.5), true)
+				piece_y = piece_end
+			ci.draw_set_transform(Vector2.ZERO)
+			# 차선: 가운데 노랑 겹선, 흰 점선 (일반 도로와 같은 24px 칠·56px 간격)
 			for off in [-3.0, 3.0]:
 				var line := PackedVector2Array()
 				for i in ys.size():
 					line.append(at.call(cx + off, i))
 				ci.draw_polyline(line, LANE_YELLOW, 2.0)
-			for i in ys.size() - 1:
-				if i % 2 == 0:
-					for lane in [-ROAD * 0.25, ROAD * 0.25]:
-						ci.draw_line(at.call(cx + lane, i), at.call(cx + lane, i + 1), LANE_WHITE, 2.0)
+			var dash := span.x + fposmod(-span.x, 56.0)
+			while dash < span.y - 24.0:
+				var h0 := CityMap.deck_height_at(span, dash)
+				var h1 := CityMap.deck_height_at(span, dash + 24.0)
+				for lane in [-ROAD * 0.25, ROAD * 0.25]:
+					ci.draw_line(Vector2(cx + lane, dash) + IsoView.lift(h0), Vector2(cx + lane, dash + 24.0) + IsoView.lift(h1), LANE_WHITE, 2.0)
+				dash += 56.0
 			# 난간: 서쪽은 안쪽 면, 동쪽은 바깥 면이 보인다. 윗선은 밝게
 			for x in [cx - hw + 3.0, cx + hw - 1.0]:
 				for i in ys.size() - 1:
@@ -1097,6 +1142,11 @@ func draw_bridges(ci: CanvasItem) -> void:
 				ci.draw_polyline(rail, RAIL, 2.0)
 
 
+## 2.5D에서 그 자리 수면이 땅보다 낮은 만큼 (물 위면 둑 높이, 땅이면 0)
+static func _water_drop(p: Vector2) -> float:
+	return RiverBank.HEIGHT if IsoView.enabled and RiverView.is_water_at(p) else 0.0
+
+
 ## 교각 상자 (바닥 사각형 r을 높이 h0~h1로 세운다). 보이는 남·동쪽 면만 그린다
 static func _pillar(ci: CanvasItem, r: Rect2, h0: float, h1: float) -> void:
 	var s := Vector2(r.position.x, r.end.y)
@@ -1104,14 +1154,6 @@ static func _pillar(ci: CanvasItem, r: Rect2, h0: float, h1: float) -> void:
 	ci.draw_colored_polygon(IsoView.wall(s, r.end, h0, h1), CONCRETE.darkened(IsoView.face_shade(Vector2.DOWN)))
 	ci.draw_colored_polygon(IsoView.wall(e, r.end, h0, h1), CONCRETE.darkened(IsoView.face_shade(Vector2.RIGHT)))
 	ci.draw_rect(Rect2(r.position + IsoView.lift(h1), r.size), CONCRETE)
-
-
-func _draw_water(ci: CanvasItem, r: Rect2, b: Vector2i) -> void:
-	for k in 5:
-		var y := r.position.y + 60 + k * 110 + posmod(b.x * 37 + k * 13, 40)
-		var x := r.position.x + 40 + posmod(b.y * 53 + k * 71, 200)
-		ci.draw_line(Vector2(x, y), Vector2(x + 90, y), WATER_LIGHT, 3.0)
-		ci.draw_line(Vector2(x + 140, y + 40), Vector2(x + 200, y + 40), WATER_LIGHT, 2.0)
 
 
 ## vertical=true면 k번째 세로 도로의 seg번째 구간
@@ -1131,6 +1173,8 @@ func _draw_road_segment(ci: CanvasItem, k: int, seg: int, vertical: bool, water_
 	RoadDetail.manhole(ci, p.call(a+BLOCK*.43, ROAD*.28))
 
 	for side in water_sides:
+		if IsoView.enabled:
+			break   # 2.5D 둑 난간은 RiverBank가 세운다
 		Terrain.line(ci, p.call(a - 4, side * (ROAD * 0.5 + 4)), p.call(b + 4, side * (ROAD * 0.5 + 4)), Color(0, 0, 0, 0.35), 6.0)
 		Terrain.line(ci, p.call(a - 4, side * (ROAD * 0.5 - 3)), p.call(b + 4, side * (ROAD * 0.5 - 3)), RAIL, 6.0)
 	if bridge:
