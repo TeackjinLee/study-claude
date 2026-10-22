@@ -1,8 +1,9 @@
 class_name Sfx
 extends Node
-## 한 번 울리는 효과음(총소리·폭발)을 트는 곳. Combat이 하나 만들어 붙이고, 어디서든 `Sfx.play(종류, 위치)`로 부른다.
-## 소리는 GunSynth가 코드로 만든 것을 처음에 한 번 AudioStreamWAV로 구워 두고(전부 굽는 데 1초쯤 걸려 뒤 스레드에서 굽는다 —
-## 다 구워지기 전에 부른 종류는 소리 없이 넘어간다), 목소리(AudioStreamPlayer) 몇 개를 돌려 쓴다.
+## 한 번 울리는 효과음(총소리·폭발·차 충돌·경적·물에 빠짐)을 트는 곳. Combat이 하나 만들어 붙이고, 어디서든 `Sfx.play(종류, 위치)`로 부른다.
+## 소리는 GunSynth가 코드로 만든 것을 처음에 한 번 AudioStreamWAV로 구워 두고(전부 굽는 데 1초쯤 걸려 따로 만든 스레드 하나에서 굽는다 —
+## 다 구워지기 전에 부른 종류는 소리 없이 넘어간다. 굽는 스레드는 샘플 계산만 하고 AudioStreamWAV는 본 스레드에서 만든다 —
+## 스레드에서 소리 자원을 만들면 강물 셰이더와 겹쳐 본 스레드가 1초쯤 멈췄다(perf_probe)), 목소리(AudioStreamPlayer) 몇 개를 돌려 쓴다.
 ## 카메라(화면 가운데)에서 멀수록 작다. 목소리가 모자라면 가장 오래 운 것을 끊는다.
 ## 헤드리스(테스트)에서는 소리를 내지 않고 부른 기록(`heard`)만 남긴다.
 
@@ -23,7 +24,8 @@ var _started: Array[float] = []
 var _last := {}                ## 종류 → [시각, 위치]
 var _rng := RandomNumberGenerator.new()   # 게임 rng와 따로 (소리가 게임 결과를 바꾸지 않게)
 var _silent := false
-var _tasks: Array[int] = []
+var _thread: Thread
+var _stop := false
 
 
 func _ready() -> void:
@@ -37,16 +39,17 @@ func _ready() -> void:
 		add_child(p)
 		_voices.append(p)
 		_started.append(-INF)
-	for kind: StringName in GunSynth.KINDS:
-		_tasks.append(WorkerThreadPool.add_task(_bake.bind(kind), false, "효과음 굽기"))
+	_thread = Thread.new()
+	_thread.start(_bake_all, Thread.PRIORITY_LOW)
 
 
 func _exit_tree() -> void:
 	if current == self:
 		current = null
-	for t in _tasks:
-		WorkerThreadPool.wait_for_task_completion(t)
-	_tasks.clear()
+	if _thread:
+		_stop = true
+		_thread.wait_to_finish()
+		_thread = null
 
 
 ## 종류 kind의 소리를 pos에서 낸다. size는 크기 배율(폭발 크기 등, 클수록 크고 낮다)
@@ -56,7 +59,7 @@ static func play(kind: StringName, pos: Vector2, size := 1.0) -> void:
 
 
 func _play(kind: StringName, pos: Vector2, size: float) -> void:
-	if not GunSynth.KINDS.has(kind):
+	if not known(kind):
 		return
 	var tick := Engine.get_physics_frames()
 	var last: Array = _last.get(kind, [-SAME_GAP, Vector2.ZERO])
@@ -84,6 +87,11 @@ func _play(kind: StringName, pos: Vector2, size: float) -> void:
 	_started[v] = now
 
 
+## 합성기(GunSynth·CarSynth)가 아는 종류인가
+static func known(kind: StringName) -> bool:
+	return GunSynth.KINDS.has(kind) or CarSynth.SHOTS.has(kind)
+
+
 ## 놀고 있는 목소리, 없으면 가장 오래 운 것
 func _free_voice() -> int:
 	var oldest := 0
@@ -104,24 +112,40 @@ func _near(pos: Vector2, reach: float) -> float:
 	return k * k
 
 
-## 뒤 스레드에서 돈다: 다 구우면 본 스레드에서 넣는다
-func _bake(kind: StringName) -> void:
+## 굽는 스레드에서 돈다: 종류 하나를 다 구울 때마다 본 스레드에서 넣는다 (KINDS 순서 — 자주 쓰는 권총부터)
+func _bake_all() -> void:
+	for kind: StringName in GunSynth.KINDS.keys() + CarSynth.SHOTS.keys():
+		if _stop:
+			return
+		var list: Array = []
+		for variant in GunSynth.VARIANTS:
+			var samples := GunSynth.render(kind, variant) if GunSynth.KINDS.has(kind) else CarSynth.render(kind, variant)
+			list.append(pcm16(samples))
+		_set_streams.call_deferred(kind, list)
+
+
+func _set_streams(kind: StringName, pcm: Array) -> void:
 	var list: Array = []
-	for variant in GunSynth.VARIANTS:
-		list.append(to_wav(GunSynth.render(kind, variant)))
-	_set_streams.call_deferred(kind, list)
-
-
-func _set_streams(kind: StringName, list: Array) -> void:
+	for bytes: PackedByteArray in pcm:
+		list.append(wav_of(bytes))
 	_streams[kind] = list
 
 
 ## -1..1 모노 샘플을 16비트 소리로
 static func to_wav(samples: PackedFloat32Array) -> AudioStreamWAV:
+	return wav_of(pcm16(samples))
+
+
+static func pcm16(samples: PackedFloat32Array) -> PackedByteArray:
 	var bytes := PackedByteArray()
 	bytes.resize(samples.size() * 2)
 	for i in samples.size():
 		bytes.encode_s16(i * 2, int(clampf(samples[i], -1.0, 1.0) * 32767.0))
+	return bytes
+
+
+## 소리 자원은 본 스레드에서 만든다
+static func wav_of(bytes: PackedByteArray) -> AudioStreamWAV:
 	var w := AudioStreamWAV.new()
 	w.format = AudioStreamWAV.FORMAT_16_BITS
 	w.mix_rate = int(GunSynth.MIX_RATE)
