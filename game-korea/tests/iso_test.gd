@@ -110,8 +110,9 @@ func _test_buildings() -> void:
 	_expect(roofs.size() == city.buildings.size(), "충돌 건물마다 입체 건물 (%d / %d)" % [roofs.size(), city.buildings.size()])
 	_expect(piece_roofs.values().all(func(n): return n == 1), "지붕은 덩어리(본채·나무·카라반 등)마다 한 번")
 	_expect(square, "조각은 정사각형에 가깝다")
-	# 랜드마크 부지의 소품(벤치·볼라드·지게차 포크)은 낮아도 된다
-	_expect(views.all(func(v): return v.visible and (v.height >= IsoView.FLOOR_HEIGHT or city.landmark_indices.values().has(v.idx))),
+	# 랜드마크 부지의 소품(벤치·볼라드·지게차 포크)과 산자락 숲의 바위는 낮아도 된다
+	_expect(views.all(func(v): return v.visible and (v.height >= IsoView.FLOOR_HEIGHT or city.landmark_indices.values().has(v.idx) \
+			or city.kinds[v.idx] == City.FOREST)),
 		"입체 건물이 보이고 높이가 있다")
 	# 건물 동·남쪽 인도의 사람은 앞, 북·서쪽은 뒤 (긴 건물의 끝 쪽에서도)
 	var wrong := 0

@@ -56,6 +56,11 @@ const BUILDING_TYPES: Array[BuildingType] = [
 const LOOK_POLICE := preload("res://data/buildings/special/police.tres")
 const LOOK_HOSPITAL := preload("res://data/buildings/special/hospital.tres")
 const LOOK_CAR_CENTER := preload("res://data/buildings/special/car_center.tres")
+## 산 블록(Terrain.is_forest)에 건물 대신 세우는 숲 — 부지 나누기는 그대로 두어 건물 번호가 바뀌지 않는다
+const FOREST := preload("res://data/buildings/forest.tres")
+const FOREST_FLOOR := Color(0.2, 0.25, 0.15)
+## 부지 안 높낮이가 이보다 크면(화면 px) 평평한 단으로 고르고 축대를 세운다
+const TERRACE_MIN := 1.5
 const SCATTER_LOOKS: Array[BuildingType] = [
 	preload("res://data/buildings/special/sauna.tres"),
 	preload("res://data/buildings/special/convenience.tres"),
@@ -128,6 +133,8 @@ var _views := {}                         ## 건물 번호 → Array[BuildingView
 var _tops := {}                          ## 건물 번호 → 2.5D 꼭대기 높이
 var _fade := {}                          ## 건물 번호 → 지금 불투명도 (흐려진 건물만. 주인공이 뒤에 있으면 흐려진다)
 var _by_block := {}                      ## 블록 → 그 블록의 건물 번호들
+var _pads := {}                          ## 건물 번호 → 비탈에서 건물이 선 높이 (부지 안 가장 높은 땅, 화면 px)
+var _terraces := {}                      ## 건물 번호 → 비탈 부지의 단 (Terrace). 보이는 단의 부지 바닥은 청크가 그리지 않는다
 var _chunks: Array[Chunk] = []
 
 ## 2.5D 특수 건물 층수
@@ -145,6 +152,16 @@ class Chunk extends Node2D:
 
 	func _draw() -> void:
 		city.draw_chunk(self, area, layer)
+
+
+## 비탈 부지의 단(축대): 부지 바닥을 단 높이에 셰이더 없이 그리고, 낮은 앞(남·동) 면 밑에 축대를 세운다.
+## 건물 덩어리와 같은 높이라 통째 그림의 바닥과 덩어리 그림이 어긋나지 않는다 (청크가 비탈대로 그리면 덩어리 윤곽이 잘려 보였다)
+class Terrace extends Node2D:
+	var city: City
+	var idx := 0
+
+	func _draw() -> void:
+		city.draw_terrace(self, idx)
 
 
 ## 2.5D 다리: 강물 위로 띄운 상판·교각·난간 (위에서 보기에서는 청크가 평면으로 그린다)
@@ -176,6 +193,7 @@ func _ready() -> void:
 	OverpassView.build(self)
 	_lock_layer = LockLayer.new()
 	_lock_layer.city = self
+	_lock_layer.material = Terrain.material()
 	add_child(_lock_layer)
 	refresh_locks()
 	queue_redraw()
@@ -364,6 +382,8 @@ func _build_layout() -> void:
 				elif cell == SPRAY_SHOP and n == 0:
 					spray = r
 					_add(r, null, cell)
+				elif Terrain.is_forest(cell):
+					_add(r, FOREST, cell)
 				else:
 					_add(r, _pick_kind(dist, footprint, i * 131 + j * 37 + n * 11), cell)
 
@@ -396,7 +416,7 @@ func _assign_looks() -> void:
 				if d < best_d:
 					best_d = d
 					best = idx
-			if best >= 0 and not looks.has(best) and kinds[best] != null and buildings[best] != hideout:
+			if best >= 0 and not looks.has(best) and kinds[best] != null and kinds[best] != FOREST and buildings[best] != hideout:
 				looks[best] = gang.base_look
 	# 사우나·편의점: 원래 종류가 replaces에 있고 부지 크기가 맞는 건물 중 일부
 	for idx in buildings.size():
@@ -420,7 +440,7 @@ func _assign_landmarks() -> void:
 		var score := INF
 		for idx in buildings.size():
 			var r := buildings[idx]
-			if looks.has(idx) or kinds[idx] == null or r == hideout or r == warehouse:
+			if looks.has(idx) or kinds[idx] == null or kinds[idx] == FOREST or r == hideout or r == warehouse:
 				continue
 			var dist := CityMap.district_of(_owners[idx])
 			if dist == null or dist.id != spec[1]:
@@ -677,6 +697,7 @@ func _make_chunks() -> void:
 				chunk.city = self
 				chunk.area = Rect2i(i, j, CHUNK, CHUNK)
 				chunk.layer = layer
+				chunk.material = Terrain.material(true)   # 바닥을 지형 높이만큼 올리고 비탈 그늘을 진다
 				add_child(chunk)
 				_chunks.append(chunk)
 				i += CHUNK
@@ -721,11 +742,13 @@ func _draw_chunk_blocks(ci: CanvasItem, area: Rect2i) -> void:
 			if dist == null:
 				continue
 			var r := block_rect(i, j)
-			ci.draw_rect(r, dist.sidewalk)
+			Terrain.rect(ci, r, dist.sidewalk)
 			RoadDetail.pavement(ci, r)
-			ci.draw_rect(r, CURB, false, 3.0)
+			Terrain.rect(ci, r, CURB, false, 3.0)
 			if dist.plazas.has(b):
 				_draw_plaza(ci, r.grow(-SIDEWALK), b == PLAZA)
+			elif Terrain.is_forest(b):
+				Terrain.rect(ci, r.grow(-SIDEWALK), FOREST_FLOOR)   # 숲 부지 사이 골목도 숲 바닥
 
 
 func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
@@ -758,7 +781,7 @@ func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 					var a: Vector2 = corners[d]
 					var b: Vector2 = corners[(d + 1) % 4]
 					var inward := Vector2(-CityMap.STEPS[d]) * 3.0
-					ci.draw_line(a + inward, b + inward, RAIL, 6.0)
+					Terrain.line(ci, a + inward, b + inward, RAIL, 6.0)
 	for idx in parks.size():
 		if area.has_point(CityMap.block_at(parks[idx].get_center())):
 			var sp := _park_sprite(idx) if IsoView.enabled else null
@@ -769,7 +792,7 @@ func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 	if IsoView.enabled:
 		# 2.5D: 바닥(마당·화단·담장)만 그리고, 벽과 지붕은 BuildingView가 세워 그린다
 		for idx in buildings.size():
-			if area.has_point(_owners[idx]):
+			if area.has_point(_owners[idx]) and not _terraced(idx):
 				BuildingModel.draw_ground(ci, buildings[idx], _ground_kind(idx), idx, roundi(building_height(idx) / IsoView.FLOOR_HEIGHT))
 		return
 	for idx in buildings.size():
@@ -793,6 +816,7 @@ func _park_sprite(idx: int) -> BuildingSprite:
 # ── 2.5D 입체 건물 ────────────────────────────────────────
 
 func _make_views() -> void:
+	Terrain.clear_terraces()   # 단은 정적 표라, 도시를 다시 세우면 (테스트) 앞 도시의 것을 비운다
 	for idx in buildings.size():
 		var list: Array[BuildingView] = []
 		var top := 0.0
@@ -803,9 +827,61 @@ func _make_views() -> void:
 			top = maxf(top, p.top())
 		_views[idx] = list
 		_tops[idx] = top
+		_place_views(idx)
 		if not _by_block.has(_owners[idx]):
 			_by_block[_owners[idx]] = []
 		_by_block[_owners[idx]].append(idx)
+	# 비탈 부지의 단: 앞(남·동)의 단이 뒤의 단 축대를 덮도록 깊이 차례로 세운다
+	var slopes: Array = []
+	for idx in buildings.size():
+		if _wants_terrace(idx):
+			slopes.append(idx)
+	slopes.sort_custom(func(a: int, b: int) -> bool: return buildings[a].end.x + buildings[a].end.y < buildings[b].end.x + buildings[b].end.y)
+	for idx: int in slopes:
+		var t := Terrace.new()
+		t.city = self
+		t.idx = idx
+		t.position = IsoView.lift(_pads[idx])
+		add_child(t)
+		_terraces[idx] = t
+
+
+## 비탈에 건물을 앉힌다: 부지를 가장 높은 땅만큼의 평평한 단(Terrain.set_terrace)으로 고르고 덩어리를 모두 그 높이에 세운다.
+## 축대는 Terrace가 그린다. 숲은 단을 만들지 않고 나무마다 제 땅에 선다
+func _place_views(idx: int) -> void:
+	var whole := Terrain.max_height(buildings[idx])
+	_pads[idx] = whole
+	var terrace := _wants_terrace(idx)
+	if terrace:
+		Terrain.set_terrace(buildings[idx], whole)
+	for v: BuildingView in _views[idx]:
+		v.pad = whole if terrace or v.piece.sprite else Terrain.max_height(v.piece.rect)
+		v.position = IsoView.lift(v.pad)
+	if _terraces.has(idx):
+		_terraces[idx].position = IsoView.lift(whole)
+		_terraces[idx].visible = terrace
+
+
+## 단을 세울 만큼 기운 부지인가 (숲은 비탈 그대로)
+func _wants_terrace(idx: int) -> bool:
+	var r := buildings[idx]
+	return kinds[idx] != FOREST and Terrain.max_height(r) - Terrain.min_height(r) > TERRACE_MIN
+
+
+## 지금 단 위에 그리는 부지인가 (청크는 그 부지 바닥을 건너뛴다)
+func _terraced(idx: int) -> bool:
+	return _terraces.has(idx) and _terraces[idx].visible
+
+
+## 비탈 부지의 단: 바닥(인도 바탕 + 부지 바닥 그림)과 앞 면 축대. 노드는 단 높이만큼 올라 있다
+func draw_terrace(ci: CanvasItem, idx: int) -> void:
+	var r := buildings[idx]
+	var pad: float = _pads[idx]
+	var dist := CityMap.district_of(_owners[idx])
+	ci.draw_rect(r, dist.sidewalk if dist else SIDEWALK_COLOR)   # 비탈대로 그린 블록 바탕이 비치지 않게
+	BuildingModel.draw_ground(ci, r, _ground_kind(idx), idx, roundi(building_height(idx) / IsoView.FLOOR_HEIGHT))
+	Terrain.foundation_face(ci, Vector2(r.position.x, r.end.y), r.end, pad, Vector2.DOWN)
+	Terrain.foundation_face(ci, Vector2(r.end.x, r.position.y), r.end, pad, Vector2.RIGHT)
 
 
 ## 건물 하나의 2.5D 덩어리들. 특수 건물은 부지 꽉 찬 상자에 위에서 본 지붕 그림
@@ -864,7 +940,10 @@ func _special_wall(r: Rect2) -> Color:
 
 ## 2.5D ↔ 위에서 보기 전환 (IsoView.enabled를 바꾼 뒤 부른다)
 func set_iso(on: bool) -> void:
+	Terrain.refresh()
+	Terrain.clear_terraces()
 	for idx: int in _views:
+		_place_views(idx)
 		for v: BuildingView in _views[idx]:
 			v.visible = on
 	for c in _chunks:
@@ -879,7 +958,7 @@ func _process(delta: float) -> void:
 	if cam == null or cam.target == null or not is_instance_valid(cam.target):
 		return
 	var p := cam.target.global_position
-	var head := p + IsoView.lift(14.0)
+	var head := p + IsoView.lift(14.0 + Terrain.height(p))
 	# 주인공 둘레 블록의 건물과, 아직 흐린 건물만 본다
 	var here := CityMap.block_at(p)
 	var check := {}
@@ -896,7 +975,7 @@ func _process(delta: float) -> void:
 		var r := buildings[idx]
 		var goal := 1.0
 		if not r.has_point(p) and p.x < r.end.x and p.y < r.end.y \
-				and Geometry2D.is_point_in_polygon(head, BuildingView.silhouette(r, building_top(idx))):
+				and Geometry2D.is_point_in_polygon(head - IsoView.lift(_pads.get(idx, 0.0)), BuildingView.silhouette(r, building_top(idx))):
 			goal = FADE_ALPHA
 		var now: float = _fade.get(idx, 1.0)
 		if is_equal_approx(now, goal):
@@ -916,7 +995,7 @@ func _fade_pieces(idx: int, p: Vector2, head: Vector2, delta: float) -> void:
 	for v: BuildingView in _views[idx]:
 		var r := v.rect
 		var goal := 1.0
-		if p.x < r.end.x and p.y < r.end.y and Geometry2D.is_point_in_polygon(head, BuildingView.silhouette(r, v.height)):
+		if p.x < r.end.x and p.y < r.end.y and Geometry2D.is_point_in_polygon(head - v.position, BuildingView.silhouette(r, v.height)):
 			goal = FADE_ALPHA
 		v.modulate.a = move_toward(v.modulate.a, goal, delta * 3.0)
 		faded = faded or v.modulate.a < 1.0
@@ -1052,8 +1131,8 @@ func _draw_road_segment(ci: CanvasItem, k: int, seg: int, vertical: bool, water_
 	RoadDetail.manhole(ci, p.call(a+BLOCK*.43, ROAD*.28))
 
 	for side in water_sides:
-		ci.draw_line(p.call(a - 4, side * (ROAD * 0.5 + 4)), p.call(b + 4, side * (ROAD * 0.5 + 4)), Color(0, 0, 0, 0.35), 6.0)
-		ci.draw_line(p.call(a - 4, side * (ROAD * 0.5 - 3)), p.call(b + 4, side * (ROAD * 0.5 - 3)), RAIL, 6.0)
+		Terrain.line(ci, p.call(a - 4, side * (ROAD * 0.5 + 4)), p.call(b + 4, side * (ROAD * 0.5 + 4)), Color(0, 0, 0, 0.35), 6.0)
+		Terrain.line(ci, p.call(a - 4, side * (ROAD * 0.5 - 3)), p.call(b + 4, side * (ROAD * 0.5 - 3)), RAIL, 6.0)
 	if bridge:
 		# 다리 교각
 		for t in [0.25, 0.75]:
@@ -1061,8 +1140,8 @@ func _draw_road_segment(ci: CanvasItem, k: int, seg: int, vertical: bool, water_
 			for side in [-1.0, 1.0]:
 				var q: Vector2 = p.call(at, side * (ROAD * 0.5 + 16))
 				ci.draw_rect(Rect2(q - Vector2(10, 10), Vector2(20, 20)), Color(0.3, 0.32, 0.36))
-	ci.draw_line(p.call(a + 48, -3.0), p.call(b - 48, -3.0), LANE_YELLOW, 2.0)
-	ci.draw_line(p.call(a + 48, 3.0), p.call(b - 48, 3.0), LANE_YELLOW, 2.0)
+	Terrain.line(ci, p.call(a + 48, -3.0), p.call(b - 48, -3.0), LANE_YELLOW, 2.0)
+	Terrain.line(ci, p.call(a + 48, 3.0), p.call(b - 48, 3.0), LANE_YELLOW, 2.0)
 	var y := a + 60.0
 	while y < b - 72.0:
 		for lane in [-ROAD * 0.25, ROAD * 0.25]:
@@ -1087,7 +1166,7 @@ func _draw_road_segment(ci: CanvasItem, k: int, seg: int, vertical: bool, water_
 
 
 func _draw_plaza(ci: CanvasItem, r: Rect2, practice: bool) -> void:
-	ci.draw_rect(r, Color(0.19, 0.20, 0.25))
+	Terrain.rect(ci, r, Color(0.19, 0.20, 0.25))
 	var x := r.position.x + 40
 	while x < r.end.x - 40:
 		ci.draw_line(Vector2(x, r.position.y + 20), Vector2(x, r.position.y + 90), LANE_WHITE, 2.0)
