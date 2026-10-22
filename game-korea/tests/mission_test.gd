@@ -341,7 +341,7 @@ func _test_failures() -> void:
 	await _frames(2)
 	main.player.take_damage(Player.MAX_HEALTH)
 	await _frames(int(main.BUST_DELAY * 60) + 10)
-	_expect(results.back() == [false, "사망"] and not missions.active(), "죽으면 미션 실패")
+	_expect(results.back() == [false, "기절"] and not missions.active(), "죽으면 미션 실패")
 	_expect(main.player.global_position.distance_to(City.hospital_position()) < 5.0, "병원에서 다시 시작")
 	await _free(main)
 

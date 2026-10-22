@@ -43,6 +43,7 @@ var controlled := false       ## 플레이어가 운전 중 (Director가 정한�
 var has_driver := false       ## NPC 운전자가 타고 있음 — 탈취하면 끌려 나와 도망친다
 var ai: TrafficAI = null      ## 도로를 달리는 NPC 차의 운전자 (주차된 차는 null)
 var pursuit: PursuitAI = null ## 추격 중인 경찰차의 운전자
+var rotor_off := false         ## 날개를 세웠다 (병원 옥상에 서 있는 구급헬기 — PoliceHeli.parked)
 var siren := false            ## 경광등 (경찰차)
 var motor: VehicleMotor
 var health := 0.0             ## 0이 되면 불이 붙는다 (최대 stats.durability)
@@ -434,7 +435,7 @@ func airborne() -> bool:
 
 ## 시동이 걸려 날개가 돈다 (조종 중이거나 아직 떠 있다)
 func _rotor_spinning() -> bool:
-	return stats.flies and not wrecked and (controlled or altitude > 0.0)
+	return stats.flies and not wrecked and not rotor_off and (controlled or altitude > 0.0)
 
 
 ## 조종하면 날 높이까지 오르고, 내려앉는 중(landing)이거나 아무도 안 타면 내려온다.

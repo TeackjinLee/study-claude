@@ -25,6 +25,16 @@ extends Resource
 	get: return 10.0 + stat_health * 2.5 if stat_health > 0 else health
 ## 들고 다니는 무기 (경찰 등). 없으면 null
 @export var weapon: WeaponType
+## 기절시키면 이 중 하나를 떨어뜨린다 (배달원 상자 — Pickups). 비우면 없다
+@export var ko_loot: Array[WeaponType] = []
+## ko_loot 고르기에 구급상자도 넣는다
+@export var ko_loot_medkit := false
+## 기절시키면 이 무기의 총알 상자를 떨어뜨린다 (조직원 — 주인공이 가진 그 무기·든 총에 들어간다). 0이면 없다
+@export var ko_ammo := 0
+## 기절시키면 이 확률(0~1)로 총알 대신 총 자체(ko_ammo_weapon)를 떨어뜨린다
+@export var ko_gun_chance := 0.0
+## 떨어뜨리는 총알·총의 무기 (조직원 권총은 NPC용이라 주인공 권총으로 준다)
+@export var ko_ammo_weapon: WeaponType
 ## 소속 갱 (GangType.id). 시민·경찰은 비어 있다
 @export var gang: StringName
 ## 몸 크기 배율 (아이 0.7)

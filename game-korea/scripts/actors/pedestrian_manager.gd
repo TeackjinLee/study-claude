@@ -4,7 +4,7 @@ extends Node2D
 ## 배치와 행동 RNG는 고정 시드 하나에서 나온다 — 같은 입력이면 같은 결과.
 
 signal pedestrian_hit(ped: Pedestrian, vehicle: Vehicle, speed: float)
-signal person_hurt(ped: Pedestrian, by_player: bool, killed: bool)   ## 차·총·주먹·폭발 — 피해는 모두 damage()를 거친다
+signal person_hurt(ped: Pedestrian, by_player: bool, killed: bool)   ## 차·총·주먹·폭발 — 피해는 모두 damage()를 거친다. killed = 기절했다
 
 const COUNT := 24
 const SEED := 20261011
@@ -20,6 +20,7 @@ const NPC_TYPES: Array[NpcType] = [
 	preload("res://data/npc/busker.tres"),
 	preload("res://data/npc/flyer.tres"),
 	preload("res://data/npc/traffic_cop.tres"),
+	preload("res://data/npc/delivery.tres"),      # 배달원 — 기절시키면 상자에서 무엇이든 떨어진다 (Pickups)
 ]
 const TALK_RANGE := 48.0         ## 주인공이 이 안에 TALK_DELAY초 서 있으면 말을 건다 (docs/02 §5.3)
 const TALK_DELAY := 2.0
@@ -39,7 +40,7 @@ const FEAR_HOPS := 2
 const ACTIVE_RANGE := 1500.0
 const LOD_INTERVAL := 0.25
 const MAINTAIN_INTERVAL := 1.0
-const BODY_TIME := 20.0          ## 시신은 이만큼 지나고 화면 밖이면 치운다
+const BODY_TIME := 20.0          ## 기절한 사람은 이만큼 지나고 화면 밖이면 치운다 (구급대가 맡은 사람은 빼고)
 const OFFSCREEN := 950.0
 const RESPAWN_DISTANCE := 1100.0 ## 죽은 시민 수만큼 카메라에서 이보다 먼 인도에 새로 걷게 한다
 ## 도시가 넓어서 시민은 카메라 둘레에만 둔다: 블록 가운데가 이 반경 안인 열린 블록에 생기고,
@@ -202,7 +203,7 @@ func _talk(delta: float) -> void:
 			_still = 0.0
 			return
 
-## 사람에게 피해를 준다 (차에 치임·총·주먹·폭발 공통). 넘어지거나 죽으면 주변이 겁먹는다.
+## 사람에게 피해를 준다 (차에 치임·총·주먹·폭발 공통). 넘어지거나 기절하면 주변이 겁먹는다.
 func damage(p: Pedestrian, amount: float, away: Vector2, by_player: bool, knock: bool) -> void:
 	if p.is_dead():
 		return
@@ -222,10 +223,11 @@ func scare(pos: Vector2, radius: float) -> void:
 
 
 func is_alive_civilian(p: Pedestrian) -> bool:
-	return not p.is_dead() and not (p is PoliceOfficer) and not (p is GangMember) and not (p is StreetCriminal)
+	return not p.is_dead() and not (p is PoliceOfficer) and not (p is GangMember) and not (p is StreetCriminal) \
+		and not (p is Paramedic)
 
 
-## 오래된 시신을 치우고, 죽은 시민 수만큼 화면 밖에서 새로 걷게 한다
+## 구급대가 맡지 않은 채 오래 누운 사람을 치우고, 모자란 시민 수만큼 화면 밖에서 새로 걷게 한다
 func _maintain() -> void:
 	var camera := ChaseCamera.current_cam()
 	var center := camera.global_position if camera else Vector2.ZERO
@@ -234,7 +236,8 @@ func _maintain() -> void:
 	for p: Pedestrian in peds.duplicate():
 		if p.is_dead():
 			var far := p.global_position.distance_to(center) > OFFSCREEN
-			if far and (p.dead_time > BODY_TIME or not p.active):
+			var waiting := p.rescuer != null and is_instance_valid(p.rescuer)
+			if far and not waiting and (p.dead_time > BODY_TIME or not p.active):
 				remove(p)
 		elif is_alive_civilian(p):
 			# 멀리 떨어진 시민은 하나씩 치우고 카메라 둘레에 새로 걷게 한다

@@ -13,7 +13,7 @@ extends Resource
 @export var give_up_distance := 700.0    ## 주인공과 이만큼 멀어지면 놓친다
 @export var escape_time := 45.0          ## 달아난 뒤 이만큼 지나면 놓친다
 @export var reward := 30000              ## 산 채로 붙잡으면 주는 돈 (원)
-@export_range(0.0, 1.0) var kill_reward_scale := 0.5   ## 죽여서 막으면 보상 배율
+@export_range(0.0, 1.0) var kill_reward_scale := 0.5   ## 기절시켜 막으면 보상 배율 (넘어뜨려 붙잡으면 전부)
 @export var wanted_relief := 1           ## 막으면 떼 주는 수배 별 (정의 구현 보너스)
 @export var weight := 1.0                ## 고를 비중
 @export var start_text := ""             ## 저지를 때 알림

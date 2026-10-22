@@ -264,8 +264,6 @@ func zoom_ratio() -> float:
 
 func _draw() -> void:
 	if is_dead() or knocked_down:
-		if is_dead():
-			PersonDrawer.draw_blood(self, facing)
 		if IsoView.enabled:
 			PersonRig.draw(self, facing, walk_phase, 0.0, shirt, pants, hair, 1.0, null, 0, null, true)
 		else:

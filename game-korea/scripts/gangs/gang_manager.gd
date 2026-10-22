@@ -198,8 +198,11 @@ func _maintain() -> void:
 	var center := _camera_center()
 	var counts := {}
 	var dropped := false
-	for m: GangMember in members.duplicate():
-		var dist := m.global_position.distance_to(center)
+	for m in members.duplicate():
+		if not is_instance_valid(m):
+			members.erase(m)   # 기절해 구급대가 실어 갔다
+			continue
+		var dist := (m as GangMember).global_position.distance_to(center)
 		# 아주 멀리 남은 조직원은 하나씩 치우고, 주인공 가까이에 그 갱 집 블록이 있으면 거기 다시 세운다
 		if m.resident and not dropped and m.aggro <= 0.0 and dist > PedestrianManager.DESPAWN_DISTANCE \
 				and _has_home_near(m.gang, center):

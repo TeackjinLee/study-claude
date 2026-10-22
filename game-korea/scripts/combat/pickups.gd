@@ -2,6 +2,8 @@ class_name Pickups
 extends Node2D
 ## 무기 상자·구급상자. 맵 고정 위치에 있고, 먹으면 RESPAWN초 뒤 다시 생긴다.
 ## 걸어서든 차로든 지나가면 먹는다 (GTA2처럼).
+## 기절한 사람도 떨어뜨린다 (한 번 먹으면 사라진다): 군인은 소총, 배달원은 상자 속 무엇이든(NpcType.ko_loot),
+## 조직원은 총알 상자(ko_ammo)·드물게 총(ko_gun_chance). 무작위는 자기 rng만 쓴다.
 
 signal picked(label: String)
 
@@ -20,12 +22,14 @@ const CAR_MG: WeaponType = preload("res://data/weapons/car_mg.tres")
 const RIFLE: WeaponType = preload("res://data/weapons/rifle.tres")
 const SOLDIER: NpcType = preload("res://data/npc/soldier.tres")
 const SIZE := 18.0
+const LOOT_SEED := 20261024
 
 var director: Director
 var player: Player
 var pedestrians: PedestrianManager
-## {pos, weapon(null이면 구급상자), wait, once(먹으면 사라짐)}
+## {pos, weapon(null이면 구급상자), wait, once(먹으면 사라짐), ammo(총알 상자면 탄 수 — 아니면 0)}
 var crates: Array[Dictionary] = []
+var loot_rng := RandomNumberGenerator.new()   ## 떨어뜨릴 것 고르기 전용 (다른 rng를 뽑으면 다른 결과가 바뀐다)
 
 
 func _ready() -> void:
@@ -56,21 +60,40 @@ func _ready() -> void:
 	_add(City.sidewalk_loop(Vector2i(-2, 4))[1], null)
 
 
-func _add(pos: Vector2, weapon: WeaponType, once := false) -> void:
-	crates.append({"pos": pos, "weapon": weapon, "wait": 0.0, "once": once})
+func _add(pos: Vector2, weapon: WeaponType, once := false, ammo := 0) -> void:
+	crates.append({"pos": pos, "weapon": weapon, "wait": 0.0, "once": once, "ammo": ammo})
 
 
-## 쓰러진 군인이 소총을 떨어뜨린다 (docs/05 §3: 소총은 군인 드롭)
-func drop(pos: Vector2, weapon: WeaponType) -> void:
-	_add(pos, weapon, true)
+## 기절한 사람이 떨어뜨린다 (한 번 먹으면 사라진다). weapon이 null이면 구급상자, ammo > 0이면 그 무기의 총알 상자
+func drop(pos: Vector2, weapon: WeaponType, ammo := 0) -> void:
+	_add(pos, weapon, true, ammo)
 	queue_redraw()
 
 
 func _ready_drops() -> void:
+	loot_rng.seed = LOOT_SEED
 	if pedestrians:
 		pedestrians.person_hurt.connect(func(p: Pedestrian, _by: bool, killed: bool):
-			if killed and p.npc == SOLDIER:
-				drop(p.global_position, RIFLE))
+			if killed:
+				drop_loot(p))
+
+
+## 기절한 사람이 가진 것을 떨어뜨린다 (docs/05 §3: 소총은 군인 드롭)
+func drop_loot(p: Pedestrian) -> void:
+	var pos := p.global_position
+	var npc := p.npc
+	if npc == SOLDIER:
+		drop(pos, RIFLE)
+	if not npc.ko_loot.is_empty():
+		# 배달 상자: 실은 것 중 하나 (구급상자도)
+		var n := npc.ko_loot.size() + (1 if npc.ko_loot_medkit else 0)
+		var k := loot_rng.randi() % n
+		drop(pos + Vector2(10, 0), npc.ko_loot[k] if k < npc.ko_loot.size() else null)
+	if npc.ko_ammo > 0 and npc.ko_ammo_weapon:
+		if loot_rng.randf() < npc.ko_gun_chance:
+			drop(pos, npc.ko_ammo_weapon)                  # 드물게 총 자체
+		else:
+			drop(pos, npc.ko_ammo_weapon, npc.ko_ammo)     # 총알
 
 
 func _physics_process(delta: float) -> void:
@@ -97,6 +120,14 @@ func _physics_process(delta: float) -> void:
 ## 상자를 연다. 구급상자는 체력이 깎였을 때만 먹는다.
 func take(c: Dictionary) -> bool:
 	var w: WeaponType = c.weapon
+	if c.get("ammo", 0) > 0:
+		# 총알 상자: 그 무기가 있으면 거기, 없으면 지금 든(또는 가진) 총에 넣는다. 총이 없으면 못 먹는다
+		var gun := w if player.arsenal.has(w) else _ammo_target()
+		if gun == null or player.arsenal.ammo_of(gun) >= gun.max_ammo:
+			return false
+		player.arsenal.give(gun, c.ammo)
+		picked.emit("%s 총알 +%d" % [gun.display_name, c.ammo])
+		return true
 	if w == null:
 		if player.health >= Player.MAX_HEALTH:
 			return false
@@ -108,6 +139,17 @@ func take(c: Dictionary) -> bool:
 	player.arsenal.give(w, w.pickup_ammo)
 	picked.emit(w.display_name if w.infinite else "%s +%d" % [w.display_name, w.pickup_ammo])
 	return true
+
+
+## 총알을 넣을 총: 지금 든 총, 아니면 가진 총 중 맨 앞 (주먹·방망이·무한 무기는 빼고)
+func _ammo_target() -> WeaponType:
+	var held := player.arsenal.current()
+	if not held.melee and not held.infinite:
+		return held
+	for w in player.arsenal.weapons:
+		if not w.melee and not w.infinite:
+			return w
+	return null
 
 
 func _draw() -> void:
@@ -122,6 +164,13 @@ func _draw() -> void:
 			draw_rect(r, Color(0.95, 0.95, 0.95))
 			draw_rect(Rect2(c.pos - Vector2(2.5, 7), Vector2(5, 14)), Color(0.9, 0.1, 0.12))
 			draw_rect(Rect2(c.pos - Vector2(7, 2.5), Vector2(14, 5)), Color(0.9, 0.1, 0.12))
+		elif c.get("ammo", 0) > 0:
+			# 총알 상자: 짙은 국방색 탄통에 노란 탄 세 알
+			var box := Rect2(c.pos - Vector2(8, 6), Vector2(16, 12))
+			draw_rect(box, Color(0.3, 0.34, 0.22))
+			draw_rect(box, Color(0.75, 0.7, 0.4), false, 1.5)
+			for i in 3:
+				draw_rect(Rect2(c.pos + Vector2(-5.5 + i * 4.0, -4), Vector2(2.5, 7)), Color(0.95, 0.78, 0.3))
 		else:
 			draw_rect(r, Color(0.55, 0.38, 0.18))
 			draw_rect(r, Color(0.95, 0.75, 0.3), false, 2.0)

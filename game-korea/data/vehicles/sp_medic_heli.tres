@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="VehicleType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/vehicle_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"SP_MEDIC_HELI"
+display_name = "병원 구급헬기"
+category = &"heli"
+max_speed = 420.0
+acceleration = 300.0
+reverse_speed = 0
+brake_force = 500
+coast_drag = 100
+turn_rate = 2.0
+turn_speed_ref = 100
+steer_response = 4.0
+grip = 1000
+handbrake_grip = 1.0
+handbrake_decel = 100
+drift_turn_boost = 1.0
+mass = 2.0
+durability = 200
+size = Vector2(44, 96)
+height = 20.0
+body_color = Color(0.95, 0.95, 0.96, 1)
+roof_color = Color(0.85, 0.12, 0.14, 1)
+enterable = false
+flies = true
+fly_height = 170.0
+climb_rate = 70.0
+bank_angle = 0.3
+pitch_angle = 0.18

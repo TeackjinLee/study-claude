@@ -121,6 +121,7 @@ var combat: Combat
 var weapons: PlayerWeapons
 var pickups: Pickups
 var fires: Fires
+var ems: EmsDispatcher                    ## 구급대 (기절한 사람을 구급차·병원 구급헬기로 실어 간다)
 var sky: DayNight
 var jobs: SideJobs
 var street_events: StreetEvents
@@ -258,6 +259,12 @@ func _ready() -> void:
 	add_child(fires)
 	combat.fires = fires
 
+	ems = EmsDispatcher.new()
+	ems.pedestrians = pedestrians
+	ems.traffic = traffic
+	ems.vehicles = vehicles
+	add_child(ems)
+
 	gangs = GangManager.new()
 	gangs.gangs = GANGS
 	gangs.respect = respect
@@ -352,6 +359,7 @@ func _ready() -> void:
 	_update_goal()
 	director.notice.connect(hud.notify)
 	pickups.picked.connect(hud.notify)
+	ems.heli_launched.connect(func(_at: Vector2): hud.notify("병원 구급헬기 출동"))
 	spray_shop.notice.connect(hud.notify)
 	missions.mission_started.connect(_on_mission_started)
 	missions.mission_finished.connect(_on_mission_finished)
@@ -600,14 +608,14 @@ func _on_busted(fine: int) -> void:
 	_respawn("체포!", "벌금 ₩%s · 무기 압수" % Hud.won(paid), City.nearest_police_station(director.controlled_target().global_position))
 
 
-## 죽었다: 치료비를 내고 무기를 잃은 채 병원 앞에서 다시 시작한다
+## 기절했다: 치료비를 내고 무기를 잃은 채 병원 앞에서 다시 시작한다
 func _on_died() -> void:
 	if _respawning:
 		return
 	var paid := wallet.pay(0 if jobs.has_bonus(&"ambulance") else HOSPITAL_FEE)
-	missions.fail("사망")
-	jobs.end("사망")
-	_respawn("사망!", "치료비 ₩%s · 무기 분실" % Hud.won(paid), City.nearest_hospital(director.controlled_target().global_position))
+	missions.fail("기절")
+	jobs.end("기절")
+	_respawn("기절!", "치료비 ₩%s · 무기 분실" % Hud.won(paid), City.nearest_hospital(director.controlled_target().global_position))
 
 
 func _respawn(title: String, sub: String, at: Vector2) -> void:
@@ -638,7 +646,7 @@ func _on_mission_finished(m: MissionType, passed: bool, reason: String) -> void:
 	if passed:
 		var g := gangs.gang(m.gang)
 		hud.banner("미션 성공!", "₩%s · %s 존경도 +%d" % [Hud.won(m.reward), g.display_name, m.respect], 3.0, Hud.GOLD)
-	elif _respawning or reason == "사망" or reason == "체포":
+	elif _respawning or reason == "기절" or reason == "체포":
 		hud.notify("미션 실패 — %s" % reason)
 	else:
 		hud.banner("미션 실패", reason)

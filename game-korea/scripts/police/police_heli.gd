@@ -1,6 +1,7 @@
 class_name PoliceHeli
 extends Node2D
-## 하늘을 나는 NPC 헬기 — 경찰 헬기(수배 ★5~, docs/02 POLICE_HELI)·군 기동헬기(★6)·119 구조헬기(큰불, Fires).
+## 하늘을 나는 NPC 헬기 — 경찰 헬기(수배 ★5~, docs/02 POLICE_HELI)·군 기동헬기(★6)·119 구조헬기(큰불, Fires)·
+## 병원 구급헬기(여럿이 한꺼번에 기절, EmsDispatcher — 병원 옥상 헬기장에 날개를 세우고 서 있다가 뜬다).
 ## 건물 위를 곧장 날아 표적을 따라가 그 위를 맴돈다. 경찰·군 헬기는 땅에 탐조등을 비추고, 탐조등 안에 들면
 ## 경찰이 위치를 안다(시야 공유). 사수가 탐조등 안의 주인공에게 기관총을 쏜다 (PoliceDispatcher).
 ## 총에 맞으면 체력이 깎이고, 0이 되면 돌며 떨어져 터진다 (Combat이 맞았는지 본다 — 공중이라 몸통 충돌체가 없다).
@@ -37,6 +38,8 @@ var health := MAX_HEALTH
 var reload := 0.0
 var down := false                 ## 격추됐다 (떨어지는 중)
 var leaving := false              ## 수배가 내려가(불이 꺼져) 돌아간다
+var parked := false               ## 옥상에 날개를 세우고 서 있다 (움직이지 않는다)
+var height := -1.0                ## 몸통이 오르내릴 높이 (화면 px, 땅 높이 포함). 음수면 차종 fly_height
 var heading := 0.0                ## 기수 방향 (Vehicle.rotation과 같은 기준: 0 = 월드 −y)
 var _rotor := 0.0
 var _orbit := 0.0
@@ -59,7 +62,8 @@ func _ready() -> void:
 	_look.paint = stats.body_color
 	_look.has_driver = true
 	_look.siren = beacons
-	_look.altitude = stats.fly_height
+	_look.altitude = stats.fly_height if height < 0.0 else height
+	_look.rotor_off = parked
 	_body = Node2D.new()
 	_body.draw.connect(_draw_body)
 	add_child(_body)
@@ -96,6 +100,14 @@ func _physics_process(delta: float) -> void:
 		_look.altitude = stats.fly_height * maxf(1.0 - _fall / FALL_TIME, 0.0)
 		_sync()
 		return
+	_look.rotor_off = parked
+	if parked:
+		velocity = Vector2.ZERO
+		_look.bank = 0.0
+		_look.pitch = 0.0
+		_sync()
+		return
+	_look.altitude = move_toward(_look.altitude, stats.fly_height if height < 0.0 else height, stats.climb_rate * delta)
 	_orbit += delta * 0.9
 	var goal := target + Vector2.RIGHT.rotated(_orbit) * hover_radius
 	if leaving:
@@ -209,7 +221,8 @@ func _draw_top() -> void:
 	if not IsoView.enabled or _look == null:
 		return
 	if not down:
-		Vehicle.draw_rotor(_top, _look)
+		if not parked:
+			Vehicle.draw_rotor(_top, _look)
 		return
 	_top.draw_set_transform_matrix(Transform2D(-heading, Vector2.ZERO) * IsoView.screen_frame(Vector2.ZERO, _look.altitude + stats.height))
 	var now := Time.get_ticks_msec() / 1000.0

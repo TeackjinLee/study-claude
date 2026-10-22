@@ -643,7 +643,7 @@ static func _build(s: VehicleType) -> Array:
 		"etc_camper": return _camper(w, l, h)
 		"sp_heli": return _heli(w, l, h)
 		"police_heli": return _heli(w, l, h, {"police": true})
-		"sp_fire_heli": return _rescue_heli(w, l, h)
+		"sp_fire_heli", "sp_medic_heli": return _rescue_heli(w, l, h)
 		"army_heli": return _army_heli(w, l, h)
 		"etc_bike": return _bike(w, l, false)
 		"etc_bicycle": return _bike(w, l, true)

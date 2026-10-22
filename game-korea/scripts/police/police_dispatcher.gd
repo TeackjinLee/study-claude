@@ -20,6 +20,7 @@ const SWAT_NPC: NpcType = preload("res://data/npc/swat.tres")
 const ARMY_TYPE: VehicleType = preload("res://data/vehicles/sp_army.tres")
 const SOLDIER_NPC: NpcType = preload("res://data/npc/soldier.tres")
 const HELI_NPC: NpcType = preload("res://data/npc/police_heli.tres")
+const PARAMEDIC_NPC: NpcType = preload("res://data/npc/paramedic.tres")   ## 기절시키면 바로 ★4
 const ARMY_HELI_TYPE: VehicleType = preload("res://data/vehicles/army_heli.tres")   ## ★6: 헬기 한 대는 군 기동헬기
 const SPG_TYPE: VehicleType = preload("res://data/vehicles/army_spg.tres")           ## ★6: 자주포 (포탑을 돌려 곡사포를 쏜다)
 const JEEP_TYPE: VehicleType = preload("res://data/vehicles/army_jeep.tres")         ## ★6: 소형 전술차량 (군인 둘)
@@ -227,6 +228,7 @@ func _on_vehicle_stolen(_v: Vehicle, driver: Pedestrian) -> void:
 
 
 ## 주인공이 사람을 다치게 했다 (차·총·주먹·폭발). 경찰관은 본인이 목격자다.
+## 구급대원을 기절시키면 목격과 상관없이 바로 ★4다 (무전이 끊긴 구급대를 본부가 안다).
 func _on_person_hurt(p: Pedestrian, by_player: bool, killed: bool) -> void:
 	if not by_player:
 		return
@@ -239,6 +241,8 @@ func _on_person_hurt(p: Pedestrian, by_player: bool, killed: bool) -> void:
 		elif p.npc == SOLDIER_NPC:
 			kill = WantedSystem.Crime.KILL_SOLDIER
 		_crime(kill if killed else WantedSystem.Crime.HIT_OFFICER, true)
+	elif killed and p.npc == PARAMEDIC_NPC:
+		_crime(WantedSystem.Crime.KO_PARAMEDIC, true)
 	else:
 		_crime(WantedSystem.Crime.KILL_PEDESTRIAN if killed else WantedSystem.Crime.HIT_PEDESTRIAN, sees(p.global_position))
 

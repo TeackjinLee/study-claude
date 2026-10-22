@@ -2,6 +2,8 @@ class_name Pedestrian
 extends CharacterBody2D
 ## 보행자 한 명. 블록 둘레 인도를 돌고, 모퉁이에서 가끔 멈춘다.
 ## 차 감지는 PedestrianManager가 하고 여기엔 dodge()/panic()/knock_down()/hurt()로 알려 준다.
+## 사람은 죽지 않는다: 체력이 0이 되면 기절(DEAD — 이름만 예전 그대로)해 누운 채 일어나지 않고,
+## 구급대(EmsDispatcher)가 들것·구급헬기로 실어 간다.
 
 enum State { WALK, IDLE, DODGE, FLEE, KNOCKED, DEAD }
 
@@ -24,7 +26,9 @@ var facing := 0.0
 var walk_phase := 0.0
 var active := true
 var health := 20.0
-var dead_time := 0.0
+var dead_time := 0.0               ## 기절한 뒤 지난 시간
+var rescuer: Object = null        ## 이 기절한 사람을 맡은 구급대 (구급차·구급헬기) — 맡은 사람은 치우지 않는다
+var carried := false              ## 들것에 실려 가는 중 (들것을 밑에 그린다)
 
 var shirt: Color
 var pants: Color
@@ -153,7 +157,7 @@ func knock_down(away: Vector2) -> void:
 	_set_state(State.KNOCKED, KNOCK_TIME)
 
 
-## 다친다. knock이면 넘어지고, 아니면 겁먹고 도망친다. 죽었으면 true
+## 다친다. knock이면 넘어지고, 아니면 겁먹고 도망친다. 기절했으면 true
 ## (공포 전파·범죄 신고는 PedestrianManager.damage가 한다 — 피해는 거기를 거친다)
 ## 보호 대상(아이)은 다치지 않고 도망만 친다.
 func hurt(amount: float, away: Vector2, knock: bool) -> bool:
@@ -173,12 +177,13 @@ func hurt(amount: float, away: Vector2, knock: bool) -> bool:
 	return false
 
 
+## 기절한다 (일어나지 않는다 — 구급대가 실어 간다)
 func die(away: Vector2) -> void:
 	health = 0.0
 	if away != Vector2.ZERO:
 		facing = Vector2.UP.angle_to(away)
 	velocity = Vector2.ZERO
-	_set_collision(0, _col_base.y)          # 시신은 총알·차를 막지 않는다
+	_set_collision(0, _col_base.y)          # 기절한 사람은 총알·차를 막지 않는다
 	_set_state(State.DEAD, 0.0)
 	dead_time = 0.0
 	queue_redraw()
@@ -208,6 +213,7 @@ func _set_collision(layer: int, mask: int) -> void:
 		collision_mask = m
 
 
+## 기절했다 (예전 이름 그대로 — 죽음은 없다)
 func is_dead() -> bool:
 	return state == State.DEAD
 
@@ -233,7 +239,7 @@ func _process(_delta: float) -> void:
 	z_as_relative = not IsoView.enabled
 	z_index = IsoView.z_at(global_position, level) if IsoView.enabled else 0
 	var key := [int(walk_phase * 24.0 / TAU), snappedf(facing, 0.05), state, speech_time > 0.0, speech,
-		IsoView.enabled, npc, shirt, snappedf(IsoView.ground(global_position, level), 0.5)]
+		IsoView.enabled, npc, shirt, snappedf(IsoView.ground(global_position, level), 0.5), carried]
 	if key != _drawn_key:
 		_drawn_key = key
 		queue_redraw()
@@ -253,8 +259,8 @@ func _set_state(s: State, duration: float) -> void:
 
 
 func _draw() -> void:
-	if state == State.DEAD:
-		PersonDrawer.draw_blood(self, facing)
+	if carried:
+		_draw_stretcher()
 	var down := state == State.KNOCKED or state == State.DEAD
 	if IsoView.enabled:
 		# 2.5D: 4×2 스프라이트 시트(PersonRig)로 정지·걷기·달리기·쓰러짐을 그린다
@@ -262,8 +268,12 @@ func _draw() -> void:
 		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, npc.body_scale, npc, look_seed, null, down)
 		if speech_time > 0.0 and speech != "" and state != State.DEAD:
 			PersonDrawer.draw_speech(self, speech, npc.body_scale)
+		if state == State.DEAD:
+			_draw_out_stars()
 		return
 	PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, down, npc.body_scale, npc, look_seed)
+	if state == State.DEAD:
+		_draw_out_stars()
 	if speech_time > 0.0 and speech != "" and state != State.DEAD:
 		var font := ThemeDB.fallback_font
 		var w := font.get_string_size(speech, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 12.0
@@ -272,3 +282,32 @@ func _draw() -> void:
 		draw_rect(box, Color(0, 0, 0, 0.6), false, 1.0)
 		draw_colored_polygon(PackedVector2Array([Vector2(-4, -16), Vector2(4, -16), Vector2(0, -10)]), Color(1, 1, 1, 0.92))
 		draw_string(font, Vector2(box.position.x, box.end.y - 5), speech, HORIZONTAL_ALIGNMENT_CENTER, w, 12, Color(0.1, 0.1, 0.12))
+
+
+## 들것: 누운 사람 밑에 주황 틀과 흰 매트 (진행 방향으로 길게, 바닥보다 조금 위)
+func _draw_stretcher() -> void:
+	var up := IsoView.lift(IsoView.ground(global_position, level) + 5.0) if IsoView.enabled else Vector2.ZERO
+	draw_set_transform(up, facing, Vector2.ONE)
+	draw_rect(Rect2(-7, -17, 14, 34), Color(0, 0, 0, 0.25))
+	draw_rect(Rect2(-6, -16, 12, 32), Color(0.95, 0.5, 0.12))
+	draw_rect(Rect2(-4.5, -14, 9, 28), Color(0.94, 0.95, 0.97))
+	for x: float in [-6.0, 6.0]:
+		draw_line(Vector2(x, -20), Vector2(x, 20), Color(0.55, 0.57, 0.6), 1.5)   # 손잡이 막대
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 기절 표시: 누운 사람 머리 위에 노란 별 셋 (들것에 실리면 그리지 않는다)
+func _draw_out_stars() -> void:
+	if carried:
+		return
+	if IsoView.enabled:
+		draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, 10.0 + IsoView.ground(global_position, level)))
+	else:
+		draw_set_transform(Vector2(0, -12), 0.0, Vector2.ONE)
+	for k in 3:
+		var c := Vector2(-8.0 + k * 8.0, -2.0 - (k % 2) * 4.0)
+		var pts := PackedVector2Array()
+		for i in 10:
+			pts.append(c + Vector2.UP.rotated(i * PI / 5.0) * (3.2 if i % 2 == 0 else 1.4))
+		draw_colored_polygon(pts, Color(1.0, 0.86, 0.2))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

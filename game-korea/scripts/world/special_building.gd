@@ -12,6 +12,9 @@ const NAVY := Color(0.1, 0.2, 0.5)
 const GREEN := Color(0.16, 0.46, 0.36)
 const RED := Color(0.82, 0.12, 0.14)
 const HELIPAD := Color(0.26, 0.28, 0.3)   ## 병원 옥상 헬리패드 바닥
+const HELIPAD_AT := Vector2(0.5, 0.05)     ## 헬리패드 자리 (본관 비율)
+const HELIPAD_SIZE := Vector2(0.25, 0.4)
+const HELIPAD_H := 1.5
 const GOLD := Color(0.86, 0.66, 0.26)
 const STEEL := Color(0.3, 0.31, 0.33)
 const LINE := Color(0.92, 0.92, 0.88, 0.75)
@@ -88,6 +91,17 @@ static func _body_hospital(r: Rect2) -> Rect2:
 	return _fit(r, Vector2(320, 200), Vector2(0.3, 0.1))
 
 
+## 병원 옥상 헬리패드 자리 (월드 사각형) — 구급헬기(EmsDispatcher)가 여기 선다
+static func hospital_helipad(r: Rect2) -> Rect2:
+	var b := _body_hospital(r)
+	return Rect2(b.position + b.size * HELIPAD_AT, b.size * HELIPAD_SIZE)
+
+
+## 병원 옥상 헬리패드 윗면 높이 (땅에서)
+static func hospital_pad_height(height: float) -> float:
+	return maxf(height, FH * 4.0) + HELIPAD_H
+
+
 static func _hospital(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingType, seed: int, height: float) -> void:
 	var b := _body_hospital(r)
 	var h := maxf(height, FH * 4.0)
@@ -99,7 +113,7 @@ static func _hospital(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingType
 	BuildingModel._units(main, seed, 4)
 	BuildingModel._plant(main, Vector2(0.06, 0.62), Vector2(0.22, 0.22), 4.0, BuildingModel.HEDGE)   # 옥상 화단
 	# 옥상 헬리패드 (북동쪽: 계단실은 북서쪽, 실외기는 남동쪽이라 비어 있다)
-	var pad := BuildingModel._plant(main, Vector2(0.5, 0.05), Vector2(0.25, 0.4), 1.5, HELIPAD)
+	var pad := BuildingModel._plant(main, HELIPAD_AT, HELIPAD_SIZE, HELIPAD_H, HELIPAD)
 	pad.roof = &"helipad"
 	pad.roof_color = HELIPAD
 	out.append(main)

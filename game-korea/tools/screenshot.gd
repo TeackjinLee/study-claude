@@ -37,6 +37,11 @@ func _ready() -> void:
 		await _army_shots(main)
 		get_tree().quit()
 		return
+	if "--only=ems" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _ems_shots(main)
+		get_tree().quit()
+		return
 	if "--only=air" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _air_shots(main)
@@ -1034,6 +1039,69 @@ func _overpass_shots(main: Node2D) -> void:
 	await _frames(60)
 	await _save("overpass_front")
 	cam.zoom = Vector2(ChaseCamera.BASE_ZOOM, ChaseCamera.BASE_ZOOM)
+
+
+## 구급대 (`-- --only=ems`): 병원 옥상에 선 구급헬기(ems_pad) → 기절한 사람(ems_ko, 머리 위 별) → 들것으로 옮기는 대원(ems_stretcher)
+## → 11명이 쓰러져 뜬 헬기가 줄로 끌어올리는 모습(ems_hoist) → 옥상에 돌아와 내려앉은 헬기(ems_back)
+func _ems_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	var ems: EmsDispatcher = main.ems
+	var peds: PedestrianManager = main.pedestrians
+	main.street_events.enabled = false
+	main.sky.paused_clock = true
+	main.sky.set_hour(14.0)
+	cam.target = null
+	cam.global_position = ems.pad + IsoView.lift(ems.pad_height)
+	await _frames(20)
+	await _save("ems_pad")
+	cam.target = player
+	cam.snap()
+	var loop := City.sidewalk_loop(City.nearest_block(player.global_position))
+	var spot := loop[0].lerp(loop[1], 0.5)
+	var rng := RandomNumberGenerator.new()
+	var p := Pedestrian.new()
+	p.setup(PedestrianManager.NPC_TYPES[0], rng, loop, 0, 0.0, 1)
+	p.position = spot
+	peds.add(p)
+	peds.damage(p, 999.0, Vector2.RIGHT, false, true)
+	cam.target = null
+	cam.global_position = spot
+	await _frames(20)
+	await _save("ems_ko")
+	for f in 60 * 60:
+		await _frames(1)
+		player.revive()
+		if is_instance_valid(p) and p.carried:
+			break
+	await _frames(25)
+	if is_instance_valid(p):
+		cam.global_position = p.global_position
+	await _frames(2)
+	await _save("ems_stretcher")
+	for i in 11:
+		var q := Pedestrian.new()
+		q.setup(PedestrianManager.NPC_TYPES[i % 3], rng, loop, 0, 0.0, 1)
+		q.position = spot + Vector2(0, 120) + Vector2.from_angle(i * TAU / 11.0) * 60.0
+		peds.add(q)
+		peds.damage(q, 999.0, Vector2.RIGHT, false, true)
+	for f in 60 * 60:
+		await _frames(1)
+		player.revive()
+		if ems.hoisting != null and ems._hoist > EmsDispatcher.HOIST_TIME * 0.5:
+			break
+	cam.global_position = ems.heli.global_position + IsoView.lift(ems.heli.altitude() * 0.5)
+	await _frames(2)
+	await _save("ems_hoist")
+	for f in 60 * 120:
+		await _frames(1)
+		player.revive()
+		if ems.air == EmsDispatcher.Air.PARKED:
+			break
+	cam.global_position = ems.pad + IsoView.lift(ems.pad_height)
+	await _frames(10)
+	await _save("ems_back")
+	cam.target = player
 
 
 ## NPC 헬기 (입체 모형): ★5 경찰 헬기 탐조등 → ★6 군 기동헬기 → 큰불에 물을 쏟는 119 구조헬기 (`-- --only=air`)
