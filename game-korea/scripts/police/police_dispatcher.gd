@@ -588,8 +588,11 @@ func _shoot(o: PoliceOfficer, target: Vector2, in_air := false) -> void:
 	o.reload = weapon.fire_interval * shoot_rng.randf_range(SHOOT_DELAY[0], SHOOT_DELAY[1])
 	var dir := (target - pos).normalized()
 	o.facing = Vector2.UP.angle_to(dir)
+	o.set_meta(&"shot_at", Time.get_ticks_msec() / 1000.0)   # 그림: 서 있으면 발사 장면 (PersonRig._draw_gun — 군인 소총)
 	var exclude: Array[RID] = [o.get_rid()]
-	combat.fire(pos + dir * 10.0, dir, weapon, false, exclude, 0.0, o.level)
+	# 총 자세 그림(군인 소총)이면 궤적·총구 불꽃을 그림 속 총구에서 (그림만 — 맞히기는 그대로)
+	var shown: Variant = PersonRig.gun_muzzle(o, o.facing, o.npc.body_scale, o._draw_gait(), weapon, o.npc)
+	combat.fire(pos + dir * 10.0, dir, weapon, false, exclude, 0.0, o.level, shown)
 
 
 func _nearest_door(v: Vehicle, from: Vector2) -> Vector2:

@@ -88,6 +88,20 @@ func resume_walking() -> void:
 	_set_state(State.WALK, 0.0)
 
 
+## 경찰은 일하는 동안 늘 WALK 상태라 빠르기로 걸음을 고른다 — 서 있으면 서 있기(군인은 소총 겨누기), 쫓아 뛰면 달리기 그림
+func _draw_gait() -> float:
+	if state != State.WALK:
+		return super._draw_gait()
+	var v := velocity.length()
+	if v < 5.0:
+		return 0.0
+	return 2.0 if v > npc.walk_speed_max * 1.3 else 1.0
+
+
+func _drawn_weapon() -> WeaponType:
+	return npc.weapon
+
+
 func _draw() -> void:
 	super._draw()
 	if _swing >= 0.0 and state != State.KNOCKED and state != State.DEAD:

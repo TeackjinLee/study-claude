@@ -1,1 +1,1 @@
-{"dirs": ["s", "se", "e", "n", "nw", "w", "sw"], "frames": 8, "run_dirs": ["s", "se", "e", "ne", "n", "nw", "w", "sw"], "run_frames": 8, "turns": []}
+{"dirs": ["s", "se", "e", "ne", "n"], "frames": 12, "run_dirs": ["s", "se", "e", "ne", "n"], "run_frames": 8, "turns": [], "rifle_dirs": ["se", "e", "nw", "w"], "rifle_clips": [{"name": "aim", "col": 0, "frames": 4, "duration": 0.84, "loop": true}, {"name": "fire", "col": 4, "frames": 8, "duration": 0.3, "loop": false}], "rifle_muzzle": {"se": [41.8, -61.0], "e": [51.0, -75.0], "nw": [-30.2, -78.0], "w": [-40.0, -69.8]}}

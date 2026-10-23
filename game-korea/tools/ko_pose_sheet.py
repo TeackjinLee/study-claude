@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""포즈 옮기기로 받은 넘어짐 그림 → 영상 동작 시트 형식(00_<id>_ko_dir8.png + .json, tools/punch_video_sheet.py와 같은 꼴)
+"""포즈 옮기기로 받은 넘어짐·소총 그림 → 영상 동작 시트 형식(<NN>_<id>_<kind>_dir8.png + .json, tools/punch_video_sheet.py와 같은 꼴)
 
 주인공 넘어짐 영상 시트(00_player_ko_dir8.png)에서 10장을 골라 동작 참고(reference/ko_motion/fall10_motion_ref_a·b.png,
 5열 × 6행, 줄은 영상 시트 줄 순서)를 만들고, 코덱스가 인물만 바꿔 그린 두 장(<NN>_<id>_fall10_a·b.png)을 받는다.
@@ -7,7 +7,11 @@
 생성 그림은 칸 안 자리가 조금씩 흔들려, 그대로 쓰면 쓰러지는 동안 몸이 미끄러진다. 발 기준점·키·누운 머리 쪽은 주인공 줄 그대로.
 그 다음 `python3 tools/prepare_character_sprites.py <id> --attacks-only`가 assets/characters/<id>_ko_dir8.png를 낸다.
 
+소총(--kind=rifle)도 같다: 주인공 소총 시트(00_player_rifle_dir8.png, ↘ → ↖ ←)에서 겨누기 4장 + 쏘기 8장을 고른 참고
+(reference/soldier_motion/rifle12_motion_ref_a·b.png, 6열 × 4행)로 받은 <NN>_<id>_rifle12_a·b.png → <NN>_<id>_rifle_dir8.png.
+
   python3 tools/ko_pose_sheet.py 01_civ_f [--debug]
+  python3 tools/ko_pose_sheet.py 25_soldier --kind=rifle
 """
 import json
 import sys
@@ -20,12 +24,19 @@ sys.path.insert(0, str(Path(__file__).parent))
 from prepare_character_sprites import _key_background  # noqa: E402
 
 CHARS = Path(__file__).resolve().parent.parent / "output/imagegen/characters"
-REF = CHARS / "00_player_ko_dir8.png"
-PICK = [0, 3, 6, 9, 12, 15, 18, 21, 23, 32]   ## 참고에 쓴 주인공 장 (fall 24장 중 9장 + 숨쉬기 1장) — 참고 그림과 같아야 한다
-COLS, ROWS = 5, 6
-FALL_N = 9          ## 앞 9장 = 쓰러짐, 9·10장 = 누워 숨쉬기 (9장째를 두 동작이 함께 쓴다)
-FALL_TIME = 1.2
-OUT_TIME = 1.6
+## 종류마다: 주인공 영상 시트, 참고에 쓴 장(참고 그림과 같아야 한다), 참고 칸 배치, 받은 그림 이름, 게임 시트 칸 차례(받은 장 번호), 동작
+KINDS = {
+    "ko": {"ref": "00_player_ko_dir8.png", "pick": [0, 3, 6, 9, 12, 15, 18, 21, 23, 32], "cols": 5, "rows": 6,
+           "src": "reference/ko_motion/{stem}_fall10_{part}.png", "wide_from": 4,
+           # 앞 9장 = 쓰러짐(1.2초 한 번), 9·10장 = 누워 숨쉬기 (9장째를 두 동작이 함께 쓴다)
+           "order": list(range(9)) + [8, 9],
+           "clips": [("fall", 0, 9, 1.2, False), ("out", 9, 2, 1.6, True)]},
+    "rifle": {"ref": "00_player_rifle_dir8.png", "pick": [0, 5, 10, 15] + list(range(20, 28)), "cols": 6, "rows": 4,
+              "src": "reference/soldier_motion/{stem}_rifle12_{part}.png", "wide_from": 99,
+              # 겨눈 채 숨쉬기 4장 되풀이 · 쏘기(반동) 8장
+              "order": list(range(12)),
+              "clips": [("aim", 0, 4, 0.84, True), ("fire", 4, 8, 0.3, False)]},
+}
 
 
 def _bbox(a: np.ndarray):
@@ -84,7 +95,7 @@ def _main_blobs(rgba: np.ndarray) -> np.ndarray:
     return out
 
 
-def _cells(path: Path) -> list:
+def _cells(path: Path, COLS: int, ROWS: int) -> list:
     rgb = np.array(Image.open(path).convert("RGB")).astype(np.int32)
     rgba = _key_background(rgb, unmix=True)
     h, w = rgba.shape[:2]
@@ -95,23 +106,26 @@ def _cells(path: Path) -> list:
 
 def main() -> None:
     stem = sys.argv[1]
+    kind = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--kind=")), "ko")
+    K = KINDS[kind]
+    REF = CHARS / K["ref"]
     info = json.loads(REF.with_suffix(".json").read_text())
     W, H = info["cell"]
+    ROWS = K["rows"]
     ref = np.array(Image.open(REF).convert("RGBA"))
-    got = [a + b for a, b in zip(_cells(CHARS / f"reference/ko_motion/{stem}_fall10_a.png"),
-                                 _cells(CHARS / f"reference/ko_motion/{stem}_fall10_b.png"))]
-    cols = PICK[:FALL_N] + PICK[FALL_N - 1:]
-    out = np.zeros((H * ROWS, W * len(cols), 4), np.uint8)
+    got = [a + b for a, b in zip(*(_cells(CHARS / K["src"].format(stem=stem, part=part), K["cols"], ROWS) for part in "ab"))]
+    order = K["order"]
+    out = np.zeros((H * ROWS, W * len(order), 4), np.uint8)
     for r in range(ROWS):
-        refs = [_bbox(ref[r * H:(r + 1) * H, c * W:(c + 1) * W, 3]) for c in PICK]
+        refs = [_bbox(ref[r * H:(r + 1) * H, c * W:(c + 1) * W, 3]) for c in K["pick"]]
         boxes = [_bbox(g[:, :, 3]) for g in got[r]]
-        # 줄마다 한 배율: 서 있는 앞 장은 키, 누운 뒷 장은 몸 길이로 잰 비율의 가운데값
+        # 줄마다 한 배율: 서 있는 장은 키, 누운 장(wide_from부터)은 몸 길이로 잰 비율의 가운데값
         ks = []
         for i, (rb, gb) in enumerate(zip(refs, boxes)):
             if rb and gb:
-                ks.append((rb[3] - rb[1]) / (gb[3] - gb[1]) if i < 4 else (rb[2] - rb[0]) / (gb[2] - gb[0]))
+                ks.append((rb[3] - rb[1]) / (gb[3] - gb[1]) if i < K["wide_from"] else (rb[2] - rb[0]) / (gb[2] - gb[0]))
         k = float(np.median(ks))
-        for j, i in enumerate(list(range(FALL_N)) + list(range(FALL_N - 1, 10))):
+        for j, i in enumerate(order):
             rb, gb = refs[i], boxes[i]
             if not (rb and gb):
                 continue
@@ -125,20 +139,18 @@ def main() -> None:
             out[r * H:(r + 1) * H, j * W:(j + 1) * W] = np.array(cell)
         print(f"  {info['rows'][r]['dir']}: 배율 {k:.3f}")
     cid = stem[3:]
-    dst = CHARS / f"{stem}_ko_dir8.png"
+    dst = CHARS / f"{stem}_{kind}_dir8.png"
     Image.fromarray(out).save(dst)
-    meta = {"source": f"reference/ko_motion/{stem}_fall10_a·b.png (주인공 넘어짐에서 포즈 옮기기)", "kind": "ko",
+    meta = {"source": f"{K['src'].format(stem=stem, part='a·b')} (주인공 영상 시트에서 포즈 옮기기)", "kind": kind,
             "cell": [W, H], "rows": info["rows"],
-            "attacks": [{"name": "fall", "col": 0, "frames": FALL_N, "hit_frame": 0, "duration": FALL_TIME, "loop": False},
-                        {"name": "out", "col": FALL_N, "frames": 2, "hit_frame": 0, "duration": OUT_TIME, "loop": True}],
-            "muzzle": {}}
+            "attacks": [{"name": n, "col": c, "frames": f, "hit_frame": 0, "duration": d, "loop": lp} for n, c, f, d, lp in K["clips"]],
+            "muzzle": info.get("muzzle", {})}
     dst.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
     if "--debug" in sys.argv:
         dbg = Image.new("RGBA", (out.shape[1], out.shape[0]), (110, 110, 110, 255))
         dbg.alpha_composite(Image.fromarray(out))
-        dbg.save(CHARS.parent.parent.parent / ".screenshots" / f"ko_pose_{cid}.png")
-    print(f"{dst.name}: {len(cols)}장 × {ROWS}줄")
-
+        dbg.save(CHARS.parent.parent.parent / ".screenshots" / f"{kind}_pose_{cid}.png")
+    print(f"{dst.name}: {len(order)}장 × {ROWS}줄")
 
 if __name__ == "__main__":
     main()

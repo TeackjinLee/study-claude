@@ -267,8 +267,7 @@ func _draw() -> void:
 	var down := state == State.KNOCKED or state == State.DEAD
 	if IsoView.enabled:
 		# 2.5D: 4×2 스프라이트 시트(PersonRig)로 정지·걷기·달리기·쓰러짐을 그린다
-		var gait: float = 0.0 if down or state == State.IDLE else (2.0 if state in [State.DODGE, State.FLEE] else 1.0)
-		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, npc.body_scale, npc, look_seed, null, down)
+		PersonRig.draw(self, facing, walk_phase, _draw_gait(), shirt, pants, hair, npc.body_scale, npc, look_seed, _drawn_weapon(), down)
 		_draw_head_tag()
 		if speech_time > 0.0 and speech != "" and state != State.DEAD:
 			PersonDrawer.draw_speech(self, speech, npc.body_scale)
@@ -290,6 +289,18 @@ func _draw() -> void:
 
 
 const TAG_SIZE := Vector2(16, 3)   ## 머리 위 체력 막대
+## 그림 걸음: 0 서 있기 · 1 걷기 · 2 달리기
+func _draw_gait() -> float:
+	if state == State.KNOCKED or state == State.DEAD or state == State.IDLE:
+		return 0.0
+	return 2.0 if state in [State.DODGE, State.FLEE] else 1.0
+
+
+## 그림에 든 총 (그 사람의 총 자세 그림이 있을 때만 쓴다 — PersonRig._gun_pose)
+func _drawn_weapon() -> WeaponType:
+	return null
+
+
 
 
 ## 머리 위 표시 (몸을 가리지 않게 머리보다 위): 다쳤으면 체력 막대, 소속 색(tag_color)이 있으면 그 색 작은 삼각형.

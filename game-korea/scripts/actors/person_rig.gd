@@ -1463,7 +1463,7 @@ static func _draw_gun(ci: CanvasItem, facing: float, phase: float, size: float, 
 	var pose := _gun_pose(look, gait, weapon)
 	if pose == "":
 		return false
-	var info := dir8_for(null)
+	var info := dir8_for(look)
 	var ok: Array = info[pose + "_ok"]
 	var dir := IsoView.to_screen_dir(Vector2.UP.rotated(facing))
 	var k := dir8_pick(dir, ci.get_meta(&"dir8_" + pose, -1), ok)
@@ -1495,12 +1495,21 @@ static func _draw_gun(ci: CanvasItem, facing: float, phase: float, size: float, 
 	return true
 
 
-## 이 무기·걸음으로 그릴 총 자세 이름 ("" = 평소 그림): 주인공만, 그림이 있고, 서 있거나 겨눈 채 걷는 장면이 있으면 걸을 때도
+## 이 무기·걸음으로 그릴 총 자세 이름 ("" = 평소 그림): 그림이 있고, 서 있거나 겨눈 채 걷는 장면이 있으면 걸을 때도.
+## 주인공은 무기의 pose, 보행자(군인)는 총을 들었을 때 자기 그림이 있는 총 자세
 static func _gun_pose(look: NpcType, gait: float, weapon: WeaponType) -> String:
-	if look != null or weapon == null or weapon.pose == &"" or gait > 1.5:
+	if weapon == null or gait > 1.5:
 		return ""
+	var info := dir8_for(look)
 	var pose := String(weapon.pose)
-	var info := dir8_for(null)
+	if look != null:
+		pose = ""
+		for p: String in GUN_POSES:
+			if info.has(p + "_tex"):
+				pose = p
+				break
+	if pose == "":
+		return ""
 	if not info.has(pose + "_tex") or (gait > 0.3 and not info.has(pose + "_walk")):
 		return ""
 	return pose
@@ -1509,8 +1518,9 @@ static func _gun_pose(look: NpcType, gait: float, weapon: WeaponType) -> String:
 ## 총 자세 그림의 총구 자리 (전역 좌표, 그릴 때 쓰는 높이까지 올린 점). 총 자세 그림이 아니면(뛰기, 겨눈 채 걷는 장면이 없는 걷기,
 ## 위에서 보기, 총구를 못 잰 방향) null — 총알 궤적·총구 불꽃을 그림 속 총구에서 시작하게 한다 (Combat.fire의 shown).
 ## 로켓포는 탄두 끝(로켓이 나가는 곳)이다
-static func gun_muzzle(ci: Node2D, facing: float, size: float, gait: float, weapon: WeaponType) -> Variant:
-	return _gun_point(ci, facing, size, gait, weapon, "_muzzle")
+## look을 주면 그 보행자(군인)의 그림에서
+static func gun_muzzle(ci: Node2D, facing: float, size: float, gait: float, weapon: WeaponType, look: NpcType = null) -> Variant:
+	return _gun_point(ci, facing, size, gait, weapon, "_muzzle", look)
 
 
 ## 로켓포 그림의 발사관 뒤끝 (전역 좌표, gun_muzzle과 같은 방식) — 후폭풍이 여기서 나온다. 없으면 null
@@ -1518,11 +1528,12 @@ static func gun_breech(ci: Node2D, facing: float, size: float, gait: float, weap
 	return _gun_point(ci, facing, size, gait, weapon, "_breech")
 
 
-static func _gun_point(ci: Node2D, facing: float, size: float, gait: float, weapon: WeaponType, key: String) -> Variant:
-	var pose := _gun_pose(null, gait, weapon)
+static func _gun_point(ci: Node2D, facing: float, size: float, gait: float, weapon: WeaponType, key: String,
+		look: NpcType = null) -> Variant:
+	var pose := _gun_pose(look, gait, weapon)
 	if not IsoView.enabled or pose == "":
 		return null
-	var info := dir8_for(null)
+	var info := dir8_for(look)
 	var ok: Array = info[pose + "_ok"]
 	var k := dir8_pick(IsoView.to_screen_dir(Vector2.UP.rotated(facing)), ci.get_meta(&"dir8_" + pose, -1), ok)
 	if k < 0:

@@ -87,6 +87,11 @@ func _ready() -> void:
 		await _player_ko_shots(main)
 		get_tree().quit()
 		return
+	if "--only=soldier" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _soldier_shots(main)
+		get_tree().quit()
+		return
 	if "--only=npc_ko" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _npc_ko_shots(main)
@@ -1580,6 +1585,47 @@ func _player_ko_shots(main: Node2D) -> void:
 	await _frames(20)
 	cam.target = null
 	cam.global_position = player.global_position
+## 군인 (`-- --only=soldier`): 주인공 둘레에 선 군인 넷(화면 →·↓·←·↑)이 소총을 겨누고(soldier_aim) 쏘고(soldier_fire),
+## 소총을 든 채 뛰어간다(soldier_run) — 수배 없이 경계(GUARD)·복귀(RETURN)로 세우고 뛰게 한다
+func _soldier_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	var at := player.global_position
+	player.global_position = at + Vector2(400, 400)
+	cam.target = null
+	cam.global_position = at
+	cam.zoom = Vector2(3.5, 3.5)
+	var npc: NpcType = load("res://data/npc/soldier.tres")
+	var men: Array[PoliceOfficer] = []
+	for i in 4:
+		var k := i * 2
+		var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(k * PI / 4.0)).normalized()
+		var pos := at + world_dir * 55.0   # 보는 쪽으로 벌려 세운다 — 쏠 때 서로 맞지 않게
+		var o: PoliceOfficer = main.police._spawn_officer(pos, null, PoliceOfficer.Duty.GUARD, npc)
+		o.facing = Vector2.UP.angle_to(world_dir)
+		men.append(o)
+	await _frames(40)
+	await _save("soldier_aim")
+	for i in 4:   # 보는 쪽으로 한 발씩 (궤적·총구 불꽃이 그림 속 총구에서 나오는지)
+		var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(i * 2 * PI / 4.0)).normalized()
+		men[i].reload = 0.0
+		main.police._shoot(men[i], men[i].global_position + world_dir * 160.0)
+	await _frames(3)
+	await _save("soldier_fire")
+	for i in 4:
+		var o := men[i]
+		var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(i * 2 * PI / 4.0)).normalized()
+		o.post = o.global_position + world_dir * 600.0
+		o.duty = PoliceOfficer.Duty.RETURN
+	for k in 3:
+		await _frames(8)
+		cam.global_position = at
+		await _save("soldier_run_%d" % k)
+
+
 	cam.zoom = Vector2(4.0, 4.0)
 	player.died.disconnect(main._on_died)   # 쓰러진 뒤 병원으로 보내지 않게
 	for k in [0, 2, 4, 6]:

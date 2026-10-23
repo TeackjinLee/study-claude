@@ -1,6 +1,6 @@
 // tools/gen_motion_index.py가 만든다 — 손으로 고치지 않는다
 window.GAME_DIR8 = {
- "version": 1792759797,
+ "version": 1792763314,
  "chars": [
   {
    "name": "주인공",
@@ -700,7 +700,57 @@ window.GAME_DIR8 = {
      "nw"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -25.0,
+      -63.0
+     ],
+     "ne": [
+      25.0,
+      -66.0
+     ],
+     "n": [
+      26.0,
+      -63.0
+     ],
+     "nw": [
+      -24.0,
+      -63.0
+     ],
+     "e": [
+      16.0,
+      -61.0
+     ],
+     "sw": [
+      -26.0,
+      -49.0
+     ]
+    }
    }
   },
   {
@@ -714,24 +764,59 @@ window.GAME_DIR8 = {
      "s",
      "se",
      "e",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "ne",
+     "n"
     ],
-    "frames": 8,
+    "frames": 12,
     "run_dirs": [
      "s",
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "rifle_dirs": [
+     "se",
+     "e",
+     "nw",
+     "w"
+    ],
+    "rifle_clips": [
+     {
+      "name": "aim",
+      "col": 0,
+      "frames": 4,
+      "duration": 0.84,
+      "loop": true
+     },
+     {
+      "name": "fire",
+      "col": 4,
+      "frames": 8,
+      "duration": 0.3,
+      "loop": false
+     }
+    ],
+    "rifle_muzzle": {
+     "se": [
+      41.8,
+      -61.0
+     ],
+     "e": [
+      51.0,
+      -75.0
+     ],
+     "nw": [
+      -30.2,
+      -78.0
+     ],
+     "w": [
+      -40.0,
+      -69.8
+     ]
+    }
    }
   },
   {
@@ -962,7 +1047,57 @@ window.GAME_DIR8 = {
      "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -28.0,
+      -70.0
+     ],
+     "ne": [
+      24.0,
+      -73.0
+     ],
+     "n": [
+      25.0,
+      -68.0
+     ],
+     "nw": [
+      -28.0,
+      -69.0
+     ],
+     "e": [
+      15.0,
+      -67.0
+     ],
+     "sw": [
+      -28.0,
+      -55.0
+     ]
+    }
    }
   },
   {
@@ -988,7 +1123,57 @@ window.GAME_DIR8 = {
      "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -28.0,
+      -70.0
+     ],
+     "ne": [
+      24.0,
+      -71.0
+     ],
+     "n": [
+      25.0,
+      -68.0
+     ],
+     "nw": [
+      -27.0,
+      -67.0
+     ],
+     "e": [
+      14.0,
+      -66.0
+     ],
+     "sw": [
+      -28.0,
+      -53.0
+     ]
+    }
    }
   },
   {
@@ -1170,7 +1355,57 @@ window.GAME_DIR8 = {
      "nw"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -26.0,
+      -62.0
+     ],
+     "ne": [
+      24.0,
+      -65.0
+     ],
+     "n": [
+      24.5,
+      -63.0
+     ],
+     "nw": [
+      -26.0,
+      -61.0
+     ],
+     "e": [
+      13.0,
+      -60.0
+     ],
+     "sw": [
+      -29.0,
+      -51.0
+     ]
+    }
    }
   },
   {
