@@ -241,7 +241,8 @@ func _process(_delta: float) -> void:
 	z_as_relative = not IsoView.enabled
 	z_index = IsoView.z_at(global_position, level) if IsoView.enabled else 0
 	var key := [int(walk_phase * 24.0 / TAU), snappedf(facing, 0.05), state, speech_time > 0.0, speech,
-		IsoView.enabled, npc, shirt, snappedf(IsoView.ground(global_position, level), 0.5), carried]
+		IsoView.enabled, npc, shirt, snappedf(IsoView.ground(global_position, level), 0.5), carried,
+		PersonRig.ko_frame(self, npc)]
 	if key != _drawn_key:
 		_drawn_key = key
 		queue_redraw()
@@ -341,12 +342,18 @@ func _draw_stretcher() -> void:
 func _draw_out_stars() -> void:
 	if carried:
 		return
+	if IsoView.enabled and not has_meta(&"ko_head") and PersonRig.dir8_for(npc).has("ko_tex"):
+		return   # 넘어짐 그림이 있으면 다 누운 뒤에 (쓰러지는 동안은 없다)
+	var at := Vector2.ZERO
 	if IsoView.enabled:
 		draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, 10.0 + IsoView.ground(global_position, level)))
+		if has_meta(&"ko_head"):   # 넘어짐 그림(PersonRig._draw_dir8_fall)이 잰 누운 머리 자리 위
+			draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, IsoView.ground(global_position, level)))
+			at = get_meta(&"ko_head") + Vector2(0, 3)
 	else:
 		draw_set_transform(Vector2(0, -12), 0.0, Vector2.ONE)
 	for k in 3:
-		var c := Vector2(-8.0 + k * 8.0, -2.0 - (k % 2) * 4.0)
+		var c := at + Vector2(-8.0 + k * 8.0, -2.0 - (k % 2) * 4.0)
 		var pts := PackedVector2Array()
 		for i in 10:
 			pts.append(c + Vector2.UP.rotated(i * PI / 5.0) * (3.2 if i % 2 == 0 else 1.4))

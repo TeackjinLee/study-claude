@@ -886,6 +886,7 @@ static func draw_sheet_frame(ci: CanvasItem, facing: float, phase: float, gait: 
 		return true
 	if not down and ci.has_meta(&"dir8_fall"):
 		ci.remove_meta(&"dir8_fall")
+		ci.remove_meta(&"ko_head")
 	if not down and _draw_jump(ci, size, look):
 		return true
 	if not down and (_draw_video_punch(ci, facing, size, look, gait) or _draw_dir8_punch(ci, facing, size, look)):
@@ -1057,6 +1058,8 @@ static func _part(t: Dictionary, name: String, from: String, to: String, tint: C
 const DIR4_FRAMES := 24                ## 걷기·달리기 한 바퀴 장 수 (12장 원본은 두 번씩, 8장 원본은 세 번씩 — 다듬기 도구가 넣는다)
 const DIR4_CELL := Vector2(128, 112)   ## 옆으로 달리는 보폭이 넓어 칸이 가로로 크다
 const DIR4_FOOT := Vector2(64, 108)
+const KO_CELL := Vector2(256, 112)      ## 영상 넘어짐·기절 시트 칸 (누운 몸이 옆으로 길다 — prepare_character_sprites.KO_CELL_W)
+const KO_FOOT := Vector2(128, 108)
 const GUN_POSES := ["rifle", "pistol", "rocket"]   ## 총 자세 그림 (WeaponType.pose, assets/characters/<id>_<자세>_dir8.png)
 const DIR4_HOLD := deg_to_rad(14.0)   ## 직전 방향을 이만큼 더 넓게 봐 준다 (대각선에서 앞·옆이 번갈아 바뀌지 않게)
 static var _dir4 := {}
@@ -1210,8 +1213,8 @@ static func dir8_for(look: NpcType) -> Dictionary:
 				if ResourceLoader.exists(attacks):
 					info["attack_tex"] = load(attacks)
 				# 총 자세(소총·권총)도 자세마다 따로 한 장 (.json <자세>_dirs·<자세>_clips — 조준 · 발사 [· 겨눈 채 걷기], <자세>_muzzle 총구 자리)
-				# 점프(jump_clips — 웅크림 · 공중 · 받기, 장마다 떠오른 높이 lift)도 같은 방식
-				for pose: String in GUN_POSES + ["jump"]:
+				# 점프(jump_clips — 웅크림 · 공중 · 받기, 장마다 떠오른 높이 lift)·넘어짐(ko_clips — fall 쓰러짐 · out 기절해 숨쉬기)도 같은 방식
+				for pose: String in GUN_POSES + ["jump", "ko"]:
 					var gun := SPRITE_DIR + id + "_" + pose + "_dir8.png"
 					if ResourceLoader.exists(gun) and data.has(pose + "_clips"):
 						info[pose + "_tex"] = load(gun)
@@ -1220,6 +1223,7 @@ static func dir8_for(look: NpcType) -> Dictionary:
 							info[pose + "_" + String(c["name"])] = c
 						info[pose + "_muzzle"] = data.get(pose + "_muzzle", {})
 						info[pose + "_breech"] = data.get(pose + "_breech", {})   # 로켓포 발사관 뒤끝 (후폭풍)
+						info[pose + "_head"] = data.get(pose + "_head", {})       # 넘어짐: 다 누운 머리 자리 (기절 별)
 		_dir8[id] = info
 	return _dir8[id]
 
@@ -1305,12 +1309,13 @@ static func _draw_dir8(ci: CanvasItem, facing: float, phase: float, gait: float,
 ## 처음 쓰러져 그린 때부터 DIR8_FALL_FRAME마다 한 장씩, 마지막 칸(누운 자세)에서 멈춘다. 방향은 그때 보이던 방향.
 ## 다시 서서 그리면(병원에서 살아나면) 처음부터 — draw_sheet_frame이 지운다
 static func _draw_dir8_fall(ci: CanvasItem, facing: float, size: float, look: NpcType) -> bool:
-	if look != null:
-		return false
 	var info := dir8_for(look)
-	if info.is_empty() or int(info["fall_frames"]) == 0:
+	var video := info.has("ko_tex")
+	if look != null and not video:
+		return false   # 보행자는 넘어짐 그림(ko)이 있을 때만 — 없으면 예전처럼 눕힌 그림
+	if info.is_empty() or (not video and int(info["fall_frames"]) == 0):
 		return false
-	var ok: Array = info["fall_ok"]
+	var ok: Array = info["ko_ok"] if video else info["fall_ok"]
 	var now := Time.get_ticks_msec() / 1000.0
 	if not ci.has_meta(&"dir8_fall"):
 		var dir := IsoView.to_screen_dir(Vector2.UP.rotated(facing))
@@ -1320,17 +1325,49 @@ static func _draw_dir8_fall(ci: CanvasItem, facing: float, size: float, look: Np
 		ci.set_meta(&"dir8_fall", [k0, now])
 	var fall: Array = ci.get_meta(&"dir8_fall")
 	var k: int = fall[0]
-	var n: int = info["fall_frames"]
-	var i := mini(int((now - float(fall[1])) / DIR8_FALL_FRAME), n - 1)
+	var t := now - float(fall[1])
 	var row: int = ok[k][0]
 	var flip := -1.0 if ok[k][1] else 1.0
 	var g := PersonDrawer._ground(ci)
 	var s := SPRITE_HEIGHT * size / SPRITE_BODY
-	var src := Rect2(Vector2(int(info["fall_col"]) + i, row) * DIR4_CELL, DIR4_CELL)
+	var tex: Texture2D = info["tex"]
+	var cell := DIR4_CELL
+	var foot := DIR4_FOOT
+	var src: Rect2
+	var lie: float
+	if video:
+		# 영상 넘어짐: 쓰러짐(fall)을 한 번 넘기고, 다 누우면 기절해 숨쉬기(out)를 되풀이한다 — 일어나지 않는다
+		tex = info["ko_tex"]
+		cell = KO_CELL
+		foot = KO_FOOT
+		var drop: Dictionary = info["ko_fall"]
+		var breathe: Dictionary = info["ko_out"]
+		var col: int
+		if t < float(drop["duration"]):
+			var nf := int(drop["frames"])
+			var j := mini(int(t / float(drop["duration"]) * nf), nf - 1)
+			col = int(drop["col"]) + j
+			lie = float(j) / float(maxi(nf - 1, 1))
+		else:
+			var nb := int(breathe["frames"])
+			col = int(breathe["col"]) + posmod(int((t - float(drop["duration"])) / float(breathe["duration"]) * nb), nb)
+			lie = 1.0
+		src = Rect2(Vector2(col, row) * cell, cell)
+	else:
+		var n: int = info["fall_frames"]
+		var i := mini(int(t / DIR8_FALL_FRAME), n - 1)
+		src = Rect2(Vector2(int(info["fall_col"]) + i, row) * cell, cell)
+		lie = float(i) / float(maxi(n - 1, 1))
 	# 그림자: 서 있을 때는 발밑 타원, 누울수록 그 칸 그림이 차지한 자리(폭·깊이)에 맞춘 납작한 타원으로
-	var lie := float(i) / float(maxi(n - 1, 1))
-	var used := _fall_used(info["tex"], src)
-	var body_c := Vector2((used.get_center().x - DIR4_FOOT.x) * flip, used.end.y - DIR4_FOOT.y) * s
+	var used := _fall_used(tex, src, foot)
+	var body_c := Vector2((used.get_center().x - foot.x) * flip, used.end.y - foot.y) * s
+	# 다 누우면 머리 자리(다듬기 도구가 잰 ko_head, 화면 단위)를 적어 둔다 — 기절 별을 그 위에 띄운다 (Player._draw_out_stars)
+	var heads: Dictionary = info.get("ko_head", {})
+	if lie >= 1.0 and video and heads.has(DIR8[row]):
+		var hp: Array = heads[DIR8[row]]
+		ci.set_meta(&"ko_head", Vector2(float(hp[0]) * flip, float(hp[1])) * s)
+	elif ci.has_meta(&"ko_head"):
+		ci.remove_meta(&"ko_head")
 	var c := Vector2(body_c.x, body_c.y - used.size.y * s * 0.36).lerp(Vector2.ZERO, 1.0 - lie)
 	var rx := lerpf(6.5 * size, used.size.x * s * 0.5, lie)
 	var ry := lerpf(2.6 * size, maxf(used.size.y * s * 0.36, 2.6 * size), lie)
@@ -1344,10 +1381,26 @@ static func _draw_dir8_fall(ci: CanvasItem, facing: float, size: float, look: Np
 	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(flip * s, s)))
 	if lie > 0.0:
 		# 바닥에 닿은 몸 둘레의 짙은 그늘 (같은 그림을 검게, 조금 아래로)
-		ci.draw_texture_rect_region(info["tex"], Rect2(-DIR4_FOOT + Vector2(0.0, 2.5), DIR4_CELL), src, Color(0, 0, 0, 0.3 * lie))
-	ci.draw_texture_rect_region(info["tex"], Rect2(-DIR4_FOOT, DIR4_CELL), src)
+		ci.draw_texture_rect_region(tex, Rect2(-foot + Vector2(0.0, 2.5), cell), src, Color(0, 0, 0, 0.3 * lie))
+	ci.draw_texture_rect_region(tex, Rect2(-foot, cell), src)
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	return true
+
+
+## 넘어짐 그림의 지금 장 번호 (쓰러지는 동안·숨쉬기마다 바뀐다, 그림이 없거나 아직 안 쓰러졌으면 -1).
+## 보행자는 모습이 바뀔 때만 다시 그리므로 이 값을 다시 그릴 열쇠에 넣는다 (Pedestrian._process)
+static func ko_frame(ci: CanvasItem, look: NpcType) -> int:
+	if not ci.has_meta(&"dir8_fall"):
+		return -1
+	var info := dir8_for(look)
+	if not info.has("ko_tex"):
+		return -1
+	var t := Time.get_ticks_msec() / 1000.0 - float(ci.get_meta(&"dir8_fall")[1])
+	var drop: Dictionary = info["ko_fall"]
+	var breathe: Dictionary = info["ko_out"]
+	if t < float(drop["duration"]):
+		return int(t / float(drop["duration"]) * int(drop["frames"]))
+	return 1000 + posmod(int((t - float(drop["duration"])) / float(breathe["duration"]) * int(breathe["frames"])), int(breathe["frames"]))
 
 
 static var _fall_rects := {}
@@ -1365,11 +1418,11 @@ static func _soft_shadow() -> Texture2D:
 	return _soft
 
 ## 넘어짐 칸 하나에서 그림이 차지한 영역 (칸 안 좌표, 그림자 크기용 — 칸마다 한 번 잰다)
-static func _fall_used(tex: Texture2D, src: Rect2) -> Rect2:
+static func _fall_used(tex: Texture2D, src: Rect2, foot := DIR4_FOOT) -> Rect2:
 	var key := [tex.get_rid(), src]
 	if not _fall_rects.has(key):
 		var r := tex.get_image().get_region(Rect2i(src)).get_used_rect()
-		_fall_rects[key] = Rect2(r) if r.size.x > 0 else Rect2(DIR4_FOOT - Vector2(10, 90), Vector2(20, 90))
+		_fall_rects[key] = Rect2(r) if r.size.x > 0 else Rect2(foot - Vector2(10, 90), Vector2(20, 90))
 	return _fall_rects[key]
 
 

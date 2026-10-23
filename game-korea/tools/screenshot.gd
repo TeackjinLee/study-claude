@@ -82,6 +82,16 @@ func _ready() -> void:
 		await _player_jump_shots(main)
 		get_tree().quit()
 		return
+	if "--only=player_ko" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _player_ko_shots(main)
+		get_tree().quit()
+		return
+	if "--only=npc_ko" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _npc_ko_shots(main)
+		get_tree().quit()
+		return
 	if "--only=citizen" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _citizen_shots(main)
@@ -1515,3 +1525,76 @@ func _citizen_shots(main: Node2D) -> void:
 			await _frames(6)
 			await _save("citizen_%s_run_%d" % [id, k])
 		print("  %s: 걷기·달리기 %.0f px/s" % [id, ped.velocity.length()])
+
+
+## 보행자 넘어짐·기절 (`-- --only=npc_ko`): 주인공 둘레 보행자 넷을 시민 남·여·직장인·구급대원으로 바꿔 화면 →·↓·←·↑을 보고
+## 기절시킨다 — 쓰러지는 도중(nko_<id>_fall)·다 누운 모습(nko_<id>_out, 머리 위 별). 주인공은 화면 밖으로 치운다
+func _npc_ko_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	var at := player.global_position
+	player.global_position = at + Vector2(400, 400)
+	cam.target = null
+	cam.global_position = at
+	cam.zoom = Vector2(3.5, 3.5)
+	var peds: Array = []
+	for p in main.pedestrians.peds:
+		if is_instance_valid(p) and p.npc and not p.is_dead():
+			peds.append(p)
+	peds.sort_custom(func(a, b): return a.global_position.distance_to(at) < b.global_position.distance_to(at))
+	peds = peds.slice(0, 4)
+	if peds.size() < 4:
+		print("  보행자가 모자람 (%d)" % peds.size())
+		return
+	for id in ["civ_m", "civ_f", "office", "paramedic"]:
+		for i in 4:
+			var p: Pedestrian = peds[i]
+			var k := i * 2
+			var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(k * PI / 4.0)).normalized()
+			p.npc = load("res://data/npc/%s.tres" % id)
+			p.health = p.npc.health
+			p._set_state(Pedestrian.State.IDLE, 100.0)
+			p.velocity = Vector2.ZERO
+			p.global_position = at + IsoView.BASIS.affine_inverse().basis_xform(Vector2((i % 2) * 70.0 - 35.0, (i / 2) * 50.0 - 25.0))
+			p.facing = Vector2.UP.angle_to(world_dir)
+		await _frames(10)
+		for i in 4:
+			peds[i].die(Vector2.ZERO)
+		await _frames(30)
+		await _save("nko_%s_fall" % id)
+		await _frames(90)
+		await _save("nko_%s_out" % id)
+		print("  %s: 머리 %s" % [id, peds.map(func(p): return p.get_meta(&"ko_head", "없음"))])
+
+
+## 주인공 넘어짐·기절 (`-- --only=player_ko`): 화면 →·↓·←·↑을 보고 체력이 0이 되면 쓰러지는 도중(pko_<방향>_fall)·
+## 다 누워 기절한 모습(pko_<방향>_out, 머리 위 별), 매에 쓰러진 체포 모습(pko_bust — 별 없음)
+func _player_ko_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	cam.target = null
+	cam.global_position = player.global_position
+	cam.zoom = Vector2(4.0, 4.0)
+	player.died.disconnect(main._on_died)   # 쓰러진 뒤 병원으로 보내지 않게
+	for k in [0, 2, 4, 6]:
+		var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(k * PI / 4.0)).normalized()
+		player.revive()
+		player.facing = Vector2.UP.angle_to(world_dir)
+		await _frames(10)
+		player.take_damage(1000.0)
+		await _frames(30)
+		await _save("pko_%s_fall" % PersonRig.DIR8[k])
+		await _frames(70)
+		await _save("pko_%s_out" % PersonRig.DIR8[k])
+		print("  %s: 머리 %s" % [PersonRig.DIR8[k], player.get_meta(&"ko_head", "없음")])
+	player.revive()
+	await _frames(10)
+	player.knock_down()
+	await _frames(100)
+	await _save("pko_bust")

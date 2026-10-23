@@ -652,6 +652,7 @@ def process_dir8(cid: str, sources: dict, debug: bool) -> None:
 
 DIR8_SHEET_ROWS = ["s", "sw", "w", "nw", "n"]   ## 한 장짜리 8방향 시트의 줄 (나머지 ↘ → ↗는 게임이 좌우를 뒤집어 쓴다)
 PUNCH_H = 0.95   ## 주먹 칸 키 / 걷기 키 — 무릎을 굽힌 싸움 자세
+RUN_H_OF = {"office": 0.92}   ## 달리기 키 / 걷기 키를 머리 폭 대신 이 값으로 (걷기·달리기를 같은 키로 그린 시트 — 주인공 비율)
 RUN_H_RANGE = (0.85, 0.92)   ## 달리기 키 / 걷기 키 — 머리 폭으로 맞춘 크기가 이 밖이면 끝으로 당긴다
 RUN_ROW_K = (0.85, 1.25)     ## 달리기 줄마다 키를 시트 가운데값에 맞출 때 배율 한도 (튀는 줄만 당긴다)
 NEON = {"firefighter"}   ## 형광 반사띠가 초록 기운이라 _despill로 걷지 않는다
@@ -767,6 +768,7 @@ def _place_punch(out: Image.Image, meta: dict, cid: str, src: Path, n: int, col:
 
 MIRROR = {"e": "w", "w": "e", "se": "sw", "sw": "se", "ne": "nw", "nw": "ne", "s": "s", "n": "n"}
 TONE_K = (0.8, 1.25)   ## 공격 그림 색을 걷기 그림에 맞출 때 채널마다 퍼짐 비율 한도
+KO_CELL_W = 256       ## 넘어짐·기절 시트(kind ko) 칸 가로 — 누운 몸이 발끝에서 옆으로 뻗는다
 ATTACK_H = 0.98        ## 공격 영상 첫 장(싸움 자세) 키 / 걷기 서 있기 키 — 무릎을 조금 굽힌다
 
 
@@ -778,7 +780,7 @@ def _tone_stats(rgba: np.ndarray) -> tuple:
 
 def _video_sheets(cid: str) -> list:
     """영상에서 뽑은 동작 시트 (tools/punch_video_sheet.py): 주먹 공격·소총·권총·로켓포"""
-    return [p for kind in ("attacks", "rifle", "pistol", "rocket", "jump") for p in sorted(SRC.glob(f"[0-9][0-9]_{cid}_{kind}_dir8.png"))]
+    return [p for kind in ("attacks", "rifle", "pistol", "rocket", "jump", "ko") for p in sorted(SRC.glob(f"[0-9][0-9]_{cid}_{kind}_dir8.png"))]
 
 
 def _place_attacks(walk: Image.Image, meta: dict, cid: str, src: Path, debug: bool) -> None:
@@ -795,7 +797,9 @@ def _place_attacks(walk: Image.Image, meta: dict, cid: str, src: Path, debug: bo
     sheet = np.array(Image.open(src).convert("RGBA"))
     w, h = info["cell"]
     cols = sum(a["frames"] for a in info["attacks"])
-    out = Image.new("RGBA", (DIR4_CELL_W * cols, CELL_H * len(DIR8)), (0, 0, 0, 0))
+    kind = info.get("kind", "attacks")
+    cw = KO_CELL_W if kind == "ko" else DIR4_CELL_W   # 넘어져 누운 몸은 옆으로 길다 — 칸을 넓게 (발끝 x = cw / 2)
+    out = Image.new("RGBA", (cw * cols, CELL_H * len(DIR8)), (0, 0, 0, 0))
     clipped = 0
     points = {}   ## 로켓포: 방향 → {tip, rear} 발끝 기준 게임 칸 px (위가 −)
     lifts = {}    ## 점프: 동작 번호 → {방향: 장마다 떠오른 높이 (게임 칸 px)}
@@ -824,12 +828,11 @@ def _place_attacks(walk: Image.Image, meta: dict, cid: str, src: Path, debug: bo
                 (sm, ss), (dm, ds) = tone
                 img = img.copy()
                 img[:, :, :3] = np.clip((img[:, :, :3] - sm) * np.clip(ds / ss, *TONE_K) + dm, 0, 255).astype(np.uint8)
-            place(out, (img, fy, fx, row["stance_h"]), r, c, scale, DIR4_CELL_W)
+            place(out, (img, fy, fx, row["stance_h"]), r, c, scale, cw)
             ys, xs = np.nonzero(img[:, :, 3] > 40)
-            if xs.size and (max(fx - xs.min(), xs.max() - fx) * scale > DIR4_CELL_W / 2 or (fy - ys.min()) * scale > FOOT_Y):
+            if xs.size and (max(fx - xs.min(), xs.max() - fx) * scale > cw / 2 or (fy - ys.min()) * scale > FOOT_Y):
                 clipped += 1
                 print(f"  공격 {row['dir']} {c}번 칸: 칸 밖으로 나간다 (잘린다)")
-    kind = info.get("kind", "attacks")
     out.save(DST / f"{cid}_{kind}_dir8.png")
     dirs = [row["dir"] for row in info["rows"]]
     if kind == "attacks":
@@ -843,6 +846,8 @@ def _place_attacks(walk: Image.Image, meta: dict, cid: str, src: Path, debug: bo
                 clip.update(takeoff=info["attacks"][n]["takeoff"], land=info["attacks"][n]["land"], lift=lifts[n])
         if kind in ("rifle", "pistol"):
             meta[f"{kind}_muzzle"] = _gun_muzzles(np.asarray(out), dirs, info["attacks"][0], info.get("muzzle", {}))
+        elif kind == "ko":
+            meta[f"{kind}_head"] = _ko_heads(np.asarray(out), info, cw)
         elif points:
             # 로켓포: 탄두 끝(로켓이 나가는 곳)·발사관 뒤끝(후폭풍)을 영상에서 적은 점으로 (탄두를 지운 발사 장면이라 잴 수 없다)
             meta[f"{kind}_muzzle"] = {d: p["tip"] for d, p in points.items()}
@@ -852,6 +857,26 @@ def _place_attacks(walk: Image.Image, meta: dict, cid: str, src: Path, debug: bo
         dbg.alpha_composite(out)
         dbg.save(DST.parent.parent / ".screenshots" / f"sprite_{cid}_{kind}_dir8.png")
     print(f"  {src.name}: {kind} {len(info['attacks'])}가지 {cols}장 ({', '.join(dirs)}), 잘린 칸 {clipped}")
+
+
+def _ko_heads(sheet: np.ndarray, info: dict, cw: int) -> dict:
+    """넘어짐 시트의 기절 머리 자리 {방향: [x, y]} — 쓰러짐(첫 동작) 마지막 장에서 머리 쪽(rows[].head) 끝 30% 안의 가장 높은 점.
+    발끝 기준 칸 px(위가 −). 게임은 다 누운 뒤 그 위에 노란 별을 돌린다(Player._draw_out_stars)"""
+    last = info["attacks"][0]["frames"] - 1
+    heads = {}
+    for row in info["rows"]:
+        if "head" not in row:
+            continue
+        r = DIR8.index(row["dir"])
+        a = sheet[r * CELL_H:(r + 1) * CELL_H, last * cw:(last + 1) * cw, 3] > 40
+        ys, xs = np.nonzero(a)
+        if not xs.size:
+            continue
+        span = xs.max() - xs.min()
+        pick = xs <= xs.min() + span * 0.3 if row["head"] == "left" else xs >= xs.max() - span * 0.3
+        hx = float(np.median(xs[pick]))
+        heads[row["dir"]] = [round(hx - cw / 2, 1), float(ys[pick].min() - FOOT_Y)]
+    return heads
 
 
 def _gun_muzzles(sheet: np.ndarray, dirs: list, aim: dict, fixed: dict) -> dict:
@@ -922,6 +947,8 @@ def process_dir8_sheet(cid: str, walk_src: "Path | None", frames: int, run_src: 
             scale = float(np.median(heads)) / max(run_head, 1.0)
             # 머리를 크게 그린 그림이면 몸이 작아진다 — 달리기 키가 걷기 키의 85~92% 안에 들게 (숙인 만큼만 작게)
             scale = min(max(scale, BODY_H * 0.97 * RUN_H_RANGE[0] / run_h), BODY_H * 0.97 * RUN_H_RANGE[1] / run_h)
+            if cid in RUN_H_OF:
+                scale = BODY_H * 0.97 * RUN_H_OF[cid] / run_h
         else:
             scale = BODY_H * 0.97 * sum(RUN_H_RANGE) / 2 / run_h
         for d, run in runs.items():
@@ -969,8 +996,8 @@ def main() -> None:
     if "--attacks-only" in sys.argv:
         # 공격 시트만 다시: 지금 걷기 시트(assets/characters/<id>_dir8.png)는 그대로 두고 크기·색 기준으로만 읽는다
         import json
-        for src in [p for kind in ("attacks", "rifle", "pistol", "rocket", "jump") for p in sorted(SRC.glob(f"[0-9][0-9]_*_{kind}_dir8.png"))]:
-            cid = re.sub(r"_(attacks|rifle|pistol|rocket|jump)_dir8$", "", src.stem[3:])
+        for src in [p for kind in ("attacks", "rifle", "pistol", "rocket", "jump", "ko") for p in sorted(SRC.glob(f"[0-9][0-9]_*_{kind}_dir8.png"))]:
+            cid = re.sub(r"_(attacks|rifle|pistol|rocket|jump|ko)_dir8$", "", src.stem[3:])
             if only and cid not in only:
                 continue
             meta = json.loads((DST / f"{cid}_dir8.json").read_text())

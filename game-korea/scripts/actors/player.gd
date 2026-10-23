@@ -282,6 +282,8 @@ func _draw() -> void:
 	# 발밑 고리·진행 방향은 HeadingRing이 그린다 (몸 뒤 차례에)
 	if IsoView.enabled:
 		var gait: float = 0.0 if velocity.length_squared() < 1.0 else (2.0 if velocity.length() > WALK_SPEED + 20.0 else 1.0)
+		if is_dead():
+			_draw_out_stars()
 		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, 1.0, null, 0, arsenal.current(), false)
 		if _hurt > 0.0:
 			_draw_hit_burst()
@@ -304,4 +306,27 @@ func _draw_hit_burst() -> void:
 	for i in 6:
 		var d := Vector2.RIGHT.rotated(i * TAU / 6.0 + 0.3)
 		draw_line(c + d * (2.0 + 3.0 * t), c + d * (5.0 + 4.0 * t), col, 1.4)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 기절 표시: 다 누운 뒤 머리 위에서 노란 별 셋이 빙빙 돈다 (머리 자리는 PersonRig가 누운 그림에서 잰 ko_head, 매에 쓰러진 체포는 별 없음)
+func _draw_out_stars() -> void:
+	if not has_meta(&"ko_head") and IsoView.enabled:
+		return
+	var head: Vector2 = get_meta(&"ko_head", Vector2(0, -6))
+	if IsoView.enabled:
+		draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, IsoView.ground(global_position, level)))
+	else:
+		draw_set_transform(Vector2(0, -12), 0.0, Vector2.ONE)
+	var spin := Time.get_ticks_msec() / 1000.0 * 2.4
+	var c0 := head + Vector2(0, -9)
+	for k in 3:
+		var a := spin + k * TAU / 3.0
+		# 머리 위 납작한 고리를 돈다 (앞쪽 별이 조금 크다)
+		var c := c0 + Vector2(cos(a) * 9.0, sin(a) * 3.0)
+		var r := 3.0 + sin(a) * 0.6
+		var pts := PackedVector2Array()
+		for i in 10:
+			pts.append(c + Vector2.UP.rotated(i * PI / 5.0 + spin * 0.5) * (r if i % 2 == 0 else r * 0.45))
+		draw_colored_polygon(pts, Color(1.0, 0.86, 0.2))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

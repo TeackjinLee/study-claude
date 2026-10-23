@@ -1,6 +1,6 @@
 // tools/gen_motion_index.py가 만든다 — 손으로 고치지 않는다
 window.GAME_DIR8 = {
- "version": 1792680790,
+ "version": 1792759797,
  "chars": [
   {
    "name": "주인공",
@@ -442,7 +442,57 @@ window.GAME_DIR8 = {
        ]
       }
      }
-    ]
+    ],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 24,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 24,
+      "frames": 16,
+      "duration": 3.0,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -27.0,
+      -69.0
+     ],
+     "ne": [
+      24.0,
+      -70.0
+     ],
+     "n": [
+      25.0,
+      -66.0
+     ],
+     "nw": [
+      -27.0,
+      -67.0
+     ],
+     "e": [
+      13.0,
+      -63.0
+     ],
+     "sw": [
+      -27.0,
+      -51.0
+     ]
+    }
    }
   },
   {
@@ -633,7 +683,10 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n"
+     "n",
+     "sw",
+     "w",
+     "nw"
     ],
     "frames": 12,
     "run_dirs": [
@@ -641,7 +694,10 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n"
+     "n",
+     "sw",
+     "w",
+     "nw"
     ],
     "run_frames": 8,
     "turns": []
@@ -1094,10 +1150,13 @@ window.GAME_DIR8 = {
    "meta": {
     "dirs": [
      "s",
+     "se",
+     "e",
+     "ne",
+     "n",
      "sw",
      "w",
-     "nw",
-     "n"
+     "nw"
     ],
     "frames": 12,
     "run_dirs": [
@@ -1106,9 +1165,9 @@ window.GAME_DIR8 = {
      "e",
      "ne",
      "n",
-     "nw",
+     "sw",
      "w",
-     "sw"
+     "nw"
     ],
     "run_frames": 8,
     "turns": []

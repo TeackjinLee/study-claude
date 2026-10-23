@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """여러 방향의 인물이 칸마다 같은 시각에 같은 동작(주먹질·소총 조준과 발사)을 하는 영상에서 동작마다 장면을 골라 투명 시트로 낸다.
 매니페스트의 kind가 결과 이름이다: attacks(주먹, punch_capture/) · rifle(소총, rifle_capture/) · pistol(권총, pistol_capture/)
-· rocket(로켓포, rocket_capture/) · jump(점프, jump_capture/) — 총은 remove_flash로 영상의 총구 불꽃을 지운다.
+· rocket(로켓포, rocket_capture/) · jump(점프, jump_capture/) · ko(넘어짐·기절, ko_capture/) — 총은 remove_flash로 영상의 총구 불꽃을 지운다.
 
 영상(프로젝트 기준 경로 — 지금은 reference/video/punch.mp4)·칸·방향·공격 구간은 매니페스트(.json)에 적는다 (output/imagegen/characters/punch_capture/capture_manifest.json):
   regions: 칸마다 crop [x, y, w, h] · dir (DIR8 이름) · use (같은 방향 칸이 여럿이면 하나만 true)
@@ -10,6 +10,7 @@
   regions[].rocket: {tip 발사관 입구 앞(탄두 뿌리 — 로켓·앞 불꽃이 나오는 곳) [x, y] · rear 발사관 뒤끝 [x, y] · warhead 탄두 box [x, y, w, h] · fill "erase"(지운다)|"inpaint"(둘레 옷 색으로 메운다 —
      탄두가 몸 앞에 겹치는 정면) · mouth [x, y, r] 빈 발사관 입구 (inpaint일 때)}
      tip·rear는 칸 좌표로 .json rows[].points에 적는다 (게임이 로켓·후폭풍을 그 자리에서 낸다)
+  regions[].head: "left"|"right" — 넘어짐(kind ko)에서 다 누운 머리가 칸의 어느 끝인가 (게임이 기절 별을 그 위에 띄운다)
   star: 생성기 워터마크 별(✦)이 있는 영상 box [x, y, w, h] (있으면 메운다) · muzzle: 잴 수 없는 방향(↓·↑)의 총구 자리
   attacks: 공격마다 segments [[처음, 끝, 간격], ...] (영상 장 번호, 1부터, 간격이 음수면 거꾸로 — 왕복 되풀이) · hit (타격 장) · duration (게임에서 한 번 치는 초)
      unload: true면 장마다 탄두를 지운다(로켓이 나간 빈 발사관 — 영상 발사 장면은 폭발 연기에 덮여 조준 장면으로 만든다)
@@ -243,6 +244,8 @@ def main() -> None:
         erase = reg.get("erase", [])
         foot, stance = foot_point(cut(video[man.get("stance_frame", 1)], reg["crop"], w, h, no_flash, erase), reg.get("foot_band", 14))
         rows_meta.append({"dir": reg["dir"], "slot": reg["slot"], "foot": [round(foot[0], 1), foot[1]], "stance_h": stance})
+        if "head" in reg:   # 넘어짐: 누운 머리가 화면 왼쪽·오른쪽 어느 끝인가
+            rows_meta[-1]["head"] = reg["head"]
         rocket = reg.get("rocket")
         if rocket:
             rows_meta[-1]["points"] = {k: to_cell(rocket[k], reg["crop"], w, h) for k in ("tip", "rear")}
