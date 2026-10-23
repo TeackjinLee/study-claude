@@ -551,6 +551,7 @@ func _menu_shots(main: Node2D) -> void:
 	menu.open()
 	await get_tree().process_frame
 	await _save("menu_main")
+	main.missions.start(main.missions.by_id(&"gangnam_06"))   # 지도의 노란 길·핀
 	menu._show_map()
 	for i in 3:
 		await get_tree().process_frame

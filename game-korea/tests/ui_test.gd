@@ -3,7 +3,7 @@ extends Node
 ##  1. 번역표(data/i18n/ui.csv): 줄마다 영어가 있고, 형식 글자(%s·%d…)의 차례가 한국어와 같다.
 ##     영어로 바꾸면 Locale.t가 영어를, 표에 없는 글자는 한국어 그대로. 화면에 늘 뜨는 글자(조작 안내·구역·차·무기 이름)는 표에 있다.
 ##  2. 설정(Settings): 소리 크기가 버스에 들어가고, 언어가 Locale·Dialogue에 들어가며, 저장했다 다시 읽으면 같다.
-##  3. 일시정지 메뉴: Esc로 열면 게임이 멈추고 다시 Esc로 닫힌다. 지도·설정 화면이 열리고, 지도가 그려진다.
+##  3. 일시정지 메뉴: Esc로 열면 게임이 멈추고 다시 Esc로 닫힌다. 지도·설정 화면이 열리고, 지도가 그려진다(미션이 있으면 목표까지 노란 길).
 ## 실행: godot --headless --fixed-fps 60 --path . res://tests/ui_test.tscn
 
 var _failures: Array[String] = []
@@ -12,6 +12,7 @@ var _failures: Array[String] = []
 func _ready() -> void:
 	_test_table()
 	_test_settings()
+	_test_minimap_route()
 	await _test_pause()
 	Locale.lang = "ko"
 	Dialogue.lang = "ko"
@@ -88,13 +89,18 @@ func _test_pause() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_expect(menu.is_open() and get_tree().paused, "Esc로 열면 게임이 멈춘다")
+	main.missions.start(main.missions.by_id(&"gangnam_06"))
 	menu._show_map()
+	await get_tree().process_frame
 	await get_tree().process_frame
 	var map: MapView = null
 	for c in menu._list.get_children():
 		if c is MapView:
 			map = c
 	_expect(map != null, "지도 화면")
+	if map:
+		_expect(map._route.size() > 1 and map._route[map._route.size() - 1] == main.missions.objective_position(),
+			"지도에 목표까지 노란 길 (%d점)" % map._route.size())
 	menu._show_settings()
 	await get_tree().process_frame
 	_expect(menu._list.get_child_count() >= 7, "설정 화면 (%d)" % menu._list.get_child_count())
@@ -103,6 +109,28 @@ func _test_pause() -> void:
 	_expect(not get_tree().paused, "닫으면 다시 간다")
 	main.queue_free()
 	await _frames(2)
+
+
+## 미니맵 GPS 길: 도로(교차로 가운데)를 따라 목표까지 이어지고, 꺾는 길은 곧은 거리보다 길다
+func _test_minimap_route() -> void:
+	var from := LaneGraph.center(Vector2i(1, 1)) + Vector2(60, 0)
+	var goal := LaneGraph.center(Vector2i(3, 3)) + Vector2(0, 50)
+	var r := Minimap.route(from, Vector2.ZERO, goal)
+	_expect(r.size() >= 4 and r[0] == from and r[r.size() - 1] == goal, "GPS 길이 출발점에서 목표까지 이어진다 (%s)" % r)
+	var length := 0.0
+	var on_road := true
+	for k in r.size() - 1:
+		length += r[k].distance_to(r[k + 1])
+		# 사이 구간은 도로를 따라 가로·세로로만 간다
+		if k > 0 and k < r.size() - 2:
+			var d := r[k + 1] - r[k]
+			on_road = on_road and (absf(d.x) < 1.0 or absf(d.y) < 1.0)
+	_expect(on_road, "GPS 길은 도로를 따라 가로·세로로 간다")
+	_expect(length >= from.distance_to(goal), "GPS 길은 곧은 거리보다 짧지 않다")
+	var near := Minimap.route(from, Vector2.ZERO, from + Vector2(80, 0))
+	_expect(near.size() == 2, "가까운 목표는 곧게 잇는다")
+	_expect(Minimap.distance_text(1000.0) == "60m" and Minimap.distance_text(30000.0) == "1.8km",
+		"거리 표시 (%s · %s)" % [Minimap.distance_text(1000.0), Minimap.distance_text(30000.0)])
 
 
 func _frames(n: int) -> void:
