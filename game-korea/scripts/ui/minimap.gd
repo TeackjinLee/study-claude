@@ -30,6 +30,8 @@ const RIM := Color(0.92, 0.94, 1.0, 0.9)           ## 테 안쪽 흰 선
 const BEZEL_WIDTH := 7.0
 const OUTLINE := Color(0, 0, 0, 0.85)
 const ICON_R := 8.0              ## 그림 표 반지름
+const POLICE_BLUE := Color(0.35, 0.55, 1.0)
+const POLICE_RED := Color(1, 0.2, 0.25)
 
 enum Icon { HOSPITAL, POLICE, HIDEOUT, SPRAY, HQ, WAREHOUSE }
 
@@ -151,8 +153,7 @@ func _draw() -> void:
 	for p in missions.phones:
 		_dot(p.pos, me, c, (p.gang as GangType).accent, 3.5, false)
 	for car in police.cars:
-		var red := (Time.get_ticks_msec() / 250) % 2 == 0
-		_dot(car.global_position, me, c, Color(1, 0.2, 0.25) if red and car.siren else Color(0.35, 0.55, 1.0), 3.5, false)
+		_dot(car.global_position, me, c, police_color(car), 3.5, false)
 	var thief := events.target_position() if events else Vector2.INF
 	if thief != Vector2.INF:
 		_dot(thief, me, c, Color(1.0, 0.3, 0.2), 4.0 + 1.0 * sin(_time * 10.0), true)   # 쫓는 범인 (거리 이벤트)
@@ -301,6 +302,12 @@ func _route_length(me: Vector2) -> float:
 	for k in range(1, _route.size() - 1):
 		total += _route[k].distance_to(_route[k + 1])
 	return total
+
+
+## 경찰차 점 색: 파랑, 사이렌을 켜면 빨강·파랑으로 깜박인다 — 큰 지도(MapView)도 쓴다
+static func police_color(car: Vehicle) -> Color:
+	var red := (Time.get_ticks_msec() / 250) % 2 == 0
+	return POLICE_RED if red and car.siren else POLICE_BLUE
 
 
 ## 350m · 1.2km

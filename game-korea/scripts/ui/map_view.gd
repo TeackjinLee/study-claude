@@ -3,6 +3,7 @@ extends Control
 ## 일시정지 메뉴의 서울 지도: 위에서 본 도시 전체(북쪽이 위). 미니맵(Minimap)과 같은 모양이다 — 밝은 도로 사이에 어두운 블록과
 ## 부지(건물), 강·공원, 기능 건물은 동그란 그림 표(Minimap.draw_icon — 병원·경찰·은신처·카센터·아지트·창고), 미션·부업 목표까지
 ## 도로를 따라 노란 길(Minimap.route)과 핀, 주인공은 흰 화살촉.
+## 경찰차는 미니맵처럼 파란 점(사이렌이면 빨강·파랑 깜박임) — 수배 중 어디로 달아날지 본다.
 ## 큰 지도에만 있는 것: 잠긴 구역 그늘과 "N장에 열림", 구역 이름, 산 은신처, 공중전화(조직 색 점, 열린 구역만), 쫓는 범인(빨간 점), 범례.
 ## 수배 중에는 카센터 둘레에 퍼지는 고리를 그린다 (미니맵은 테두리에 붙여 방향을 보여 준다).
 ## 비밀 패키지·광란 아이콘은 지도에 없다 (찾는 재미).
@@ -126,6 +127,9 @@ func _draw_marks(ci: CanvasItem) -> void:
 	for h: Hideout in main.hideouts:
 		if h.owned:
 			_icon(ci, xf, h.type.door, Minimap.Icon.HIDEOUT)
+	# 경찰차
+	for car: Vehicle in main.police.cars:
+		_dot(ci, xf * car.global_position, Minimap.police_color(car), 3.5)
 	# 쫓는 범인 (거리 이벤트)
 	var crook: Vector2 = main.street_events.target_position()
 	if crook != Vector2.INF:
@@ -196,7 +200,7 @@ func _draw_legend(ci: CanvasItem) -> void:
 	var font := ThemeDB.fallback_font
 	var items := [["나", -1], ["병원", Minimap.Icon.HOSPITAL], ["경찰서", Minimap.Icon.POLICE],
 		["은신처", Minimap.Icon.HIDEOUT], ["카센터", Minimap.Icon.SPRAY], ["아지트", Minimap.Icon.HQ],
-		["창고", Minimap.Icon.WAREHOUSE], ["공중전화", -2], ["미션 목표", -3]]
+		["창고", Minimap.Icon.WAREHOUSE], ["공중전화", -2], ["경찰차", -4], ["미션 목표", -3]]
 	const ROW := 22.0
 	var w := 0.0
 	for item in items:
@@ -213,6 +217,8 @@ func _draw_legend(ci: CanvasItem) -> void:
 				_dot(ci, c, PHONE_COLOR, 3.5)
 			-3:
 				Minimap.draw_pin(ci, c + Vector2(0, 8), 1.0)
+			-4:
+				_dot(ci, c, Minimap.POLICE_BLUE, 3.5)
 			_:
 				Minimap.draw_icon(ci, c, kind as Minimap.Icon)
 		ci.draw_string(font, c + Vector2(16, 5), Locale.t(items[k][0]), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.85))
