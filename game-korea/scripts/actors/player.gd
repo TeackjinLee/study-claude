@@ -279,8 +279,7 @@ func _draw() -> void:
 		else:
 			PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, true)
 		return
-	# 보행자 사이에서 주인공을 찾기 쉽게 발밑에 노란 고리
-	draw_arc(PersonDrawer._base(self), 11.0, 0.0, TAU, 24, Color(1.0, 0.85, 0.2, 0.55), 2.0)   # 비탈·다리 위면 땅 높이에
+	# 발밑 고리·진행 방향은 HeadingRing이 그린다 (몸 뒤 차례에)
 	if IsoView.enabled:
 		var gait: float = 0.0 if velocity.length_squared() < 1.0 else (2.0 if velocity.length() > WALK_SPEED + 20.0 else 1.0)
 		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, 1.0, null, 0, arsenal.current(), false)

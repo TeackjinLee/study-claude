@@ -168,6 +168,7 @@ func hurt(amount: float, away: Vector2, knock: bool) -> bool:
 		panic(away, true)
 		return false
 	health -= amount
+	queue_redraw()     # 머리 위 체력 막대
 	if health <= 0.0:
 		die(away)
 		return true
@@ -267,12 +268,14 @@ func _draw() -> void:
 		# 2.5D: 4×2 스프라이트 시트(PersonRig)로 정지·걷기·달리기·쓰러짐을 그린다
 		var gait: float = 0.0 if down or state == State.IDLE else (2.0 if state in [State.DODGE, State.FLEE] else 1.0)
 		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, npc.body_scale, npc, look_seed, null, down)
+		_draw_head_tag()
 		if speech_time > 0.0 and speech != "" and state != State.DEAD:
 			PersonDrawer.draw_speech(self, speech, npc.body_scale)
 		if state == State.DEAD:
 			_draw_out_stars()
 		return
 	PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, down, npc.body_scale, npc, look_seed)
+	_draw_head_tag()
 	if state == State.DEAD:
 		_draw_out_stars()
 	if speech_time > 0.0 and speech != "" and state != State.DEAD:
@@ -283,6 +286,43 @@ func _draw() -> void:
 		draw_rect(box, Color(0, 0, 0, 0.6), false, 1.0)
 		draw_colored_polygon(PackedVector2Array([Vector2(-4, -16), Vector2(4, -16), Vector2(0, -10)]), Color(1, 1, 1, 0.92))
 		draw_string(font, Vector2(box.position.x, box.end.y - 5), speech, HORIZONTAL_ALIGNMENT_CENTER, w, 12, Color(0.1, 0.1, 0.12))
+
+
+const TAG_SIZE := Vector2(16, 3)   ## 머리 위 체력 막대
+
+
+## 머리 위 표시 (몸을 가리지 않게 머리보다 위): 다쳤으면 체력 막대, 소속 색(tag_color)이 있으면 그 색 작은 삼각형.
+## 쓰러져 있으면 그리지 않는다.
+func _draw_head_tag() -> void:
+	if state == State.KNOCKED or state == State.DEAD:
+		return
+	var tag := tag_color()
+	var hurt_ratio := health / npc.health if npc.health > 0.0 else 1.0
+	if tag.a <= 0.0 and hurt_ratio >= 1.0:
+		return
+	if IsoView.enabled:
+		draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, IsoView.PERSON_HEIGHT * npc.body_scale + 7.0 + IsoView.ground(global_position, level)))
+	else:
+		draw_set_transform(Vector2(0, -20), 0.0, Vector2.ONE)
+	var y := 0.0
+	if hurt_ratio < 1.0:
+		var r := Rect2(Vector2(-TAG_SIZE.x * 0.5, -TAG_SIZE.y), TAG_SIZE)
+		draw_rect(r.grow(1.0), Color(0, 0, 0, 0.75))
+		draw_rect(r, Color(0.35, 0.08, 0.08))
+		var fill := Color(0.95, 0.25, 0.2).lerp(Color(0.4, 0.95, 0.4), clampf(hurt_ratio * 1.4 - 0.3, 0.0, 1.0))
+		draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(hurt_ratio, 0.0, 1.0), r.size.y)), fill)
+		y = -TAG_SIZE.y - 3.0
+	if tag.a > 0.0:
+		var tri := PackedVector2Array([Vector2(-3.5, y - 5.0), Vector2(3.5, y - 5.0), Vector2(0, y - 0.5)])
+		draw_colored_polygon(tri, tag)
+		tri.append(tri[0])
+		draw_polyline(tri, Color(0, 0, 0, 0.7), 1.0)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 머리 위 소속 색 (없으면 투명 — 조직원은 조직 색)
+func tag_color() -> Color:
+	return Color(0, 0, 0, 0)
 
 
 ## 들것: 누운 사람 밑에 주황 틀과 흰 매트 (진행 방향으로 길게, 바닥보다 조금 위)

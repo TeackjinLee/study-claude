@@ -5,6 +5,7 @@ extends Pedestrian
 ## 기절시키면 바로 수배 ★4다 (PoliceDispatcher).
 
 var goal := Vector2.INF           ## 달려갈 곳 (INF면 제자리)
+var route := PackedVector2Array() ## goal 전에 차례로 지날 길 점 (건물을 돌아간다 — EmsDispatcher.carry_route)
 var on_duty := true               ## 구급차 일 중 — 끝나면(구급차를 잃으면) 평범한 사람처럼 걷는다
 var steered := false              ## 들것을 드는 중 — 자리는 EmsDispatcher가 옮긴다
 
@@ -26,9 +27,13 @@ func _physics_process(delta: float) -> void:
 		_set_state(State.WALK, 0.0)
 	if steered:
 		return
+	while not route.is_empty() and global_position.distance_to(route[0]) < EmsDispatcher.WAYPOINT:
+		route.remove_at(0)
+	var to := route[0] if not route.is_empty() else goal
 	var vel := Vector2.ZERO
-	if goal != Vector2.INF and global_position.distance_to(goal) > 3.0:
-		vel = (goal - global_position).normalized() * minf(npc.run_speed, global_position.distance_to(goal) * 8.0)
+	if to != Vector2.INF and global_position.distance_to(to) > 3.0:
+		var brake := INF if not route.is_empty() else global_position.distance_to(to) * 8.0
+		vel = (to - global_position).normalized() * minf(npc.run_speed, brake)
 	velocity = vel
 	if vel != Vector2.ZERO:
 		facing = Vector2.UP.angle_to(vel)
@@ -48,5 +53,6 @@ func off_duty() -> void:
 	on_duty = false
 	steered = false
 	goal = Vector2.INF
+	route.clear()
 	if not is_dead() and state != State.KNOCKED:
 		resume_walking()

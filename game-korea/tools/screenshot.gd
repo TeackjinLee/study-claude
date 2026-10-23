@@ -37,6 +37,11 @@ func _ready() -> void:
 		await _army_shots(main)
 		get_tree().quit()
 		return
+	if "--only=hud" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _hud_shots(main)
+		get_tree().quit()
+		return
 	if "--only=ems" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _ems_shots(main)
@@ -1176,6 +1181,59 @@ func _ems_shots(main: Node2D) -> void:
 	await _frames(10)
 	await _save("ems_back")
 	cam.target = player
+
+
+## HUD (`-- --only=hud`): 왼쪽 아래 원형 미니맵·오른쪽 위 무기 칸, 주인공 발밑 진행 방향 원,
+## 다친 시민·조직원 머리 위 체력 막대·조직 색 삼각형 (hud_foot), 차를 몰 때 (hud_drive)
+func _hud_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	var peds: PedestrianManager = main.pedestrians
+	main.street_events.enabled = false
+	main.sky.paused_clock = true
+	main.sky.set_hour(21.0)
+	main.missions.start(main.missions.by_id(&"gangnam_06"))   # 왼쪽 위 미션 상자
+	player.arsenal.give(load("res://data/weapons/smg.tres"), 30)
+	cam.target = player
+	cam.snap()
+	var loop := City.sidewalk_loop(City.nearest_block(player.global_position))
+	var rng := RandomNumberGenerator.new()
+	var at := player.global_position
+	for k in 3:
+		var p := Pedestrian.new()
+		p.setup(PedestrianManager.NPC_TYPES[k], rng, loop, 0, 0.0, 1)
+		p.position = at + Vector2(40.0 + k * 24.0, -30.0 + k * 20.0)
+		peds.add(p)
+		p.health = p.npc.health * (0.8 - k * 0.25)
+	var gang: GangType = main.missions.gangs.gangs[0]
+	var g := GangMember.new()
+	g.setup(gang.member, rng, loop, 0, 0.0, 1)
+	g.gang = gang
+	g.guard = true
+	g.position = at + Vector2(-50, 20)
+	peds.add(g)
+	Input.action_press("steer_right")
+	await _frames(20)
+	Input.action_release("steer_right")
+	await _frames(3)
+	for q: Pedestrian in peds.peds:
+		q.queue_redraw()
+	await _frames(2)
+	await _save("hud_foot")
+	player.global_position = at     # 걸어서 멀어진 차 옆으로 되돌린다
+	await _frames(2)
+	main.director.request_enter_exit()
+	await _frames(20)
+	Input.action_press("accelerate")
+	await _frames(70)
+	Input.action_press("steer_right")
+	await _frames(20)
+	var ch: RadioChannel = load("res://data/radio/" + DirAccess.get_files_at("res://data/radio")[0].trim_suffix(".remap"))
+	main.hud.show_dj(ch, "비 오는 밤, 강남대로를 달리는 분들께 다음 곡 보내 드립니다.")   # 오른쪽 아래 라디오 상자
+	await _frames(2)
+	await _save("hud_drive")
+	for a in ["accelerate", "steer_right"]:
+		Input.action_release(a)
 
 
 ## NPC 헬기 (입체 모형): ★5 경찰 헬기 탐조등 → ★6 군 기동헬기 → 큰불에 물을 쏟는 119 구조헬기 (`-- --only=air`)

@@ -6,13 +6,16 @@ extends Control
 ## 수배 중에는 카센터도 테두리에 붙여 방향을 보여 준다.
 ## 화면 밖 목표는 테두리에 붙여 방향만 보여 준다.
 
-const RADIUS := 86.0
+const RADIUS := 96.0
 const SCALE := 0.07              ## 월드 1px → 미니맵 px
-const BG := Color(0.1, 0.11, 0.15, 0.85)
-const BLOCK_COLOR := Color(0.3, 0.32, 0.38)
-const LOCKED_COLOR := Color(0.16, 0.16, 0.18)
-const WATER_COLOR := Color(0.1, 0.22, 0.4)
-const PARK_COLOR := Color(0.2, 0.38, 0.22)
+const BG := Color(0.07, 0.09, 0.15, 0.9)          ## 도로 (블록 사이)
+const BLOCK_COLOR := Color(0.27, 0.33, 0.46)
+const LOCKED_COLOR := Color(0.13, 0.14, 0.18)
+const WATER_COLOR := Color(0.1, 0.24, 0.48)
+const PARK_COLOR := Color(0.2, 0.38, 0.26)
+const BEZEL := Color(0.04, 0.05, 0.08, 0.92)      ## 바깥 테
+const RIM := Color(0.92, 0.94, 1.0, 0.9)           ## 테 안쪽 흰 선
+const BEZEL_WIDTH := 7.0
 
 var director: Director
 var police: PoliceDispatcher
@@ -31,7 +34,7 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var c := Vector2(RADIUS, RADIUS)
 	var me := director.controlled_target().global_position
-	draw_circle(c, RADIUS + 3.0, Color(0, 0, 0, 0.8))
+	draw_circle(c, RADIUS + BEZEL_WIDTH + 1.0, Color(0, 0, 0, 0.35))   # 그림자
 	draw_circle(c, RADIUS, BG)
 	var circle := _circle_poly(c, RADIUS - 1.0)
 	# 주인공 둘레 블록만: 땅·잠긴 땅, 그리고 강물
@@ -72,19 +75,45 @@ func _draw() -> void:
 	var thief := events.target_position() if events else Vector2.INF
 	if thief != Vector2.INF:
 		_dot(thief, me, c, Color(1.0, 0.3, 0.2), 4.0 + 1.0 * sin(_time * 10.0), true)   # 쫓는 범인 (거리 이벤트)
-	# 주인공: 진행 방향을 가리키는 흰 삼각형
+	# 원 안쪽 그늘 (테두리 쪽이 어둡다)
+	for k in 4:
+		draw_arc(c, RADIUS - 2.0 - k * 3.0, 0.0, TAU, 72, Color(0, 0, 0, 0.22 - k * 0.05), 3.0)
+	# 주인공: 진행 방향을 가리키는 흰 화살촉
 	var heading := director.current_vehicle.motor.heading if director.current_vehicle else director.player.facing
-	var tri := PackedVector2Array([Vector2(0, -7), Vector2(5, 5), Vector2(-5, 5)])
+	var tri := PackedVector2Array([Vector2(0, -10), Vector2(7, 7), Vector2(0, 3), Vector2(-7, 7)])
 	for k in tri.size():
 		tri[k] = c + tri[k].rotated(heading + _turn())
 	draw_colored_polygon(tri, Color.WHITE)
-	draw_arc(c, RADIUS, 0.0, TAU, 64, Color(0.45, 1.0, 0.55, 0.8), 2.0)
+	tri.append(tri[0])
+	draw_polyline(tri, Color(0, 0, 0, 0.9), 1.5, true)
+	# 테: 어두운 두꺼운 테 + 흰 안쪽 선 + 바깥 얇은 선
+	draw_arc(c, RADIUS + BEZEL_WIDTH * 0.5, 0.0, TAU, 96, BEZEL, BEZEL_WIDTH, true)
+	draw_arc(c, RADIUS, 0.0, TAU, 96, RIM, 2.0, true)
+	draw_arc(c, RADIUS + BEZEL_WIDTH, 0.0, TAU, 96, Color(1, 1, 1, 0.25), 1.0, true)
+	# 테 위 방위 눈금 (45°마다)
+	for k in 8:
+		var a := k * TAU / 8.0 + _turn() - PI * 0.5
+		var tick := 5.0 if k % 2 == 0 else 3.0
+		draw_line(c + Vector2.from_angle(a) * (RADIUS + 1.5), c + Vector2.from_angle(a) * (RADIUS + 1.5 + tick), Color(1, 1, 1, 0.55), 1.5)
+	# N: 테 위 북쪽에 붙은 둥근 표
+	var north := c + Vector2.UP.rotated(_turn()) * (RADIUS + BEZEL_WIDTH * 0.5)
+	draw_circle(north, 11.0, Color(0, 0, 0, 0.9))
+	draw_circle(north, 9.5, Color(0.12, 0.13, 0.18))
+	draw_arc(north, 9.5, 0.0, TAU, 24, RIM, 1.5, true)
+	draw_string(ThemeDB.fallback_font, north + Vector2(-5, 5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
+	# 구역 이름: 아래 둥근 이름표
 	var dist := CityMap.district_at(me)
-	draw_string(ThemeDB.fallback_font, Vector2(0, RADIUS * 2 + 22), Locale.t(dist.display_name if dist else "한강"),
-		HORIZONTAL_ALIGNMENT_CENTER, RADIUS * 2, 16, Color(0.85, 0.9, 1.0, 0.9))
-	var north := c + Vector2.UP.rotated(_turn()) * (RADIUS - 12.0)
-	draw_string(ThemeDB.fallback_font, north + Vector2(-4, 5), "N",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.6))
+	var where := Locale.t(dist.display_name if dist else "한강")
+	var font := ThemeDB.fallback_font
+	var w := font.get_string_size(where, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + 22.0
+	var pill := Rect2(Vector2(RADIUS - w * 0.5, RADIUS * 2 + BEZEL_WIDTH + 6.0), Vector2(w, 22))
+	var box := StyleBoxFlat.new()
+	box.bg_color = BEZEL
+	box.set_corner_radius_all(11)
+	box.set_border_width_all(1)
+	box.border_color = Color(RIM, 0.5)
+	draw_style_box(box, pill)
+	draw_string(font, Vector2(pill.position.x, pill.end.y - 6), where, HORIZONTAL_ALIGNMENT_CENTER, w, 15, Color(0.88, 0.92, 1.0))
 
 
 ## 미니맵 회전 (2.5D면 화면처럼 북서쪽이 위)

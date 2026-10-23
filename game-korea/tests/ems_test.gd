@@ -64,6 +64,21 @@ func _test_in_game() -> void:
 	await _frames(30)
 	_expect(ems.heli.global_position.distance_to(ems.pad) < 1.0 and ems.heli._look.rotor_off, "서 있는 헬기는 움직이지 않고 날개가 멈춰 있다")
 
+	# 들것 길: 부지 깊숙한 곳(비밀 패키지 자리)에서 길가까지 건물·담을 뚫지 않는다
+	var detours := 0
+	for spot0: Vector2 in HiddenPackages.SET.spots:
+		var curb := ems._curb(spot0)
+		var route := ems.carry_route(spot0, curb)
+		var walls := ems._walls_near(City.block_rect(City.nearest_block(spot0).x, City.nearest_block(spot0).y).grow(City.ROAD))
+		var ok := route[0] == spot0 and route[route.size() - 1] == curb
+		for k in route.size() - 1:
+			ok = ok and EmsDispatcher._clear(route[k], route[k + 1], walls)
+		_expect(ok, "들것 길이 건물을 뚫지 않는다 (%s → %s: %s)" % [spot0, curb, route])
+		if route.size() > 2:
+			detours += 1
+	_expect(detours >= 10, "부지 안에서는 건물을 돌아 나온다 (%d곳)" % detours)
+	print("  들것 길: 50곳 중 %d곳은 돌아 나온다" % detours)
+
 	# ── 1. 기절 → 구급차 ──
 	var block := City.nearest_block(player.global_position)
 	var loop := City.sidewalk_loop(block)

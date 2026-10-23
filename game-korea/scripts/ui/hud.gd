@@ -23,8 +23,13 @@ const ARROW_MARGIN := 46.0
 const STAR_SLOTS := 6         ## 별칸은 6개 (M3에서는 ★3까지 찬다)
 const STAR_RADIUS := 13.0
 const STAR_FLASH_TIME := 2.0
-const STAR_ON := Color(1.0, 0.85, 0.2)
-const STAR_OFF := Color(0.1, 0.28, 0.16, 0.85)
+const STAR_ON := Color(0.95, 0.18, 0.2)
+const STAR_OFF := Color(0.55, 0.57, 0.62, 0.55)
+const MONEY_GREEN := Color(0.45, 1.0, 0.45)
+const MISSION_RED := Color(0.95, 0.22, 0.2)
+const MISSION_WIDTH := 400.0   ## 미션 상자 글자 폭
+const RADIO_WIDTH := 400.0     ## 라디오 상자 폭
+const MAP_MARGIN := 34.0       ## 미니맵: 왼쪽 아래 (테·N 표가 화면 밖으로 나가지 않게 띄운다)
 
 var director: Director
 var police: PoliceDispatcher
@@ -46,7 +51,7 @@ var _arrow: Control
 var _minimap: Minimap
 var _banner_id := 0
 var _bars: Control
-var _weapon: Label
+var _weapon: WeaponPanel
 var _money: Label
 var _stars: Control
 var _banner: Label
@@ -55,6 +60,13 @@ var _star_flash := 0.0
 var _drift: Label
 var _prompt: Label
 var _notice: Label
+var _mission_box: PanelContainer
+var _mission_style: StyleBoxFlat
+var _mission_icon: Control
+var _radio_box: PanelContainer
+var _radio_icon: Control
+var _radio_wave: Control
+var _channel: RadioChannel       ## 상자에 띄운 채널 (null = 껐다)
 var _radio: Label                ## 차 라디오 채널 이름 (맞출 때 잠깐)
 var _dj: Label                   ## DJ 자막
 var _radio_time := 0.0
@@ -91,53 +103,45 @@ func _ready() -> void:
 	_hint.offset_left = 24
 	_hint.offset_top = -40
 
-	_radio = _label(20, GOLD)
-	_radio.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	_radio.offset_left = 24
-	_radio.offset_top = -112
-	_radio.visible = false
-	_dj = _label(17, Color(1, 1, 1, 0.92))
-	_dj.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	_dj.offset_left = 24
-	_dj.offset_top = -82
-	_dj.visible = false
+	_build_radio_box()
 
-	_money = _label(26, Color(0.45, 1.0, 0.55))
+	# 오른쪽 위: 무기 칸 → 돈 → 수배 별 → 존경도
+	_weapon = WeaponPanel.new()
+	_weapon.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_weapon.offset_left = -24 - WeaponPanel.SIZE.x
+	_weapon.offset_right = -24
+	_weapon.offset_top = 16
+	_weapon.offset_bottom = 16 + WeaponPanel.SIZE.y
+	add_child(_weapon)
+
+	_money = _label(30, MONEY_GREEN)
+	_money.add_theme_constant_override("outline_size", 9)
 	_money.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	_money.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_money.offset_left = -300
 	_money.offset_right = -24
-	_money.offset_top = 14
+	_money.offset_top = 128
 	_money.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	_stars = Control.new()
 	_stars.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	_stars.offset_left = -24 - STAR_SLOTS * STAR_RADIUS * 2.3
 	_stars.offset_right = -24
-	_stars.offset_top = 54
-	_stars.offset_bottom = 54 + STAR_RADIUS * 2
+	_stars.offset_top = 172
+	_stars.offset_bottom = 172 + STAR_RADIUS * 2
 	_stars.draw.connect(_draw_stars)
 	add_child(_stars)
-
-	_weapon = _label(22, Color(1.0, 0.95, 0.8))
-	_weapon.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_weapon.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_weapon.offset_left = -300
-	_weapon.offset_right = -24
-	_weapon.offset_top = 90
-	_weapon.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	_respect = _label(17, GOLD)
 	_respect.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	_respect.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_respect.offset_left = -300
 	_respect.offset_right = -24
-	_respect.offset_top = 124
+	_respect.offset_top = 206
 	_respect.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	# 미션: 위쪽 가운데 제목·목표·남은 시간
-	_mission_title = _centered(22, GOLD, 14)
-	_objective = _centered(20, Color.WHITE, 44)
+	_build_mission_box()
 
 	# 화면 밖 목표를 가리키는 테두리 화살표
 	_arrow = Control.new()
@@ -153,11 +157,11 @@ func _ready() -> void:
 	_minimap.city = city
 	_minimap.jobs = jobs
 	_minimap.events = events
-	_minimap.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	_minimap.offset_left = -24 - Minimap.RADIUS * 2
-	_minimap.offset_top = -60 - Minimap.RADIUS * 2
-	_minimap.offset_right = -24
-	_minimap.offset_bottom = -60
+	_minimap.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_minimap.offset_left = MAP_MARGIN
+	_minimap.offset_top = -78 - Minimap.RADIUS * 2
+	_minimap.offset_right = MAP_MARGIN + Minimap.RADIUS * 2
+	_minimap.offset_bottom = -78
 	add_child(_minimap)
 
 	# 체력 막대 (차에 타면 그 아래 차 체력 막대도)
@@ -172,11 +176,10 @@ func _ready() -> void:
 
 	# 미니맵 위 시계와 날씨
 	_clock = _label(16, Color(0.85, 0.9, 1.0))
-	_clock.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	_clock.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_clock.offset_left = -24 - Minimap.RADIUS * 2
-	_clock.offset_right = -24
-	_clock.offset_top = -86 - Minimap.RADIUS * 2
+	_clock.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_clock.offset_left = MAP_MARGIN
+	_clock.offset_right = MAP_MARGIN + Minimap.RADIUS * 2
+	_clock.offset_top = -126 - Minimap.RADIUS * 2
 	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# 구역 이름표: 다른 구역에 들어서면 잠깐 (위쪽 가운데, 미션 목표 아래)
@@ -283,7 +286,8 @@ func _draw_stars() -> void:
 		var color := Color(STAR_ON, alpha) if on else STAR_OFF
 		_stars.draw_colored_polygon(pts, color)
 		pts.append(pts[0])
-		_stars.draw_polyline(pts, Color(0, 0, 0, 0.8), 2.0)
+		_stars.draw_polyline(pts, Color(0, 0, 0, 0.85), 3.5)
+		_stars.draw_polyline(pts, Color(1, 1, 1, 0.9 if on else 0.35), 1.5)
 
 
 func _draw_bars() -> void:
@@ -300,8 +304,127 @@ func _bar(y: float, ratio: float, color: Color) -> void:
 	_bars.draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(ratio, 0.0, 1.0), r.size.y)), color)
 
 
+## 왼쪽 위 미션 상자: 어두운 판 + 색 테두리(미션 빨강 · 부업 청록 · 광란 빨강), 표적 그림, 제목·남은 시간, 목표
+func _build_mission_box() -> void:
+	_mission_style = _box_style(Color(0.04, 0.05, 0.08, 0.84), MISSION_RED, 2)
+	_mission_box = PanelContainer.new()
+	_mission_box.add_theme_stylebox_override("panel", _mission_style)
+	_mission_box.position = Vector2(24, 162)
+	_mission_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mission_box.visible = false
+	add_child(_mission_box)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	_mission_box.add_child(row)
+	_mission_icon = Control.new()
+	_mission_icon.custom_minimum_size = Vector2(28, 28)
+	_mission_icon.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_mission_icon.draw.connect(_draw_mission_icon)
+	row.add_child(_mission_icon)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 2)
+	row.add_child(col)
+	_mission_title = _make_label(21, GOLD)
+	_objective = _make_label(16, Color(1, 1, 1, 0.92))
+	_objective.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_objective.custom_minimum_size.x = MISSION_WIDTH
+	col.add_child(_mission_title)
+	col.add_child(_objective)
+
+
+## 표적 그림 (테두리 색)
+func _draw_mission_icon() -> void:
+	var c := _mission_icon.size * 0.5 + Vector2(0, 2)
+	var color := _mission_style.border_color
+	_mission_icon.draw_arc(c, 10.0, 0.0, TAU, 32, color, 2.5, true)
+	_mission_icon.draw_circle(c, 3.0, color)
+	for d: Vector2 in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+		_mission_icon.draw_line(c + d * 7.0, c + d * 14.0, color, 2.5)
+
+
+## 오른쪽 아래 라디오 상자: 라디오 그림 · 채널(주파수·이름)과 소리 막대 · DJ 자막
+func _build_radio_box() -> void:
+	_radio_box = PanelContainer.new()
+	_radio_box.add_theme_stylebox_override("panel", _box_style(Color(0.04, 0.05, 0.08, 0.84), Color(0.92, 0.94, 1.0, 0.7), 2))
+	_radio_box.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	_radio_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_radio_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_radio_box.offset_left = -24 - RADIO_WIDTH
+	_radio_box.offset_right = -24
+	_radio_box.offset_top = -64
+	_radio_box.offset_bottom = -24
+	_radio_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_radio_box.visible = false
+	add_child(_radio_box)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	_radio_box.add_child(row)
+	_radio_icon = Control.new()
+	_radio_icon.custom_minimum_size = Vector2(46, 46)
+	_radio_icon.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_radio_icon.draw.connect(_draw_radio_icon)
+	row.add_child(_radio_icon)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(col)
+	var head := HBoxContainer.new()
+	col.add_child(head)
+	_radio = _make_label(18, GOLD)
+	_radio.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(_radio)
+	_radio_wave = Control.new()
+	_radio_wave.custom_minimum_size = Vector2(54, 20)
+	_radio_wave.draw.connect(_draw_radio_wave)
+	head.add_child(_radio_wave)
+	_dj = _make_label(16, Color(1, 1, 1, 0.92))
+	_dj.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_dj.custom_minimum_size.x = RADIO_WIDTH - 90
+	_dj.visible = false
+	col.add_child(_dj)
+
+
+## 라디오 그림: 몸통·스피커 망·안테나 (채널 색)
+func _draw_radio_icon() -> void:
+	var color := _radio.get_theme_color("font_color")
+	var body := Rect2(4, 14, 38, 26)
+	_radio_icon.draw_line(Vector2(30, 14), Vector2(38, 3), Color(0.8, 0.82, 0.86), 2.0, true)
+	var st := _box_style(Color(0.16, 0.17, 0.2), color, 2)
+	st.set_corner_radius_all(5)
+	_radio_icon.draw_style_box(st, body)
+	_radio_icon.draw_circle(Vector2(16, 27), 8.0, Color(0.08, 0.09, 0.1))
+	for k in 3:
+		_radio_icon.draw_arc(Vector2(16, 27), 2.0 + k * 2.5, 0.0, TAU, 16, Color(color, 0.8), 1.0, true)
+	_radio_icon.draw_rect(Rect2(28, 20, 9, 3), color)
+	_radio_icon.draw_rect(Rect2(28, 26, 9, 2), Color(1, 1, 1, 0.5))
+	_radio_icon.draw_rect(Rect2(28, 31, 9, 2), Color(1, 1, 1, 0.5))
+
+
+## 소리 막대: 켜져 있으면 막대가 오르내리고, 껐으면 납작하다
+func _draw_radio_wave() -> void:
+	var on := _channel != null
+	var t := Time.get_ticks_msec() / 1000.0
+	var color := Color(_radio.get_theme_color("font_color"), 0.9)
+	for k in 9:
+		var h := 2.0 if not on else 3.0 + 13.0 * absf(sin(t * (5.0 + k * 0.7) + k * 1.3)) * (1.0 - absf(k - 4) / 6.0)
+		_radio_wave.draw_rect(Rect2(2 + k * 6, 10 - h * 0.5, 3, h), color)
+
+
+func _box_style(bg: Color, edge: Color, width: int) -> StyleBoxFlat:
+	var st := StyleBoxFlat.new()
+	st.bg_color = bg
+	st.border_color = edge
+	st.set_border_width_all(width)
+	st.set_corner_radius_all(9)
+	st.set_content_margin_all(12)
+	st.shadow_color = Color(0, 0, 0, 0.45)
+	st.shadow_size = 5
+	return st
+
+
 ## 차 라디오 채널을 맞췄다 (null = 껐다)
 func show_radio(ch: RadioChannel) -> void:
+	_channel = ch
 	_radio.text = "♪ " + Locale.t("라디오 끔") if ch == null else "♪ %s  %s" % [ch.frequency, Locale.t(ch.display_name)]
 	_radio.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7) if ch == null else ch.color)
 	_radio_time = RADIO_TIME
@@ -311,6 +434,9 @@ func show_radio(ch: RadioChannel) -> void:
 
 ## DJ 자막
 func show_dj(ch: RadioChannel, text: String) -> void:
+	_channel = ch
+	_radio.text = "♪ %s  %s" % [ch.frequency, Locale.t(ch.display_name)]
+	_radio.add_theme_color_override("font_color", ch.color)
 	_dj.text = "DJ  " + text
 	_dj.add_theme_color_override("font_color", ch.color.lerp(Color.WHITE, 0.6))
 	_dj_time = DJ_TIME
@@ -322,12 +448,18 @@ func notify(text: String) -> void:
 
 
 func _label(size: int, color: Color) -> Label:
+	var l := _make_label(size, color)
+	add_child(l)
+	return l
+
+
+## 글자 (붙이지 않는다 — 상자 안에 넣을 때)
+func _make_label(size: int, color: Color) -> Label:
 	var l := Label.new()
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
 	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	l.add_theme_constant_override("outline_size", 6)
-	add_child(l)
 	return l
 
 
@@ -344,8 +476,13 @@ func _process(delta: float) -> void:
 	_notice.visible = _notice_time > 0.0
 	_radio_time -= delta
 	_dj_time -= delta
-	_radio.visible = _radio_time > 0.0
 	_dj.visible = _dj_time > 0.0 and director.current_vehicle != null
+	_radio_box.visible = _radio_time > 0.0 or _dj.visible
+	if _radio_box.visible:
+		_radio_box.modulate.a = clampf(maxf(_radio_time, _dj_time if _dj.visible else 0.0) / 0.4, 0.0, 1.0)
+		_radio_box.offset_top = _radio_box.offset_bottom - _radio_box.get_combined_minimum_size().y   # 아래에 붙여 위로 자란다
+		_radio_wave.queue_redraw()
+		_radio_icon.queue_redraw()
 	_district_time -= delta
 	_district.visible = _district_time > 0.0
 	_district_sub.visible = _district.visible
@@ -358,11 +495,21 @@ func _process(delta: float) -> void:
 	_star_flash = maxf(_star_flash - delta, 0.0)
 	_money.text = money_text(wallet.money)
 	_update_mission()
+	_mission_box.visible = _mission_title.visible
+	if _mission_box.visible:
+		# 테두리·표적: 미션 빨강, 부업 청록, 남은 시간이 적으면 깜박인다
+		var color := MISSION_RED
+		if not missions.active() and jobs != null and jobs.active() and not (rampages and rampages.active()):
+			color = Color(0.4, 0.95, 1.0)
+		if _mission_title.get_theme_color("font_color").is_equal_approx(Color(1.0, 0.4, 0.35)) and int(Time.get_ticks_msec() / 300) % 2 == 0:
+			color = Color.WHITE
+		_mission_style.border_color = color
+		_mission_icon.queue_redraw()
+		_mission_box.reset_size()
 	_stars.queue_redraw()
 	_bars.queue_redraw()
 	var w := player.arsenal.current()
-	var ammo := player.arsenal.ammo_of(w)
-	_weapon.text = Locale.t(w.display_name) if ammo < 0 else "%s  %d" % [Locale.t(w.display_name), ammo]
+	_weapon.show_weapon(w, player.arsenal.ammo_of(w))
 	var v := director.current_vehicle
 	if v:
 		_info.text = "%s\n%d km/h" % [Locale.t(v.stats.display_name), roundi(v.speed() * KMH_PER_PX)]

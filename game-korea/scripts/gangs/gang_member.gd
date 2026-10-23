@@ -73,12 +73,13 @@ func _draw() -> void:
 	if state == State.KNOCKED or state == State.DEAD or gang == null:
 		return
 	if IsoView.enabled:
-		# 2.5D: 가슴에 갱 상징색 띠
-		draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, IsoView.ground(global_position, level)).scaled_local(Vector2(npc.body_scale, npc.body_scale)))
-		draw_rect(Rect2(-4.5, -17, 9, 2.2), gang.accent)
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		return
+		return     # 2.5D: 조직 색은 머리 위 삼각형 (tag_color) — 몸에 띠를 그리면 그림을 가린다
 	# 어깨에 갱 상징색 띠 — 시민과 구별된다
 	draw_set_transform(Vector2.ZERO, facing, Vector2.ONE)
 	draw_rect(Rect2(-6, 1.5, 12, 1.8), gang.accent)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 머리 위 조직 색 삼각형 (Pedestrian._draw_head_tag)
+func tag_color() -> Color:
+	return gang.accent if gang else Color(0, 0, 0, 0)

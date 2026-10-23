@@ -200,6 +200,9 @@ func _ready() -> void:
 	director.vehicles = vehicles
 	director.pedestrians = pedestrians
 	add_child(director)
+	var ring := HeadingRing.new()
+	ring.director = director
+	add_child(ring)
 	director.control_changed.connect(func(t: Node2D): camera.target = t)
 	director.control_changed.connect(_on_control_changed)
 
@@ -271,6 +274,7 @@ func _ready() -> void:
 	ems.pedestrians = pedestrians
 	ems.traffic = traffic
 	ems.vehicles = vehicles
+	ems.obstacles = city.obstacle_rects()
 	add_child(ems)
 
 	gangs = GangManager.new()

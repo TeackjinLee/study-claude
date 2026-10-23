@@ -30,6 +30,9 @@ const STRETCHER := 26.0             ## 들것 앞뒤 대원 사이
 const CARRY_SPEED := 70.0           ## 들것을 들고 걷는 빠르기
 const GRAB := 6.0                   ## 대원이 들것 자리에 이만큼 붙으면 든다
 const BOARD_REACH := 8.0
+const ROUTE_GRID := 8.0             ## 들것 길: 부지 안을 이 간격 격자로 번진다
+const ROUTE_CLEAR := 9.0            ## 들것 길: 건물·담에서 이만큼 띄운다
+const WAYPOINT := 6.0               ## 길 점에 이만큼 다가가면 다음 점으로
 const WORK_TIMEOUT := 40.0          ## 대원이 이만큼 한 사람에게 매여 있으면 (막혔다) 그만둔다
 const OFFSCREEN := 950.0            ## 일을 그만둔 대원은 카메라에서 이만큼 멀어지면 치운다
 const HELI_GROUP := 10              ## 한 곳에 이만큼 넘게 쓰러지면 구급헬기가 뜬다
@@ -42,6 +45,7 @@ const HELI_REACH := 14.0            ## 이만큼 위에 오면 줄을 내린다
 
 var pedestrians: PedestrianManager
 var traffic: TrafficSystem
+var obstacles: Array[Rect2] = []    ## 건물·담 바닥 사각형 (들것 길이 건물을 뚫지 않게 — Main이 넣는다)
 var vehicles: Array[Vehicle] = []
 var enabled := true
 var rng := RandomNumberGenerator.new()
@@ -114,7 +118,7 @@ func _dispatch() -> void:
 	if car == null:
 		return
 	var u := {"car": car, "patients": [], "medics": [], "phase": Amb.DRIVE, "patient": null,
-		"at": Vector2.ZERO, "park": Vector2.ZERO, "time": 0.0}
+		"at": Vector2.ZERO, "park": Vector2.ZERO, "time": 0.0, "route": PackedVector2Array(), "leg": 0, "sent": null}
 	for p in list:
 		if u.patients.size() < CAPACITY and p.global_position.distance_to(first.global_position) < GROUP:
 			p.rescuer = car
@@ -228,14 +232,26 @@ func _crew(u: Dictionary, delta: float) -> void:
 			if p == null:
 				u.phase = Amb.BOARD
 				u.time = 0.0
+				for m: Paramedic in u.medics:
+					m.route = _trim(carry_route(rear, m.global_position), true)
 				return
-			# 들것 앞(구급차 쪽)에 a, 뒤에 b
-			var dir := (rear - p.global_position).normalized()
+			if u.sent != p:
+				# 대원마다 지금 자리에서 환자까지 건물을 돌아가는 길
+				u.sent = p
+				for m: Paramedic in u.medics:
+					m.route = _trim(carry_route(p.global_position, m.global_position), true)
+			# 들것 앞(구급차 쪽)에 a, 뒤에 b — 들것 길의 첫 방향으로 눕힌다
+			var route: PackedVector2Array = u.route
+			if route.is_empty() or route[0] != p.global_position:
+				route = carry_route(p.global_position, rear)
+			u.route = route
+			var dir: Vector2 = (route[1] - route[0]).normalized() if route.size() > 1 else Vector2.UP
 			a.goal = p.global_position + dir * STRETCHER * 0.5
 			b.goal = p.global_position - dir * STRETCHER * 0.5
 			if _at_goal(a) and _at_goal(b):
 				u.phase = Amb.CARRY
 				u.at = p.global_position
+				u.leg = 1
 				p.carried = true
 				a.steered = true
 				b.steered = true
@@ -243,13 +259,20 @@ func _crew(u: Dictionary, delta: float) -> void:
 			if a.state == Pedestrian.State.KNOCKED or b.state == Pedestrian.State.KNOCKED:
 				_drop(u)     # 들던 대원이 넘어졌다 — 내려놓고 다시 든다
 				u.patient = p
+				u.sent = null
 				return
-			var to: Vector2 = rear - u.at
-			if to.length() < 4.0:
+			var route: PackedVector2Array = u.route
+			route[route.size() - 1] = rear
+			while u.leg < route.size() - 1 and u.at.distance_to(route[u.leg]) < WAYPOINT:
+				u.leg += 1
+			var to: Vector2 = route[mini(u.leg, route.size() - 1)] - u.at
+			if u.leg >= route.size() - 1 and to.length() < 4.0:
 				pedestrians.remove(p)     # 실었다
 				u.patients.erase(p)
 				rescued += 1
 				u.time = 0.0
+				u.sent = null
+				u.route = PackedVector2Array()
 				_drop(u)
 				return
 			var dir: Vector2 = to.normalized()
@@ -273,7 +296,156 @@ func _crew(u: Dictionary, delta: float) -> void:
 
 
 func _at_goal(m: Paramedic) -> bool:
-	return m.state == Pedestrian.State.WALK and m.global_position.distance_to(m.goal) < GRAB
+	return m.route.is_empty() and m.state == Pedestrian.State.WALK and m.global_position.distance_to(m.goal) < GRAB
+
+
+# ── 들것 길 ──────────────────────────────────────────────
+
+## 들것 길 (from → to): 부지 안이면 격자를 번져 건물·담을 돌아 인도까지 나오고, 인도 고리를 따라
+## 구급차 쪽으로 돈 뒤 to로 간다. 막히지 않는 곳은 곧게 잇는다 (모서리만 남긴다).
+func carry_route(from: Vector2, to: Vector2) -> PackedVector2Array:
+	var block := City.nearest_block(from)
+	var area := City.block_rect(block.x, block.y)
+	var walls := _walls_near(area.grow(City.ROAD * 0.5))
+	var path := PackedVector2Array([from])
+	if area.has_point(from):
+		if area.grow(-City.SIDEWALK).has_point(from):
+			path.append_array(_walk_out(area, from, walls))
+		path.append_array(_along_loop(area.grow(-City.SIDEWALK * 0.5), path[path.size() - 1], to))
+	path.append(to)
+	return _pull(path, walls)
+
+
+## 대원이 따라갈 길 (끝점에서 시작점 쪽으로 뒤집고, 대원 자리·환자 자리는 뺀다 — 마지막은 goal이 정한다)
+static func _trim(route: PackedVector2Array, reverse: bool) -> PackedVector2Array:
+	var r := route.duplicate()
+	if reverse:
+		r.reverse()
+	if r.size() > 0:
+		r.remove_at(0)
+	if r.size() > 0:
+		r.remove_at(r.size() - 1)
+	return r
+
+
+func _walls_near(area: Rect2) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for r in obstacles:
+		var g := r.grow(ROUTE_CLEAR)
+		if g.intersects(area):
+			out.append(g)
+	return out
+
+
+## 부지 안 from에서 인도 띠까지 격자를 번져 가장 가까운 길 (못 나가면 빈 길)
+func _walk_out(area: Rect2, from: Vector2, walls: Array[Rect2]) -> PackedVector2Array:
+	var n := Vector2i(int(area.size.x / ROUTE_GRID), int(area.size.y / ROUTE_GRID))
+	var cell := func(p: Vector2) -> Vector2i:
+		return Vector2i(clampi(int((p.x - area.position.x) / ROUTE_GRID), 0, n.x - 1), clampi(int((p.y - area.position.y) / ROUTE_GRID), 0, n.y - 1))
+	var center := func(c: Vector2i) -> Vector2:
+		return area.position + (Vector2(c) + Vector2(0.5, 0.5)) * ROUTE_GRID
+	var ring := int(City.SIDEWALK * 0.5 / ROUTE_GRID)
+	var start: Vector2i = cell.call(from)
+	var came := {start: start}
+	var queue: Array[Vector2i] = [start]
+	var head := 0
+	while head < queue.size():
+		var c := queue[head]
+		head += 1
+		if c.x <= ring or c.y <= ring or c.x >= n.x - 1 - ring or c.y >= n.y - 1 - ring:
+			var out := PackedVector2Array()
+			while c != start:
+				out.append(center.call(c))
+				c = came[c]
+			out.reverse()
+			return out
+		for d: Vector2i in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+			var m: Vector2i = c + d
+			if m.x < 0 or m.y < 0 or m.x >= n.x or m.y >= n.y or came.has(m):
+				continue
+			if not _inside(center.call(m), walls):
+				came[m] = c
+				queue.append(m)
+	return PackedVector2Array()
+
+
+## 인도 고리(사각형 r) 위 from 자리에서 to에 가장 가까운 자리까지, 짧은 쪽으로 돌며 모서리를 지난다
+static func _along_loop(r: Rect2, from: Vector2, to: Vector2) -> PackedVector2Array:
+	var perim := 2.0 * (r.size.x + r.size.y)
+	var sa := _perim(r, from)
+	var sb := _perim(r, to)
+	var fwd := fposmod(sb - sa, perim)
+	var step := 1.0 if fwd <= perim * 0.5 else -1.0
+	var span := fwd if step > 0.0 else perim - fwd
+	var corners := [0.0, r.size.x, r.size.x + r.size.y, 2.0 * r.size.x + r.size.y]
+	var hits: Array = []
+	for k in corners:
+		var d := fposmod((k - sa) * step, perim)
+		if d > 0.0 and d < span:
+			hits.append([d, k])
+	hits.sort_custom(func(x, y): return x[0] < y[0])
+	var out := PackedVector2Array([_at_perim(r, sa)])
+	for h in hits:
+		out.append(_at_perim(r, h[1]))
+	out.append(_at_perim(r, sb))
+	return out
+
+
+## 사각형 둘레 위치 (왼쪽 위 모서리에서 시계 방향 거리)
+static func _perim(r: Rect2, p: Vector2) -> float:
+	var q := p.clamp(r.position, r.end)
+	var gaps := [q.y - r.position.y, r.end.x - q.x, r.end.y - q.y, q.x - r.position.x]
+	var side := gaps.find(gaps.min())
+	match side:
+		0: return q.x - r.position.x
+		1: return r.size.x + q.y - r.position.y
+		2: return r.size.x + r.size.y + r.end.x - q.x
+		_: return 2.0 * r.size.x + r.size.y + r.end.y - q.y
+
+
+static func _at_perim(r: Rect2, s: float) -> Vector2:
+	s = fposmod(s, 2.0 * (r.size.x + r.size.y))
+	if s <= r.size.x:
+		return Vector2(r.position.x + s, r.position.y)
+	s -= r.size.x
+	if s <= r.size.y:
+		return Vector2(r.end.x, r.position.y + s)
+	s -= r.size.y
+	if s <= r.size.x:
+		return Vector2(r.end.x - s, r.end.y)
+	return Vector2(r.position.x, r.end.y - (s - r.size.x))
+
+
+## 막히지 않으면 건너뛰어 곧게 잇는다 (앞에서부터 가장 먼 보이는 점으로)
+static func _pull(path: PackedVector2Array, walls: Array[Rect2]) -> PackedVector2Array:
+	var out := PackedVector2Array([path[0]])
+	var i := 0
+	while i < path.size() - 1:
+		var j := path.size() - 1
+		while j > i + 1 and not _clear(path[i], path[j], walls):
+			j -= 1
+		out.append(path[j])
+		i = j
+	return out
+
+
+## a → b가 건물·담을 지나지 않는가 (a가 이미 붙어 있는 담은 빼고 본다)
+static func _clear(a: Vector2, b: Vector2, walls: Array[Rect2]) -> bool:
+	var steps := ceili(a.distance_to(b) / 4.0)
+	for r in walls:
+		if r.has_point(a):
+			continue
+		for k in range(1, steps + 1):
+			if r.has_point(a.lerp(b, float(k) / steps)):
+				return false
+	return true
+
+
+static func _inside(p: Vector2, rects: Array[Rect2]) -> bool:
+	for r in rects:
+		if r.has_point(p):
+			return true
+	return false
 
 
 func _next_patient(u: Dictionary, from: Vector2) -> Pedestrian:
