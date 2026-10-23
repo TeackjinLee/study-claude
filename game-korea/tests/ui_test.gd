@@ -3,7 +3,7 @@ extends Node
 ##  1. 번역표(data/i18n/ui.csv): 줄마다 영어가 있고, 형식 글자(%s·%d…)의 차례가 한국어와 같다.
 ##     영어로 바꾸면 Locale.t가 영어를, 표에 없는 글자는 한국어 그대로. 화면에 늘 뜨는 글자(조작 안내·구역·차·무기 이름)는 표에 있다.
 ##  2. 설정(Settings): 소리 크기가 버스에 들어가고, 언어가 Locale·Dialogue에 들어가며, 저장했다 다시 읽으면 같다.
-##  3. 일시정지 메뉴: Esc로 열면 게임이 멈추고 다시 Esc로 닫힌다. 지도·설정 화면이 열리고, 지도가 그려진다(미션이 있으면 목표까지 노란 길).
+##  3. 일시정지 메뉴: Esc로 열면 게임이 멈추고 다시 Esc로 닫힌다. 지도·설정 화면이 열리고, 지도가 그려진다(미션이 있으면 목표까지 노란 길, 수배 중이면 카센터 강조).
 ## 실행: godot --headless --fixed-fps 60 --path . res://tests/ui_test.tscn
 
 var _failures: Array[String] = []
@@ -101,6 +101,9 @@ func _test_pause() -> void:
 	if map:
 		_expect(map._route.size() > 1 and map._route[map._route.size() - 1] == main.missions.objective_position(),
 			"지도에 목표까지 노란 길 (%d점)" % map._route.size())
+		_expect(not map.spray_alert(), "수배가 없으면 카센터를 강조하지 않는다")
+		main.police.wanted.raise_to(2)
+		_expect(map.spray_alert(), "수배 중에는 지도에서 카센터를 강조한다")
 	menu._show_settings()
 	await get_tree().process_frame
 	_expect(menu._list.get_child_count() >= 7, "설정 화면 (%d)" % menu._list.get_child_count())

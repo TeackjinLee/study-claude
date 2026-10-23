@@ -4,18 +4,24 @@ extends Control
 ## 부지(건물), 강·공원, 기능 건물은 동그란 그림 표(Minimap.draw_icon — 병원·경찰·은신처·카센터·아지트·창고), 미션·부업 목표까지
 ## 도로를 따라 노란 길(Minimap.route)과 핀, 주인공은 흰 화살촉.
 ## 큰 지도에만 있는 것: 잠긴 구역 그늘과 "N장에 열림", 구역 이름, 산 은신처, 공중전화(조직 색 점, 열린 구역만), 쫓는 범인(빨간 점), 범례.
+## 수배 중에는 카센터 둘레에 퍼지는 고리를 그린다 (미니맵은 테두리에 붙여 방향을 보여 준다).
 ## 비밀 패키지·광란 아이콘은 지도에 없다 (찾는 재미).
-## 바탕(블록·부지·강·이름)은 크기가 바뀔 때만 그리고, 움직이는 표시는 위층(Marks)이 매 프레임 그린다.
+## 바탕(블록·부지·강)은 크기가 바뀔 때만 그리고, 움직이는 표시와 구역 이름(그림 표를 피해 자리를 고른다)은 위층(Marks)이 매 프레임 그린다.
 
 const BACK := Color(0.05, 0.06, 0.08)
 const CRIMINAL := Color(1.0, 0.3, 0.2)
 const PHONE_COLOR := Color(1.0, 0.6, 0.2)    ## 범례의 공중전화 (지도 위 점은 조직 색)
 const CONE := 26.0                           ## 주인공 보는 쪽 부채꼴 길이
+const NAME_SIZE := 15
+## 구역 이름 자리 후보 (구역 가운데에서 블록 간격 단위 — 반 칸이면 블록 사이 도로 위)
+const NAME_SPOTS: Array[Vector2] = [Vector2.ZERO, Vector2(0, -0.5), Vector2(0, 0.5), Vector2(-0.5, -0.5),
+	Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5), Vector2(0, -1), Vector2(0, 1)]
 
 var main: Node2D
 var _t := 0.0
 var _route := PackedVector2Array()
 var _route_goal: Variant = null
+var _taken := PackedVector2Array()           ## 이번 프레임에 그림 표·점을 그린 자리 (구역 이름이 피한다)
 
 
 func _ready() -> void:
@@ -78,16 +84,8 @@ func _draw() -> void:
 			if _open(r.get_center()):
 				draw_rect(r, Minimap.PARK_COLOR)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
-	var font := ThemeDB.fallback_font
-	for d in CityMap.DISTRICTS:
-		var a := City.block_rect(d.blocks.position.x, d.blocks.position.y)
-		var e := City.block_rect(d.blocks.end.x - 1, d.blocks.end.y - 1)
-		var at := xf * ((a.position + e.end) * 0.5)
-		var open := d.chapter <= CityMap.chapter
-		var name := Locale.t(d.display_name) if open else Locale.t("%d장에 열림") % d.chapter
-		draw_string_outline(font, at + Vector2(-80, 6), name, HORIZONTAL_ALIGNMENT_CENTER, 160, 15, 4, Color(0, 0, 0, 0.8))
-		draw_string(font, at + Vector2(-80, 6), name, HORIZONTAL_ALIGNMENT_CENTER, 160, 15,
-			Color(1, 1, 1, 0.9 if open else 0.45))
+	if main == null:
+		_draw_names(self, xf)
 
 
 func _draw_marks(ci: CanvasItem) -> void:
@@ -96,6 +94,7 @@ func _draw_marks(ci: CanvasItem) -> void:
 	var xf := _xf()
 	var city: City = main.city
 	var me: Node2D = main.director.controlled_target()
+	_taken.clear()
 	# GPS 길 (멈춘 동안 목표가 바뀔 때만 다시 찾는다)
 	var goal: Variant = Minimap.goal_of(main.missions, main.jobs)
 	if goal != _route_goal:
@@ -110,6 +109,7 @@ func _draw_marks(ci: CanvasItem) -> void:
 	for q: Dictionary in main.missions.phones:
 		if _open(q.pos):
 			_dot(ci, xf * (q.pos as Vector2), (q.gang as GangType).accent, 3.5)
+			_taken.append(xf * (q.pos as Vector2))
 	# 기능 건물 그림 표 (열린 구역만)
 	for r in city.hospitals:
 		_icon(ci, xf, r.get_center(), Minimap.Icon.HOSPITAL)
@@ -117,6 +117,10 @@ func _draw_marks(ci: CanvasItem) -> void:
 		_icon(ci, xf, r.get_center(), Minimap.Icon.POLICE)
 	_icon(ci, xf, city.hq.get_center(), Minimap.Icon.HQ)
 	_icon(ci, xf, city.warehouse.get_center(), Minimap.Icon.WAREHOUSE)
+	if spray_alert():
+		var pulse := fmod(_t * 1.5, 1.0)
+		ci.draw_arc(xf * City.spray_bay(), Minimap.ICON_R + 3.0 + pulse * 10.0, 0.0, TAU, 32,
+			Color(1, 1, 1, 0.9 * (1.0 - pulse)), 2.5, true)
 	_icon(ci, xf, City.spray_bay(), Minimap.Icon.SPRAY)
 	_icon(ci, xf, City.hideout_door(), Minimap.Icon.HIDEOUT)
 	for h: Hideout in main.hideouts:
@@ -128,8 +132,47 @@ func _draw_marks(ci: CanvasItem) -> void:
 		_dot(ci, xf * crook, CRIMINAL, 4.5 + sin(_t * 10.0))
 	if goal is Vector2:
 		Minimap.draw_pin(ci, xf * (goal as Vector2), 0.5 + 0.5 * sin(_t * 6.0))
+		_taken.append(xf * (goal as Vector2) + Vector2(0, -12))
 	Minimap.draw_player(ci, xf * me.global_position, Minimap.heading_of(main.director), CONE)
+	_taken.append(xf * me.global_position)
+	_draw_names(ci, xf)
 	_draw_legend(ci)
+
+
+## 구역 이름: 구역 가운데에서 가까운 자리부터 (블록 사이 도로 위) 그림 표·점을 가리지 않는 곳을 고른다
+func _draw_names(ci: CanvasItem, xf: Transform2D) -> void:
+	var font := ThemeDB.fallback_font
+	var pitch := City.PITCH * xf.get_scale().x
+	for d in CityMap.DISTRICTS:
+		var a := City.block_rect(d.blocks.position.x, d.blocks.position.y)
+		var e := City.block_rect(d.blocks.end.x - 1, d.blocks.end.y - 1)
+		var center := xf * ((a.position + e.end) * 0.5)
+		var open := d.chapter <= CityMap.chapter
+		var name := Locale.t(d.display_name) if open else Locale.t("%d장에 열림") % d.chapter
+		var w := font.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, NAME_SIZE).x
+		var at := center
+		for off: Vector2 in NAME_SPOTS:
+			var p := center + off * pitch
+			if not _covers(Rect2(p - Vector2(w * 0.5 + 2.0, 11.0), Vector2(w + 4.0, 16.0))):
+				at = p
+				break
+		var left := at + Vector2(-w * 0.5, 5.0)
+		ci.draw_string_outline(font, left, name, HORIZONTAL_ALIGNMENT_LEFT, -1, NAME_SIZE, 4, Color(0, 0, 0, 0.85))
+		ci.draw_string(font, left, name, HORIZONTAL_ALIGNMENT_LEFT, -1, NAME_SIZE, Color(1, 1, 1, 0.9 if open else 0.45))
+
+
+## 글자 사각형이 그림 표·점 자리를 덮는가
+func _covers(r: Rect2) -> bool:
+	var grown := r.grow(Minimap.ICON_R + 4.0)
+	for p in _taken:
+		if grown.has_point(p):
+			return true
+	return false
+
+
+## 수배 중이라 카센터를 강조하는가
+func spray_alert() -> bool:
+	return main != null and main.police.wanted.level > 0 and _open(City.spray_bay())
 
 
 ## 열린 구역인가 (잠긴 구역의 공원·그림 표·공중전화는 그리지 않는다)
@@ -140,6 +183,7 @@ static func _open(world: Vector2) -> bool:
 func _icon(ci: CanvasItem, xf: Transform2D, world: Vector2, kind: Minimap.Icon) -> void:
 	if world != Vector2.ZERO and _open(world):
 		Minimap.draw_icon(ci, xf * world, kind)
+		_taken.append(xf * world)
 
 
 func _dot(ci: CanvasItem, p: Vector2, color: Color, r: float) -> void:

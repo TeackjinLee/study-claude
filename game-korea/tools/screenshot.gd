@@ -543,7 +543,7 @@ func _collect_shots(main: Node2D) -> void:
 	await _save("collect_rampage_on")
 
 
-## 일시정지 메뉴 (`-- --only=menu`): menu_main · menu_map(서울 지도) · menu_settings · menu_settings_en(영어로 바꾼 설정) ·
+## 일시정지 메뉴 (`-- --only=menu`): menu_main · menu_map(서울 지도) · menu_map_ch4(모든 구역이 열린 4장, 수배 ★2 — 카센터 고리) · menu_settings · menu_settings_en(영어로 바꾼 설정) ·
 ## hud_en(영어 HUD, 차에 타서 라디오 채널 이름과 DJ 자막)
 func _menu_shots(main: Node2D) -> void:
 	var menu: PauseMenu = main.pause_menu
@@ -556,6 +556,14 @@ func _menu_shots(main: Node2D) -> void:
 	for i in 3:
 		await get_tree().process_frame
 	await _save("menu_map")
+	main.set_chapter(CityMap.LAST_CHAPTER)
+	main.police.wanted.raise_to(2)
+	menu._show_map()
+	for i in 3:
+		await get_tree().process_frame
+	await _save("menu_map_ch4")
+	main.police.wanted.clear()
+	main.set_chapter(1)
 	menu._show_settings()
 	await get_tree().process_frame
 	await _save("menu_settings")
