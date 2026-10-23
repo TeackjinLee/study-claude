@@ -15,6 +15,9 @@ const AVOID_MARGIN := 14.0
 const STUCK_TIME := 0.9
 const REVERSE_TIME := 0.8
 const LOS_INTERVAL := 0.1
+## 같은 교차로를 노린 채 이만큼(라디안) 돌았으면 지난 것으로 본다 — 회전 반경이 WAYPOINT_REACH보다 커서
+## 교차로 둘레를 끝없이 맴도는 것을 끊는다 (꺾고 유턴하는 데는 π면 된다)
+const ORBIT_TURN := PI * 1.5
 
 var vehicle: Vehicle
 var vehicles: Array[Vehicle]     ## 피해야 할 차들 (도시 전체 목록을 공유)
@@ -34,6 +37,8 @@ var _stuck := 0.0
 var _reverse_left := 0.0
 var _reverse_steer := 0.0
 var _los_timer := 0.0
+var _turned := 0.0             ## 지금 교차로를 노리는 동안 돈 각 (맴돌기 감지)
+var _last_heading := 0.0
 
 
 func _init(p_vehicle: Vehicle, p_vehicles: Array[Vehicle]) -> void:
@@ -100,9 +105,13 @@ func is_stopped() -> bool:
 ## 먼 교차로를 바로 노리면 차로를 벗어났을 때 거의 꺾지 않아 벽을 긁는다.
 func _route_aim(pos: Vector2) -> Vector2:
 	var forward := vehicle.motor.forward()
-	if waypoint == RoadNav.INVALID or pos.distance_to(LaneGraph.center(waypoint)) < WAYPOINT_REACH:
+	var heading := forward.angle()
+	_turned += absf(angle_difference(_last_heading, heading))
+	_last_heading = heading
+	if waypoint == RoadNav.INVALID or pos.distance_to(LaneGraph.center(waypoint)) < WAYPOINT_REACH or _turned > ORBIT_TURN:
 		waypoint = RoadNav.next_cell(pos, forward if vehicle.speed() > 60.0 else Vector2.ZERO, target,
 			vehicle.level, target_level)
+		_turned = 0.0
 	var wp := LaneGraph.center(waypoint)
 	var to := wp - pos
 	var axis := Vector2(signf(to.x), 0.0) if absf(to.x) > absf(to.y) else Vector2(0.0, signf(to.y))
