@@ -285,7 +285,7 @@ def window_order(a: np.ndarray, base: str) -> np.ndarray:
 def guide_key(name: str) -> str:
     """컨셉을 달리 그린 그림(<ID>_<부지>_<컨셉> — 공원)은 같은 부지 가이드 <ID>_<부지>를 쓴다.
     층수를 바꿔 그린 그림(<ID>_<부지>_<컨셉>_f<층>)은 그 층수 가이드 <ID>_<부지>_f<층>을 쓴다."""
-    m = re.match(r"^(.*_(?:full|half_x|half_y|quarter))_[a-z0-9]+(_f\d+)?$", name)
+    m = re.match(r"^(.*_(?:full|half_x|half_y|quarter|merge_\d+x\d+))_[a-z0-9]+(_f\d+)?$", name)
     return m.group(1) + (m.group(2) or "") if m else name
 
 

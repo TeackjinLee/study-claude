@@ -5,7 +5,7 @@ extends Node
 ##   godot --path . res://tools/building_guide.tscn -- --ids=VILLA,APT
 ##   ... -- --set=street            (base 15종 · special 8종 · street 10종 · landmarks 12종, 기본 base)
 ##   ... -- --lots=all              (그 종이 놓이는 부지 크기 전부. 기본은 첫 부지)
-##   ... -- --lots=half_y           (부지 이름을 직접: full·half_x·half_y·quarter, 쉼표로 여럿 — 랜드마크는 구역에 통째 부지가
+##   ... -- --lots=half_y           (부지 이름을 직접: full·half_x·half_y·quarter·merge_1x2·merge_3x1, 쉼표로 여럿 — 랜드마크는 구역에 통째 부지가
 ##                                    없으면 반쪽 부지에 선다. 실제 부지는 landmark_city_preview 출력의 lot=으로 본다)
 ##   ... -- --scale=2 --seed=7      (그림 배율: 게임 줌 1 화면 px의 몇 배 · 모형 무작위 시드)
 ##   ... -- --floors=4              (층수를 바꿔 찍는다 — <ID>_<부지>_f4. 도시가 층을 ±1 바꾼 건물에 붙일 그림용)
@@ -24,7 +24,8 @@ const OUT := "res://output/imagegen/buildings/guides"
 const MAGENTA := Color(1, 0, 1)
 ## 부지 이름 → 크기 (City: 블록 안쪽 520, 반쪽 251). 반쪽은 긴 쪽이 x(half_x)·y(half_y) 두 방향이 있다
 const LOTS := {
-	"full": Vector2(520, 520), "half_x": Vector2(520, 251), "half_y": Vector2(251, 520), "quarter": Vector2(251, 251)}
+	"full": Vector2(520, 520), "half_x": Vector2(520, 251), "half_y": Vector2(251, 520), "quarter": Vector2(251, 251),
+	"merge_1x2": Vector2(520, 1288), "merge_3x1": Vector2(2056, 520)}   # 합친 블록 (CityMap.MERGES — 롯데·남산)
 const FOOTPRINT_LOTS := {0: ["full"], 1: ["half_x", "half_y"], 2: ["quarter"]}
 const PAD := 40.0           ## 그림 가장자리 여유 (화면 px, 처마·나무가 나가는 몫)
 const SIDEWALK := 28.0

@@ -203,7 +203,7 @@ var _floors := 1
 static func make(parent: Node, c: City, i: int, p: BuildingModel.Piece) -> Array[BuildingView]:
 	var out: Array[BuildingView] = []
 	var parts := split(p.rect)
-	var edges := poly_parts(p.poly) if p.poly.size() >= 3 else []
+	var edges := poly_parts(p.poly) if p.poly.size() >= 3 and p.sprite == null else []   # 통째 그림은 상자 조각으로 오린다
 	if not edges.is_empty():
 		parts.clear()
 		for e: Array in edges:
