@@ -71,7 +71,7 @@ func _draw() -> void:
 			var b := Vector2i(i, j)
 			if not CityMap.is_land(b):
 				continue
-			var r := City.block_rect(i, j)
+			var r := City.block_area(b)   # 합친 블록은 사이 도로였던 띠까지
 			if not CityMap.is_open_block(b):
 				draw_rect(r, Minimap.LOCKED_COLOR)
 				continue

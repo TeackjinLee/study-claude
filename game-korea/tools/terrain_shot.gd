@@ -1,6 +1,6 @@
 extends Node
 ## 서울 지형(Terrain) 화면을 .screenshots/terrain_*.png로 찍는다 (창이 잠깐 뜬다).
-## 실행: godot --path . res://tools/terrain_shot.tscn [-- --day] [--chapter=1 (잠긴 구역 그늘)]
+## 실행: godot --path . res://tools/terrain_shot.tscn [-- --day] [--chapter=1 (잠긴 구역 그늘)] [--only=이름 앞부분 (예: landmark_)] [--night] [--topdown]
 
 const OUT_DIR := "res://.screenshots/"
 ## [이름, 블록, 블록 안 위치(0~1), 줌]
@@ -16,6 +16,13 @@ const SPOTS := [
 	["terrain_police", Vector2i(3, -7), Vector2(0.5, 0.5), 1.0],   # 비탈 부지의 단과 축대 (통째 그림)
 	["terrain_apt", Vector2i(2, -10), Vector2(0.5, 0.5), 1.0],     # 코드 모형 아파트 단
 	["terrain_tower", Vector2i(2, -6), Vector2(0.5, 0.5), 1.0],    # 랜드마크 공터 단
+	["landmark_namsan", Vector2i(2, -6), Vector2(0.5, 0.3), 0.45],  # 남산 (산 위 타워)
+	["landmark_namsan_top", Vector2i(2, -6), Vector2(0.5, 0.2), 0.9],
+	["landmark_namsan_cable", Vector2i(1, -6), Vector2(0.6, 0.3), 0.8],   # 케이블카
+	["landmark_namsan_south", Vector2i(2, -6), Vector2(0.5, 1.1), 0.75],  # 남쪽 길에서 본 산
+	["landmark_jamsil", Vector2i(7, 3), Vector2(0.0, 0.0), 0.3],    # 롯데월드타워·롯데월드
+	["landmark_lotte_tower", Vector2i(6, 2), Vector2(0.5, 0.2), 0.55],
+	["landmark_lotte_world", Vector2i(7, 3), Vector2(0.5, 0.5), 0.55],
 ]
 
 
@@ -34,12 +41,23 @@ func _ready() -> void:
 	if "--day" in OS.get_cmdline_user_args():
 		main.sky.paused_clock = true
 		main.sky.set_hour(13.0)
+	if "--night" in OS.get_cmdline_user_args():
+		main.sky.paused_clock = true
+		main.sky.set_hour(21.5)
+	if "--topdown" in OS.get_cmdline_user_args():
+		main.set_iso(false)
+	var only := ""
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--only="):
+			only = a.get_slice("=", 1)
 	for s in SPOTS:
+		if not (s[0] as String).begins_with(only):
+			continue
 		var r := City.block_rect(s[1].x, s[1].y)
 		cam.global_position = r.position + r.size * (s[2] as Vector2)
 		cam.zoom = Vector2(s[3], s[3])
 		await _frames(4)
-		await _save(s[0])
+		await _save(s[0] + ("_night" if "--night" in OS.get_cmdline_user_args() else "") + ("_top" if "--topdown" in OS.get_cmdline_user_args() else ""))
 	get_tree().quit()
 
 

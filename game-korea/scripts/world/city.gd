@@ -83,8 +83,8 @@ const LANDMARK_PLACEMENTS := [
 	["fire_station", &"industrial", Vector2i(-2,4)],
 	["finance_tower", &"yeouido", Vector2i(-2,-2)],
 	["print_alley", &"jongno", Vector2i(1,-7)],
-	["sky_tower", &"jamsil", Vector2i(6,2)],
-	["lake_park", &"jamsil", Vector2i(7,3)],
+	["sky_tower", &"jamsil", Vector2i(7,1)],    # 합친 블록 (7,1)~(7,2) — CityMap.MERGES
+	["lake_park", &"jamsil", Vector2i(6,2)],    # 합친 블록 (6,2)~(6,3)
 ]
 var landmark_indices := {}
 ## 블록 → 그 블록 랜드마크 부지 안 공터를 오가는 보행자 길들 (PedestrianManager가 인도 대신 쓰기도 한다)
@@ -135,6 +135,9 @@ var _lock_layer: Node2D
 var _bridge_layer: Node2D
 var _river_bank: RiverBank
 var _owners := {}                        ## 건물 번호 → 블록 (청크 그리기용)
+## 건물 번호 → 겉모습 시드. 블록을 합치기 전의 번호 그대로라(합친 블록이 없앤 부지까지 센다) 뒤 건물들의 겉모습이 바뀌지 않는다
+var _seeds: Array[int] = []
+var _number := 0
 var _views := {}                         ## 건물 번호 → Array[BuildingView] (2.5D 입체 건물, 덩어리마다 조각들)
 var _tops := {}                          ## 건물 번호 → 2.5D 꼭대기 높이
 var _fade := {}                          ## 건물 번호 → 지금 불투명도 (흐려진 건물만. 주인공이 뒤에 있으면 흐려진다)
@@ -228,9 +231,23 @@ static func road_center(k: int) -> float:
 	return k * PITCH + ROAD * 0.5
 
 
-## 블록 둘레 인도 한가운데를 도는 4꼭짓점 (시계 방향)
+## 블록이 차지한 땅 (합친 블록이면 사이 도로였던 띠까지 합친 사각형)
+static func block_area(b: Vector2i) -> Rect2:
+	var m := CityMap.merge_of(b)
+	if not m.has_area():
+		return block_rect(b.x, b.y)
+	return block_rect(m.position.x, m.position.y).merge(block_rect(m.end.x - 1, m.end.y - 1))
+
+
+## 합친 블록의 대표(첫) 블록이 아닌가 — 땅·그늘을 대표 블록이 한 번만 그린다
+static func merged_tail(b: Vector2i) -> bool:
+	var m := CityMap.merge_of(b)
+	return m.has_area() and b != m.position
+
+
+## 블록 둘레 인도 한가운데를 도는 4꼭짓점 (시계 방향). 합친 블록은 합친 땅 둘레
 static func sidewalk_loop(block: Vector2i) -> PackedVector2Array:
-	var r := block_rect(block.x, block.y).grow(-SIDEWALK * 0.5)
+	var r := block_area(block).grow(-SIDEWALK * 0.5)
 	return PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
 
 
@@ -345,6 +362,8 @@ func _build_layout() -> void:
 	park_kinds.clear()
 	stations.clear()
 	hospitals.clear()
+	_seeds.clear()
+	_number = 0
 	for cell in CityMap.layout_order():   # 잠실(동쪽 확장)은 뒤에 센다 — 예전 건물 번호를 지킨다
 		var i := cell.x
 		var j := cell.y
@@ -391,9 +410,16 @@ func _build_layout() -> void:
 				for oy in [0.0, half.y + ALLEY]:
 					for ox in [0.0, half.x + ALLEY]:
 						rects.append(Rect2(inner.position + Vector2(ox, oy), half))
+		var merge := CityMap.merge_of(cell)
 		for n in rects.size():
 			var r := rects[n]
-			if cell == HIDEOUT and n == rects.size() - 1:
+			if merge.has_area():
+				# 합친 블록: 대표 블록의 첫 부지가 합친 땅 전체, 나머지 부지는 번호만 센다
+				if cell == merge.position and n == 0:
+					_add(block_area(cell).grow(-SIDEWALK), _pick_kind(dist, 0, i * 131 + j * 37), cell)
+				else:
+					_number += 1
+			elif cell == HIDEOUT and n == rects.size() - 1:
 				hideout = r
 				_add(r, _type(&"OFFICETEL"), cell)
 			elif cell == SPRAY_SHOP and n == 0:
@@ -444,7 +470,7 @@ func _assign_looks() -> void:
 		for k in SCATTER_LOOKS.size():
 			var look := SCATTER_LOOKS[k]
 			if kind.id in look.replaces and _footprint(r) in look.footprints \
-					and BuildingModel.hash01(idx, 600 + k * 17) < look.scatter:
+					and BuildingModel.hash01(seed_of(idx), 600 + k * 17) < look.scatter:
 				looks[idx] = look
 				break
 
@@ -465,6 +491,8 @@ func _assign_landmarks() -> void:
 			var d := Vector2(_owners[idx]).distance_squared_to(Vector2(spec[2])) * 1000000.0 - r.get_area()
 			if _footprint(r) != 0:
 				d += 1000000000.0
+			if CityMap.merge_of(_owners[idx]).has_point(spec[2]):
+				d = -INF   # 합친 블록은 그 안을 가리킨 랜드마크 자리
 			if d < score:
 				score = d
 				best = idx
@@ -473,7 +501,15 @@ func _assign_landmarks() -> void:
 			landmark_indices[spec[0]] = best
 			var loops := LandmarkBuilding.walk_loops(buildings[best], looks[best])
 			if not loops.is_empty():
-				lot_loops[_owners[best]] = (lot_loops.get(_owners[best], []) as Array) + Array(loops)   # 한 블록에 둘이면 합친다
+				var cells: Array[Vector2i] = [_owners[best]]
+				var m := CityMap.merge_of(_owners[best])
+				if m.has_area():   # 합친 블록은 블록마다 같은 공터 길
+					cells.clear()
+					for jj in range(m.position.y, m.end.y):
+						for ii in range(m.position.x, m.end.x):
+							cells.append(Vector2i(ii, jj))
+				for cell in cells:
+					lot_loops[cell] = (lot_loops.get(cell, []) as Array) + Array(loops)   # 한 블록에 둘이면 합친다
 
 
 ## 랜드마크 공터에 세워 둘 차 [위치, 방향] (열린 구역만). 차종은 Main이 정한다
@@ -538,6 +574,13 @@ func _add(r: Rect2, kind: BuildingType, cell: Vector2i) -> void:
 	_owners[buildings.size()] = cell
 	buildings.append(r)
 	kinds.append(kind)
+	_seeds.append(_number)
+	_number += 1
+
+
+## 건물의 겉모습 시드 (번호를 합친 블록 전 그대로 센다 — 짓기·층수·흩뿌리기·통째 그림 고르기에 쓴다)
+func seed_of(idx: int) -> int:
+	return _seeds[idx]
 
 
 func _type(id: StringName) -> BuildingType:
@@ -629,7 +672,7 @@ static func water_rects() -> Array[Rect2]:
 			if not CityMap.node_exists(c):
 				result.append(node_rect(c))
 			for d in [1, 2]:
-				if CityMap.node_in_bounds(c + CityMap.STEPS[d]) and not CityMap.road(c, d):
+				if CityMap.node_in_bounds(c + CityMap.STEPS[d]) and not CityMap.road(c, d) and not CityMap.merged_segment(c, d):
 					result.append(segment_rect(c, d))
 	return result
 
@@ -664,7 +707,8 @@ func refresh_locks() -> void:
 			var b := Vector2i(i, j)
 			if CityMap.is_land(b) and not CityMap.is_open_block(b):
 				locked_blocks.append(b)
-				_add_box(_lock_body, block_rect(i, j))
+				if not merged_tail(b):
+					_add_box(_lock_body, block_area(b))
 	for j in range(CityMap.MIN.y, CityMap.MAX.y + 2):
 		for i in range(CityMap.MIN.x, CityMap.MAX.x + 2):
 			var c := Vector2i(i, j)
@@ -693,7 +737,9 @@ func refresh_locks() -> void:
 func draw_locks(ci: CanvasItem) -> void:
 	var font := ThemeDB.fallback_font
 	for b in locked_blocks:
-		var r := block_rect(b.x, b.y)
+		if merged_tail(b):
+			continue
+		var r := block_area(b)
 		Terrain.rect_except(ci, r, LOCK_SHADE, Terrain.terraces_in(b))   # 단 부지는 단이 제 높이에서 칠한다
 		Terrain.rect(ci, r.grow(-4), Color(BARRIER, 0.55), false, 4.0)
 	for r in barriers:
@@ -771,9 +817,9 @@ func _draw_chunk_blocks(ci: CanvasItem, area: Rect2i) -> void:
 			if CityMap.is_water(b):
 				continue   # 물은 바닥(City._draw)의 RiverView 셰이더가 그린다
 			var dist := CityMap.district_of(b)
-			if dist == null:
+			if dist == null or merged_tail(b):
 				continue
-			var r := block_rect(i, j)
+			var r := block_area(b)
 			Terrain.rect(ci, r, dist.sidewalk)
 			RoadDetail.pavement(ci, r)
 			Terrain.rect(ci, r, CURB, false, 3.0)
@@ -825,7 +871,7 @@ func _draw_chunk_roads(ci: CanvasItem, area: Rect2i, font: Font) -> void:
 		# 2.5D: 바닥(마당·화단·담장)만 그리고, 벽과 지붕은 BuildingView가 세워 그린다
 		for idx in buildings.size():
 			if area.has_point(_owners[idx]) and not _terraced(idx):
-				BuildingModel.draw_ground(ci, buildings[idx], _ground_kind(idx), idx, roundi(building_height(idx) / IsoView.FLOOR_HEIGHT))
+				BuildingModel.draw_ground(ci, buildings[idx], _ground_kind(idx), seed_of(idx), roundi(building_height(idx) / IsoView.FLOOR_HEIGHT))
 		return
 	for idx in buildings.size():
 		if area.has_point(_owners[idx]):
@@ -876,6 +922,10 @@ func _make_views() -> void:
 		t.position = IsoView.lift(_pads[idx])
 		add_child(t)
 		_terraces[idx] = t
+	# 남산 케이블카 (합친 블록의 산에만)
+	var namsan: int = landmark_indices.get("landmark_tower", -1)
+	if namsan >= 0 and BuildingSprite.merged_lot(buildings[namsan]):
+		Namsan.attach(self, buildings[namsan])
 
 
 ## 비탈에 건물을 앉힌다: 부지를 가장 높은 땅만큼의 평평한 단(Terrain.set_terrace)으로 고르고 덩어리를 모두 그 높이에 세운다.
@@ -897,7 +947,7 @@ func _place_views(idx: int) -> void:
 ## 단을 세울 만큼 기운 부지인가 (숲은 비탈 그대로)
 func _wants_terrace(idx: int) -> bool:
 	var r := buildings[idx]
-	return kinds[idx] != FOREST and Terrain.max_height(r) - Terrain.min_height(r) > TERRACE_MIN
+	return kinds[idx] != FOREST and not Terrain.mound_rects().has(r) and Terrain.max_height(r) - Terrain.min_height(r) > TERRACE_MIN
 
 
 ## 지금 단 위에 그리는 부지인가 (청크는 그 부지 바닥을 건너뛴다)
@@ -911,7 +961,7 @@ func draw_terrace(ci: CanvasItem, idx: int) -> void:
 	var pad: float = _pads[idx]
 	var dist := CityMap.district_of(_owners[idx])
 	ci.draw_rect(r, dist.sidewalk if dist else SIDEWALK_COLOR)   # 비탈대로 그린 블록 바탕이 비치지 않게
-	BuildingModel.draw_ground(ci, r, _ground_kind(idx), idx, roundi(building_height(idx) / IsoView.FLOOR_HEIGHT))
+	BuildingModel.draw_ground(ci, r, _ground_kind(idx), seed_of(idx), roundi(building_height(idx) / IsoView.FLOOR_HEIGHT))
 	var shade := LOCK_SHADE if locked_blocks.has(_owners[idx]) else Color(0, 0, 0, 0)   # 잠긴 구역 그늘은 단이 직접 (LockLayer는 단을 비운다)
 	if shade.a > 0.0:
 		ci.draw_rect(r, shade)
@@ -925,11 +975,11 @@ func _pieces(idx: int) -> Array[BuildingModel.Piece]:
 	var kind := kinds[idx]
 	var h := building_height(idx)
 	if looks.has(idx):
-		return BuildingModel.build(r, looks[idx], idx, h)
+		return BuildingModel.build(r, looks[idx], seed_of(idx), h)
 	if kind == null or r == hq or r == hideout:
 		var windows := &"glass" if kind and kind.style == &"office" else (&"officetel" if kind else &"punched")
-		return BuildingModel.special(r, h, kind.wall_color if kind else _special_wall(r), windows, idx)
-	return BuildingModel.build(r, kind, idx, h)
+		return BuildingModel.special(r, h, kind.wall_color if kind else _special_wall(r), windows, seed_of(idx))
+	return BuildingModel.build(r, kind, seed_of(idx), h)
 
 
 ## 2.5D에서 건물이 화면에 차지하는 높이 (지붕·굴뚝 포함) — 주인공을 가리는지 볼 때 쓴다
@@ -947,7 +997,7 @@ func building_height(idx: int) -> float:
 	elif kind:
 		floors = kind.floors
 		if floors >= 3:
-			floors += posmod(idx, 3) - 1
+			floors += posmod(seed_of(idx), 3) - 1
 	elif stations.has(r):
 		floors = STATION_FLOORS
 	elif hospitals.has(r):
@@ -1241,7 +1291,7 @@ func _draw_building(ci: CanvasItem, r: Rect2, idx: int, font: Font) -> void:
 	if looks.has(idx) and LandmarkBuilding.owns(looks[idx].style):
 		var t: BuildingType = looks[idx]
 		ci.draw_rect(r,Color("535657"))
-		for part in LandmarkBuilding.collision_rects(r,t,idx):
+		for part in LandmarkBuilding.collision_rects(r,t,seed_of(idx)):
 			ci.draw_rect(part,Color("929990"))
 			ci.draw_rect(part,Color("434b50"),false,2)
 		ci.draw_string(font,r.get_center(),t.display_name,HORIZONTAL_ALIGNMENT_CENTER,-1,16,Color.WHITE)
@@ -1259,7 +1309,7 @@ func _draw_building(ci: CanvasItem, r: Rect2, idx: int, font: Font) -> void:
 	elif r == spray:
 		_draw_spray_shop(ci, r, font)
 	else:
-		BuildingDrawer.draw(ci, r, kinds[idx], idx, font)
+		BuildingDrawer.draw(ci, r, kinds[idx], seed_of(idx), font)
 
 
 ## 경찰서: 흰 지붕에 파란 테두리, 옥상 헬기장, 정문 위 간판

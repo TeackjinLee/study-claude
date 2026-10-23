@@ -41,13 +41,17 @@ static func build(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingType, se
 	var c := r.get_center()
 	var base := Rect2(r.position + r.size * 0.1, r.size * 0.8)
 	match t.style:
-		&"landmark_tower": _tower_park(out, r, seed)
+		&"landmark_tower":
+			if BuildingSprite.merged_lot(r):
+				Namsan.build(out, r, seed)   # 합친 블록: 산 하나 (도감·가이드의 블록 하나 부지는 예전 타워 공원)
+			else:
+				_tower_park(out, r, seed)
 		&"terminal": _terminal(out, r, seed)
 		&"market": _market(out, r, seed)
 		&"broadcast": _broadcast(out, r, seed)
 		&"industrial_dock": _dock(out, r, seed)
-		&"sky_tower": _sky_tower(out, r, seed)
-		&"lake_park": _lake_park(out, r, seed)
+		&"sky_tower": Lotte.build_tower(out, r, seed)
+		&"lake_park": Lotte.build_park(out, r, seed)
 		&"checkpoint":
 			var booth := box(out, Rect2(c - Vector2(38, 30), Vector2(76, 60)), 0, 46, Color("b7b6a9"), &"punched")
 			booth.deco = [&"landmark_sign", &"door"]
@@ -394,236 +398,6 @@ static func _dock_helipad(ci: CanvasItem, c: Vector2) -> void:
 		ci.draw_line(c + right * a.x + up * a.y, c + right * b.x + up * b.y, Color.WHITE, 4.0)
 
 
-# ── 롯데월드타워: 석촌호수 옆 초고층 전망 타워와 아래 롯데월드몰 (사용자 요청으로 실제 이름) ──
-
-const SKY_GLASS := Color("b8c6cf")
-const SKY_TINT := Color("7f98a8")   ## 은빛 유리 (위로 갈수록 밝다)
-const SKY_TOP := 1150.0      ## 탑신 꼭대기 (화면 px) — 남산 타워(안테나 400 + 언덕)·금융타워(540)의 두 배쯤, 도시에서 가장 높다
-const SKY_STEPS := 30        ## 위로 갈수록 좁아지는 탑신 토막 수 (촘촘해야 곡선처럼 보인다)
-
-## 부지 안 자리: 쇼핑몰(북·서 ㄱ자), 타워 발(남동 광장 가운데)
-static func _sky_frame(r: Rect2) -> Dictionary:
-	var c := r.position + r.size * Vector2(0.6, 0.6)
-	var w := r.size.x * 0.36
-	return {
-		"mall_n": StreetBuilding._f(r, 0.05, 0.05, 0.95, 0.27),
-		"mall_w": StreetBuilding._f(r, 0.05, 0.27, 0.27, 0.8),
-		"c": c,
-		"foot": Rect2(c - Vector2.ONE * w * 0.5, Vector2.ONE * w),
-	}
-
-
-static func _sky_tower(out: Array[BuildingModel.Piece], r: Rect2, seed: int) -> void:
-	var f := _sky_frame(r)
-	var c: Vector2 = f.c
-	var foot: Rect2 = f.foot
-	# 쇼핑몰: 낮은 ㄱ자 유리 상가 (위에 옥상 정원 띠)
-	var mall := box(out, f.mall_n, 0, 58, Color("d6d2c8"), &"glass")
-	mall.text = "롯데월드몰"
-	mall.deco = [&"sd_podium", &"sd_podium_glow"]
-	mall.roof_color = Color("8f9a8a")
-	mall.floor_height = 19
-	var wing := box(out, f.mall_w, 0, 46, Color("cfcac0"), &"glass")
-	wing.deco = [&"entrance"]
-	wing.roof_color = Color("8f9a8a")
-	wing.floor_height = 15
-	# 탑신: 둥근 모서리 사각 기둥이 위로 갈수록 가늘어진다 (토막을 차례로 얹는다)
-	var base := box(out, foot, 0, 34, Color("9aa6ad"), &"glass")
-	base.deco = [&"entrance"]
-	base.roof_color = SKY_GLASS.darkened(0.15)
-	var under := base
-	var h := 34.0
-	var step := (SKY_TOP - 34.0) / SKY_STEPS
-	for k in SKY_STEPS:
-		var t := float(k) / (SKY_STEPS - 1)
-		var w := foot.size.x * lerpf(0.94, 0.5, pow(t, 1.35))   # 아래는 곧게, 위로 갈수록 빨리 좁아지는 붓끝 모양
-		var seg := BuildingModel._box(Rect2(c - Vector2.ONE * w * 0.5, Vector2.ONE * w), h, h + step,
-			SKY_GLASS.lerp(Color("e3eaee"), t), &"flat", SKY_GLASS.darkened(0.2), &"glass", seed + k)
-		seg.deco = [&"street_mullions"]
-		seg.glass_tint = SKY_TINT.lerp(Color("c3d3dc"), t)
-		seg.floor_height = 18
-		seg.surface_detail = true
-		under.on_top.append(seg)
-		under = seg
-		h += step
-	# 전망대: 어두운 유리 띠 한 층
-	var top_w := foot.size.x * 0.5
-	var deck := BuildingModel._box(Rect2(c - Vector2.ONE * top_w * 0.5, Vector2.ONE * top_w), h, h + 22, Color("5d6f7b"), &"flat", Color("8a9aa4"), &"glass", seed + 30)
-	deck.glass_tint = Color("2c3c48")
-	deck.floor_height = 22
-	under.on_top.append(deck)
-	h += 22.0
-	# 꼭대기 왕관: 가운데가 갈라진 두 쪽이 붓끝처럼 좁아지며 솟는다 (서쪽이 더 높다), 끝에 항공 장애등
-	for side in 2:
-		var half := deck
-		var hh := h
-		var tall := 120.0 if side == 0 else 92.0
-		for k in 4:
-			var w := top_w * 0.46 * lerpf(1.0, 0.45, k / 3.0)
-			var d := top_w * 0.04 + top_w * 0.46 * (1.0 - lerpf(1.0, 0.45, k / 3.0)) * 0.5
-			var x := c.x - d - w if side == 0 else c.x + d
-			var dep := top_w * lerpf(1.0, 0.6, k / 3.0)
-			var cap := BuildingModel._box(Rect2(Vector2(x, c.y - dep * 0.5), Vector2(w, dep)), hh, hh + tall / 4.0,
-				Color("e4ebef"), &"flat", Color("b4c2ca"), &"glass", seed + 40 + side * 4 + k)
-			cap.glass_tint = Color("b9cbd6").lerp(Color("dde7ec"), k / 3.0)
-			cap.floor_height = 10
-			half.on_top.append(cap)
-			half = cap
-			hh += tall / 4.0
-		if side == 0:
-			half.on_top.append(BuildingModel._box(Rect2(half.rect.get_center() - Vector2(2, 2), Vector2(4, 4)), hh, hh + 26, Color("d8dde0"), &"antenna", Color("ff3b2a"), &"none", seed))
-	# 광장: 화단 나무·깃대·가로등·볼라드
-	var n := 0
-	for at in [foot.position + Vector2(-46, foot.size.y + 30), foot.end + Vector2(30, -foot.size.y - 40), foot.end + Vector2(50, 44)]:
-		if r.has_point(at):
-			StreetBuilding._add(out, Rect2(at - Vector2(18, 9), Vector2(36, 18)), 0, 6, Color("8a8f8c"), &"none", &"sd_planter")
-			StreetBuilding._tree(out, at, seed + n, 1.25, n == 1)
-		n += 1
-	for d in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
-		box(out, Rect2(c + d * (foot.size.x * 0.5 + 46.0) - Vector2(2, 2), Vector2(4, 4)), 0, 44, Color("2f3437"), &"none", &"lamp_pole")
-	for k in 3:
-		var flag := BuildingModel._box(Rect2(Vector2(r.position.x + r.size.x * (0.34 + k * 0.05), r.end.y - 34.0), Vector2(3, 3)), 0, 70,
-			Color("d8d8d8"), &"flag", [Color("c8372c"), Color.WHITE, Color("2f5f8c")][k])
-		flag.blocks_ground = false
-		out.append(flag)
-	for k in 6:
-		StreetBuilding._bollard(out, Vector2(r.position.x + r.size.x * (0.3 + k * 0.12), r.end.y - 8.0), Color("3a4044"))
-
-
-static func _sky_ground(ci: CanvasItem, r: Rect2, seed: int) -> void:
-	var f := _sky_frame(r)
-	var foot: Rect2 = f.foot
-	ci.draw_rect(r, Color("b9b4aa"))
-	StreetBuilding._tiles(ci, r, 32, Color("a8a398"))
-	var y := r.position.y + 32.0
-	while y < r.end.y:
-		ci.draw_line(Vector2(r.position.x, y), Vector2(r.end.x, y), Color("a8a398"), 1.0)
-		y += 32.0
-	# 타워 둘레 둥근 돌 마당과 물 띠
-	var c: Vector2 = f.c
-	ci.draw_circle(c, foot.size.x * 0.5 + 34.0, Color("cdc8bd"))
-	ci.draw_arc(c, foot.size.x * 0.5 + 34.0, 0.0, TAU, 48, Color("8f8a80"), 2.0)
-	ci.draw_arc(c, foot.size.x * 0.5 + 22.0, 0.0, TAU, 48, Color(0.35, 0.55, 0.7, 0.8), 5.0)
-	# 쇼핑몰 앞 보도 띠
-	var mall_n: Rect2 = f.mall_n
-	ci.draw_rect(Rect2(mall_n.position.x, mall_n.end.y, mall_n.size.x, 14.0), Color("d7d2c6"))
-
-
-# ── 롯데월드: 실내 놀이 궁(유리 돔), 석촌호수 섬(매직아일랜드)의 성과 낙하 탑, 둘레 산책길 ──
-
-const LAKE_WALK := 34.0      ## 호수 둘레 산책길 폭
-const LAKE_WATER := Color("3d7896")
-
-static func _lake_frame(r: Rect2) -> Dictionary:
-	var hall := StreetBuilding._f(r, 0.05, 0.05, 0.58, 0.36)
-	var lake := Rect2(r.position.x + 40.0, hall.end.y + 50.0, r.size.x - 80.0, r.end.y - hall.end.y - 92.0)
-	var island := lake.get_center()
-	var bridge := Rect2(island.x - 14.0, lake.position.y, 28.0, lake.size.y * 0.5)
-	return {"hall": hall, "lake": lake, "island": island, "island_r": minf(lake.size.x, lake.size.y) * 0.3, "bridge": bridge}
-
-
-static func _lake_park(out: Array[BuildingModel.Piece], r: Rect2, seed: int) -> void:
-	var f := _lake_frame(r)
-	var hall: Rect2 = f.hall
-	var lake: Rect2 = f.lake
-	var bridge: Rect2 = f.bridge
-	var ic: Vector2 = f.island
-	var ir: float = f.island_r
-	# 실내 놀이 궁: 크림색 벽 + 유리 박공 지붕, 옆에 둥근 유리 돔
-	var palace := box(out, hall, 0, 64, Color("e2d6bd"), &"glass", &"gable")
-	palace.text = "롯데월드"
-	palace.deco = [&"top_sign", &"entrance"]
-	palace.roof_color = Color("8fc0d8")
-	palace.rise = 46.0
-	palace.floor_height = 21
-	var dome_r := Rect2(Vector2(hall.end.x + 18.0, hall.position.y + 14.0), Vector2(r.end.x - hall.end.x - 40.0, hall.size.y - 28.0))
-	var dome := box(out, dome_r, 0, 40, Color("d9cfb8"), &"glass", &"hip")
-	dome.roof_color = Color("9fd0e4")
-	dome.rise = 44.0
-	# 호수: 다리 길을 빼고 막는다 (보이지 않는 덩어리 — 물은 바닥 그림)
-	for part in [Rect2(lake.position, Vector2(bridge.position.x - lake.position.x, lake.size.y)),
-			Rect2(Vector2(bridge.end.x, lake.position.y), Vector2(lake.end.x - bridge.end.x, lake.size.y)),
-			Rect2(Vector2(bridge.position.x, bridge.end.y + ir), Vector2(bridge.size.x, lake.end.y - bridge.end.y - ir))]:
-		StreetBuilding._add(out, part, 0, 4, Color(0, 0, 0, 0), &"none", &"sd_void")
-	# 섬의 성: 흰 성벽, 분홍 탑 넷과 파란 고깔 지붕, 가운데 높은 탑
-	var keep := Rect2(ic - Vector2(34, 30), Vector2(68, 56))
-	var wall := box(out, keep, 0, 34, Color("f1ece4"), &"punched")
-	wall.deco = [&"entrance"]
-	wall.roof_color = Color("d8d0c4")
-	for d in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
-		var tw := box(out, Rect2(ic + Vector2(d.x * 38.0, d.y * 33.0) - Vector2(8, 8), Vector2(16, 16)), 0, 62, Color("f0c3cf"), &"punched", &"hip")
-		tw.roof_color = Color("4d7fc4")
-		tw.rise = 28.0
-	var spire := BuildingModel._box(Rect2(ic - Vector2(13, 11), Vector2(26, 22)), 34, 96, Color("f6d7de"), &"hip", Color("3f6fb8"), &"punched", seed + 3)
-	spire.rise = 40.0
-	wall.on_top.append(spire)
-	# 낙하 탑: 섬 동쪽의 가는 철탑과 의자 고리
-	var drop_at := ic + Vector2(ir * 0.72, -ir * 0.1)
-	var drop := box(out, Rect2(drop_at - Vector2(5, 5), Vector2(10, 10)), 0, 230, Color("c8372c"), &"none", &"antenna")
-	drop.roof_color = Color("ffd23a")
-	var seats := box(out, Rect2(drop_at - Vector2(13, 13), Vector2(26, 26)), 150, 162, Color("f2c230"), &"none", &"observation_ring")
-	seats.roof_color = Color("e8a72a")
-	# 산책길 가로등·벤치·나무
-	var x := lake.position.x + 30.0
-	var k := 0
-	while x < lake.end.x - 20.0:
-		box(out, Rect2(Vector2(x, lake.end.y + LAKE_WALK - 6.0), Vector2(4, 4)), 0, 40, Color("2f3437"), &"none", &"lamp_pole")
-		StreetBuilding._tree(out, Vector2(x + 40.0, r.end.y - 8.0), seed + k, 1.1, k % 2 == 0)
-		k += 1
-		x += 96.0
-	for side in [-1.0, 1.0]:
-		var tx: float = lake.get_center().x + side * (lake.size.x * 0.5 + LAKE_WALK + 4.0)   # 산책길 밖 잔디
-		for t in [0.3, 0.7]:
-			StreetBuilding._tree(out, Vector2(tx, lake.position.y + lake.size.y * t), seed + 20 + k, 1.2, t > 0.5)
-			k += 1
-	# 섬 둘레 나무
-	for a in 6:
-		var ang := TAU * (a + 0.5) / 6.0
-		var at := ic + Vector2(cos(ang), sin(ang)) * ir * 0.85
-		if absf(at.x - ic.x) < 20.0 and at.y < ic.y:
-			continue   # 다리 길
-		if at.distance_to(drop_at) < 26.0:
-			continue
-		StreetBuilding._tree(out, at, seed + 50 + a, 0.9, a % 3 == 0)
-
-
-static func _lake_ground(ci: CanvasItem, r: Rect2, seed: int) -> void:
-	var f := _lake_frame(r)
-	var lake: Rect2 = f.lake
-	var bridge: Rect2 = f.bridge
-	var ic: Vector2 = f.island
-	var ir: float = f.island_r
-	# 바깥: 잔디, 산책길(벽돌색 보도)
-	ci.draw_rect(r, Color("5a8445"))
-	_speckle(ci, r, seed, 90, Color("4f763c"), Color("6a9450"), 5.0)
-	ci.draw_rect(lake.grow(LAKE_WALK), Color("c39a7c"))
-	StreetBuilding._tiles(ci, lake.grow(LAKE_WALK), 20, Color("b08a6d"))
-	var hall: Rect2 = f.hall
-	ci.draw_rect(Rect2(r.position.x, hall.end.y, r.size.x, lake.position.y - LAKE_WALK - hall.end.y), Color("d4cdbf"))
-	# 물: 호안 돌 띠, 짙은 가운데, 물결 줄
-	ci.draw_rect(lake.grow(4.0), Color("8d8a82"))
-	ci.draw_rect(lake, LAKE_WATER)
-	ci.draw_rect(lake.grow(-26.0), LAKE_WATER.darkened(0.12))
-	for k in 26:
-		var at := lake.position + lake.size * Vector2(StreetBuilding._h(seed, k + 300), StreetBuilding._h(seed + 4099, k * 17 + 301))
-		ci.draw_line(at, at + Vector2(14.0 + k % 4 * 4.0, 0), Color(0.75, 0.88, 0.95, 0.35), 1.5)
-	# 섬과 다리
-	ci.draw_circle(ic, ir + 5.0, Color("8d8a82"))
-	ci.draw_circle(ic, ir, Color("6a9a50"))
-	ci.draw_circle(ic, ir * 0.62, Color("d9cdb4"))
-	ci.draw_rect(Rect2(bridge.position.x, bridge.position.y - 4.0, bridge.size.x, ic.y - ir * 0.6 - bridge.position.y + 4.0), Color("a8805e"))
-	var y := bridge.position.y
-	while y < ic.y - ir:
-		ci.draw_line(Vector2(bridge.position.x, y), Vector2(bridge.end.x, y), Color("8a6748"), 1.0)
-		y += 6.0
-	for side in [bridge.position.x - 1.0, bridge.end.x + 1.0]:
-		ci.draw_line(Vector2(side, bridge.position.y) + IsoView.lift(6), Vector2(side, ic.y - ir) + IsoView.lift(6), Color("f1ece4"), 2.0)
-	# 꽃밭 (궁 앞)
-	for k in 18:
-		var at := Vector2(hall.position.x + 20.0 + k * (hall.size.x - 40.0) / 17.0, hall.end.y + 12.0)
-		ci.draw_circle(at, 3.0, [Color("e9a6bf"), Color("f2d35b"), Color("e46a5a")][k % 3])
-
-
 static func _container(out: Array[BuildingModel.Piece], rr: Rect2, h0: float, color: Color, doors: bool, double := false) -> BuildingModel.Piece:
 	var cargo := box(out, rr, h0, h0 + 28.0, color, &"metal")
 	cargo.roof_color = color.darkened(0.15)
@@ -707,6 +481,8 @@ static func walk_loops(r: Rect2, t: BuildingType) -> Array[PackedVector2Array]:
 	var out: Array[PackedVector2Array] = []
 	match t.style:
 		&"landmark_tower":
+			if BuildingSprite.merged_lot(r):
+				return Namsan.walk_loops(r)
 			var c := tower_center(r)
 			out.append(_ring(Rect2(c - Vector2(80, 80), Vector2(160, 160))))
 		&"terminal":
@@ -730,14 +506,8 @@ static func walk_loops(r: Rect2, t: BuildingType) -> Array[PackedVector2Array]:
 			var area: Rect2 = f.area
 			var cr: Rect2 = f.crane
 			out.append(_ring(Rect2(area.position.x + 10.0, cr.end.y + 14.0, cr.size.x - 10.0, 8.0)))
-		&"sky_tower":
-			var f := _sky_frame(r)
-			var foot: Rect2 = f.foot
-			out.append(_ring(foot.grow(20.0)))
-		&"lake_park":
-			var f := _lake_frame(r)
-			var lake: Rect2 = f.lake
-			out.append(_ring(lake.grow(12.0)))
+		&"sky_tower": return Lotte.tower_loops(r)
+		&"lake_park": return Lotte.park_loops(r)
 	return out
 
 
@@ -750,6 +520,8 @@ static func parking(r: Rect2, t: BuildingType) -> Array:
 	if StreetBuilding.owns(t.style):
 		return StreetBuilding.parking(r, t)
 	var out := []
+	if t.style == &"landmark_tower" and BuildingSprite.merged_lot(r):
+		return Namsan.parking(r)
 	if t.style == &"terminal":
 		for bay: Rect2 in _terminal_frame(r).bays:
 			out.append([bay.get_center() + Vector2(0, 6), 0.0])
@@ -768,13 +540,17 @@ static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int) ->
 		StreetBuilding.draw_ground(ci, r, t, seed)
 		return
 	match t.style:
-		&"landmark_tower": _park_ground(ci, r, seed)
+		&"landmark_tower":
+			if BuildingSprite.merged_lot(r):
+				Namsan.draw_ground(ci, r, seed)
+			else:
+				_park_ground(ci, r, seed)
 		&"terminal": _terminal_ground(ci, r)
 		&"market": _market_ground(ci, r, seed)
 		&"broadcast": _broadcast_ground(ci, r)
 		&"industrial_dock": _dock_ground(ci, r, seed)
-		&"sky_tower": _sky_ground(ci, r, seed)
-		&"lake_park": _lake_ground(ci, r, seed)
+		&"sky_tower": Lotte.tower_ground(ci, r, seed)
+		&"lake_park": Lotte.park_ground(ci, r, seed)
 		_: BuildingModel._plinth(ci, r, seed)
 
 

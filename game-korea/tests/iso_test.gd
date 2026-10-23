@@ -281,7 +281,7 @@ func _test_landmarks() -> void:
 					if _hits(space, loop[k].lerp(loop[(k + 1) % loop.size()], f), Pedestrian.RADIUS):
 						blocked += 1
 		_expect(not loops.is_empty() and blocked == 0, "%s: 공터 길이 막히지 않는다 (길 %d, 막힘 %d)" % [key, loops.size(), blocked])
-		var solid := LandmarkBuilding.collision_rects(r, t, idx)
+		var solid := LandmarkBuilding.collision_rects(r, t, city.seed_of(idx))
 		var area := 0.0
 		for q in solid:
 			area += q.get_area()
@@ -304,7 +304,7 @@ func _test_landmarks() -> void:
 					if _hits(space, loop[k].lerp(loop[(k + 1) % loop.size()], f), Pedestrian.RADIUS):
 						blocked += 1
 		_expect(blocked == 0, "%s: 공터 길이 막히지 않는다 (길 %d, 막힘 %d)" % [key, loops.size(), blocked])
-		var solid := LandmarkBuilding.collision_rects(city.buildings[idx], t, idx)
+		var solid := LandmarkBuilding.collision_rects(city.buildings[idx], t, city.seed_of(idx))
 		_expect(not solid.is_empty() and _hits(space, solid[0].get_center(), 2.0), "%s: 건물은 막는다" % key)
 	_expect(street == 10, "거리 건물 열 곳 (%d)" % street)
 	var trucks := 0

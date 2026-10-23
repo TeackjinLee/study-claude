@@ -100,5 +100,8 @@ static func faces_viewer(n: Vector2) -> bool:
 
 
 ## 보이는 면을 밝기로 구분한다 (오른쪽 면은 덜, 왼쪽 면은 더 어둡게)
+## 비스듬한 면(돌린 덩어리)은 그 사이 — 동(1,0) 0.3, 남(0,1) 0.48
 static func face_shade(n: Vector2) -> float:
-	return 0.3 if n.x > n.y else 0.48
+	if is_zero_approx(n.x) or is_zero_approx(n.y):
+		return 0.3 if n.x > n.y else 0.48
+	return clampf(0.39 + 0.09 * (n.y - n.x), 0.26, 0.52)

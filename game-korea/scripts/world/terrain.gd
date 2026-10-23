@@ -18,6 +18,12 @@ const FOUNDATION_CAP := Color(0.6, 0.59, 0.56)   ## 축대 위 갓돌
 const STONE_ROW := 9.0                          ## 축대 돌 한 줄 높이 (화면 px)
 const STONE_LEN := 26.0                         ## 축대 돌 한 장 길이 (월드 px)
 const STEP_RAMP := 14.0                         ## 단 가장자리에서 사람·차가 단 높이까지 오르는 거리 (월드 px, 단 안쪽)
+## 산으로 솟은 합친 블록 (남산): [그 안 블록, 꼭대기 평지 반폭(월드 px), 높이(화면 px)]. 부지(인도 안) 가장자리에서 0이고
+## 가운데로 갈수록 부드럽게 솟는다 — 격자 표본(192px)으로는 모자라 수식으로 더하고, 셰이더도 같은 수식을 쓴다
+const MOUNDS := [[Vector2i(2, -6), Vector2(150, 84), 230.0]]
+const MOUND_SHADING := 2.6                      ## 산 비탈 그늘을 지형보다 세게 (나무 사이로 비탈이 읽히게)
+const MOUND_CELL := 48.0                        ## 산 안에서 바닥 도형을 자르는 간격 (월드 px)
+const MAX_MOUNDS := 4
 
 const SHADER := """
 shader_type canvas_item;
@@ -33,7 +39,24 @@ uniform vec2 light = vec2(0.95, 0.32);
 uniform int terrace_count = 0;
 uniform vec4 terrace_rects[MAX_TERRACES];
 uniform float terrace_heights[MAX_TERRACES];
+// 산 (Terrain.MOUNDS — 수식은 Terrain._mound와 같다): 부지 (x0, y0, x1, y1), (평지 반폭 x, y, 높이, 0)
+uniform int mound_count = 0;
+uniform vec4 mound_rects[MAX_MOUNDS];
+uniform vec4 mound_shapes[MAX_MOUNDS];
 varying vec2 ground;
+
+float mound(vec2 p) {
+	float h = 0.0;
+	for (int i = 0; i < mound_count; i++) {
+		vec4 r = mound_rects[i];
+		vec4 s = mound_shapes[i];
+		vec2 c = (r.xy + r.zw) * 0.5;
+		vec2 half_size = (r.zw - r.xy) * 0.5;
+		vec2 q = max(abs(p - c) - s.xy, vec2(0.0)) / max(half_size - s.xy, vec2(1.0));
+		h += s.z * (1.0 - smoothstep(0.0, 1.0, length(q)));
+	}
+	return h;
+}
 
 float h_at(ivec2 k) {
 	ivec2 s = textureSize(heights, 0);
@@ -47,6 +70,7 @@ void vertex() {
 	ivec2 k = ivec2(f);
 	vec2 t = g - f;
 	float h = mix(mix(h_at(k), h_at(k + ivec2(1, 0)), t.x), mix(h_at(k + ivec2(0, 1)), h_at(k + ivec2(1, 1)), t.x), t.y);
+	h += mound(VERTEX);
 	for (int i = 0; i < terrace_count; i++) {
 		vec4 r = terrace_rects[i];
 		if (VERTEX.x >= r.x && VERTEX.y >= r.y && VERTEX.x < r.z && VERTEX.y < r.w) {
@@ -69,7 +93,11 @@ void fragment() {
 		float h01 = h_at(k + ivec2(0, 1));
 		float h11 = h_at(k + ivec2(1, 1));
 		vec2 grad = vec2(mix(h10 - h00, h11 - h01, t.y), mix(h01 - h00, h11 - h10, t.x)) / cell;
-		c.rgb *= clamp(1.0 + dot(grad, light) * shading * strength, 0.78, 1.2);
+		if (mound_count > 0) {
+			grad += vec2(mound(ground + vec2(2.0, 0.0)) - mound(ground - vec2(2.0, 0.0)),
+				mound(ground + vec2(0.0, 2.0)) - mound(ground - vec2(0.0, 2.0))) * 0.25 * MOUND_SHADING;
+		}
+		c.rgb *= clamp(1.0 + dot(grad, light) * shading * strength, 0.62, 1.3);
 	}
 	COLOR = c;
 }
@@ -82,6 +110,7 @@ static var _materials: Array[ShaderMaterial] = []   ## [표시용, 그늘 있는
 static var _over_heights := {}              ## 고가 번호 → 고른 높이
 static var _band := Vector2.INF             ## 한강 띠의 y 범위 (둑 도로 포함)
 static var _terraces := {}                  ## 블록 → [[부지, 단 높이], ...]
+static var _mounds: Array = []              ## [부지, 평지 반폭, 높이] (MOUNDS를 월드 좌표로)
 
 
 static func _ensure() -> void:
@@ -93,6 +122,32 @@ static func _ensure() -> void:
 		var p := _point(k)
 		_h[k] = pow(DATA.values[k], DATA.contrast) * DATA.max_height * smoothstep(0.0, DATA.shore_fall, _shore_distance(p)) * _hill_mask(p)
 	_flatten_overpasses()
+	_mounds.clear()
+	for m: Array in MOUNDS:
+		_mounds.append([City.block_area(m[0]).grow(-City.SIDEWALK), m[1], m[2]])
+
+
+## 산이 더하는 높이 (셰이더의 mound와 같은 수식)
+static func _mound(p: Vector2) -> float:
+	var h := 0.0
+	for m: Array in _mounds:
+		var r: Rect2 = m[0]
+		if not r.has_point(p):
+			continue
+		var flat: Vector2 = m[1]
+		var half := r.size * 0.5
+		var d := ((p - r.get_center()).abs() - flat).max(Vector2.ZERO) / (half - flat).max(Vector2.ONE)
+		h += m[2] * (1.0 - smoothstep(0.0, 1.0, d.length()))
+	return h
+
+
+## 산 부지들 (남산 — 그리는 쪽에서 길·나무를 놓을 때)
+static func mound_rects() -> Array[Rect2]:
+	_ensure()
+	var out: Array[Rect2] = []
+	for m: Array in _mounds:
+		out.append(m[0])
+	return out
 
 
 ## 산 둘레면 1, 산 반지름 밖은 0 (가운데 35%는 그림 높이 그대로, 그 밖은 부드럽게 줄인다)
@@ -215,7 +270,7 @@ static func slope(pos: Vector2) -> float:
 	var j := floori(g.y)
 	var tx := g.x - i
 	var ty := g.y - j
-	return lerpf(lerpf(_sample(i, j), _sample(i + 1, j), tx), lerpf(_sample(i, j + 1), _sample(i + 1, j + 1), tx), ty)
+	return lerpf(lerpf(_sample(i, j), _sample(i + 1, j), tx), lerpf(_sample(i, j + 1), _sample(i + 1, j + 1), tx), ty) + _mound(pos)
 
 
 ## 사각형 안 가장 높은 땅 — 단은 빼고 지형 그대로
@@ -239,8 +294,8 @@ static func _corners(r: Rect2) -> PackedVector2Array:
 	var out := PackedVector2Array([r.position, r.end, Vector2(r.end.x, r.position.y), Vector2(r.position.x, r.end.y)])
 	if not enabled or not IsoView.enabled:
 		return out
-	var xs := _cuts(r.position.x, r.end.x, DATA.origin.x)
-	var ys := _cuts(r.position.y, r.end.y, DATA.origin.y)
+	var xs := _cuts(r.position.x, r.end.x, DATA.origin.x, 0)
+	var ys := _cuts(r.position.y, r.end.y, DATA.origin.y, 1)
 	for y in ys:
 		for x in xs:
 			out.append(Vector2(x, y))
@@ -262,7 +317,7 @@ static func material(shaded := false) -> ShaderMaterial:
 		var img := Image.create_from_data(DATA.size.x, DATA.size.y, false, Image.FORMAT_RF, _h.to_byte_array())
 		var tex := ImageTexture.create_from_image(img)
 		var shader := Shader.new()
-		shader.code = SHADER.replace("MAX_TERRACES", str(MAX_TERRACES))
+		shader.code = SHADER.replace("MAX_TERRACES", str(MAX_TERRACES)).replace("MAX_MOUNDS", str(MAX_MOUNDS)).replace("MOUND_SHADING", str(MOUND_SHADING))
 		for k in 2:
 			var m := ShaderMaterial.new()
 			m.shader = shader
@@ -270,6 +325,18 @@ static func material(shaded := false) -> ShaderMaterial:
 			m.set_shader_parameter(&"origin", DATA.origin)
 			m.set_shader_parameter(&"cell", DATA.cell)
 			m.set_shader_parameter(&"shading", DATA.shading if k == 1 else 0.0)
+			var rects := PackedVector4Array()
+			var shapes := PackedVector4Array()
+			rects.resize(MAX_MOUNDS)
+			shapes.resize(MAX_MOUNDS)
+			for i in mini(_mounds.size(), MAX_MOUNDS):
+				var r: Rect2 = _mounds[i][0]
+				var flat: Vector2 = _mounds[i][1]
+				rects[i] = Vector4(r.position.x, r.position.y, r.end.x, r.end.y)
+				shapes[i] = Vector4(flat.x, flat.y, _mounds[i][2], 0.0)
+			m.set_shader_parameter(&"mound_count", mini(_mounds.size(), MAX_MOUNDS))
+			m.set_shader_parameter(&"mound_rects", rects)
+			m.set_shader_parameter(&"mound_shapes", shapes)
 			_materials.append(m)
 		_sync_terraces()
 	for m in _materials:
@@ -310,8 +377,8 @@ static func refresh() -> void:
 # ── 격자 선마다 잘라 그리기 ────────────────────────────────
 # 셰이더는 꼭짓점에서만 높이를 재므로, 격자 칸보다 큰 도형은 칸마다 잘라야 땅(Terrain.height)과 맞는다.
 
-## 구간 [a, b]를 격자 선에서 자른 좌표들 (양끝 포함)
-static func _cuts(a: float, b: float, o: float) -> PackedFloat32Array:
+## 구간 [a, b]를 격자 선에서 자른 좌표들 (양끝 포함). axis(0 x · 1 y)를 주면 산 부지 안은 MOUND_CELL마다 더 자른다
+static func _cuts(a: float, b: float, o: float, axis := -1) -> PackedFloat32Array:
 	var out := PackedFloat32Array([a])
 	var c := DATA.cell
 	var x := floorf((a - o) / c) * c + o + c
@@ -319,7 +386,19 @@ static func _cuts(a: float, b: float, o: float) -> PackedFloat32Array:
 		out.append(x)
 		x += c
 	out.append(b)
-	return out
+	if axis < 0 or _mounds.is_empty() or not enabled or not IsoView.enabled:
+		return out
+	var fine := PackedFloat32Array()
+	for m: Array in _mounds:
+		var r: Rect2 = m[0]
+		var lo := maxf(a, r.position[axis])
+		var hi := minf(b, r.end[axis])
+		var v := r.position[axis] + ceilf((lo - r.position[axis]) / MOUND_CELL) * MOUND_CELL
+		while v < hi:
+			if v > a + 0.5 and v < b - 0.5:
+				fine.append(v)
+			v += MOUND_CELL
+	return out if fine.is_empty() else _merge(out, fine)
 
 
 ## r을 칠하되 holes(단 부지)는 비운다 — 격자 선과 구멍 경계에서 잘라, 단 경계를 걸친 꼭짓점이 없게 한다
@@ -334,8 +413,8 @@ static func rect_except(ci: CanvasItem, r: Rect2, color: Color, holes: Array[Rec
 		for v in [h.position.y - 0.02, h.end.y]:
 			if v > r.position.y and v < r.end.y:
 				hy.append(v)
-	var xs := _merge(_cuts(r.position.x, r.end.x, DATA.origin.x), hx)
-	var ys := _merge(_cuts(r.position.y, r.end.y, DATA.origin.y), hy)
+	var xs := _merge(_cuts(r.position.x, r.end.x, DATA.origin.x, 0), hx)
+	var ys := _merge(_cuts(r.position.y, r.end.y, DATA.origin.y, 1), hy)
 	for j in ys.size() - 1:
 		for i in xs.size() - 1:
 			var cell := Rect2(xs[i], ys[j], xs[i + 1] - xs[i], ys[j + 1] - ys[j])
@@ -355,8 +434,8 @@ static func rect(ci: CanvasItem, r: Rect2, color: Color, filled := true, width :
 		for k in 4:
 			line(ci, p[k], p[(k + 1) % 4], color, width)
 		return
-	var xs := _cuts(r.position.x, r.end.x, DATA.origin.x)
-	var ys := _cuts(r.position.y, r.end.y, DATA.origin.y)
+	var xs := _cuts(r.position.x, r.end.x, DATA.origin.x, 0)
+	var ys := _cuts(r.position.y, r.end.y, DATA.origin.y, 1)
 	for j in ys.size() - 1:
 		for i in xs.size() - 1:
 			ci.draw_rect(Rect2(xs[i], ys[j], xs[i + 1] - xs[i], ys[j + 1] - ys[j]), color)
@@ -366,8 +445,8 @@ static func rect(ci: CanvasItem, r: Rect2, color: Color, filled := true, width :
 ## 격자 선과 그림 한 장의 경계 둘 다에서 잘라, 조각마다 그림 안쪽 영역만 쓴다
 static func texture_rect(ci: CanvasItem, tex: Texture2D, r: Rect2) -> void:
 	var size := tex.get_size()
-	var xs := _merge(_cuts(r.position.x, r.end.x, DATA.origin.x), _tile_cuts(r.position.x, r.end.x, size.x))
-	var ys := _merge(_cuts(r.position.y, r.end.y, DATA.origin.y), _tile_cuts(r.position.y, r.end.y, size.y))
+	var xs := _merge(_cuts(r.position.x, r.end.x, DATA.origin.x, 0), _tile_cuts(r.position.x, r.end.x, size.x))
+	var ys := _merge(_cuts(r.position.y, r.end.y, DATA.origin.y, 1), _tile_cuts(r.position.y, r.end.y, size.y))
 	for j in ys.size() - 1:
 		for i in xs.size() - 1:
 			var part := Rect2(xs[i], ys[j], xs[i + 1] - xs[i], ys[j + 1] - ys[j])
@@ -397,12 +476,16 @@ static func _merge(a: PackedFloat32Array, b: PackedFloat32Array) -> PackedFloat3
 
 ## 축에 나란한 선은 격자 선마다, 비스듬한 선은 칸 길이마다 잘라 그린다
 static func line(ci: CanvasItem, a: Vector2, b: Vector2, color: Color, width := -1.0) -> void:
-	var n := maxi(ceili(a.distance_to(b) / DATA.cell), 1)
+	var step := DATA.cell
+	for m: Array in _mounds:
+		if (m[0] as Rect2).intersects(Rect2(a, Vector2.ZERO).expand(b).grow(1.0)):
+			step = MOUND_CELL
+	var n := maxi(ceili(a.distance_to(b) / step), 1)
 	if is_equal_approx(a.y, b.y) or is_equal_approx(a.x, b.x):
 		var horizontal := is_equal_approx(a.y, b.y)
 		var lo := minf(a.x, b.x) if horizontal else minf(a.y, b.y)
 		var hi := maxf(a.x, b.x) if horizontal else maxf(a.y, b.y)
-		var cuts := _cuts(lo, hi, DATA.origin.x if horizontal else DATA.origin.y)
+		var cuts := _cuts(lo, hi, DATA.origin.x if horizontal else DATA.origin.y, 0 if horizontal else 1)
 		var pts := PackedVector2Array()
 		for v in cuts:
 			pts.append(Vector2(v, a.y) if horizontal else Vector2(a.x, v))

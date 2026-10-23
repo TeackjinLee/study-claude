@@ -34,8 +34,13 @@ static var margins := true
 
 
 ## 그 종류·부지의 그림 (없으면 null). 부지 이름은 building_guide.gd와 같다
+## 블록을 합친 부지(CityMap.MERGES)는 그림이 없다 — 블록 하나 크기로 그린 그림을 늘리지 않는다
+static func merged_lot(lot: Rect2) -> bool:
+	return lot.size.x > City.BLOCK or lot.size.y > City.BLOCK
+
+
 static func of(t: BuildingType, lot: Rect2) -> BuildingSprite:
-	if t == null or not enabled:
+	if t == null or not enabled or merged_lot(lot):
 		return null
 	var key := "%s_%s" % [String(t.id).to_lower(), lot_name(lot.size)]
 	if _cache.has(key):
@@ -78,7 +83,7 @@ func floors_or(base: int) -> int:
 
 ## 같은 종류·부지에 컨셉을 달리 그린 그림들 (<id>_<부지>_<컨셉>.json — 공원). 이름 순, 없으면 빈 배열.
 static func variants(t: BuildingType, lot: Rect2) -> Array:
-	if t == null or not enabled:
+	if t == null or not enabled or merged_lot(lot):
 		return []
 	var base := "%s_%s_" % [String(t.id).to_lower(), lot_name(lot.size)]
 	if _cache.has(base):

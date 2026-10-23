@@ -43,6 +43,9 @@ const OVER_SWITCH := 14.0
 ## 층이 달라도 바닥 높이 차가 이보다 작으면 서로 본다 (경사로 입구에서 앞차를 놓치지 않게)
 const MEET_HEIGHT := 18.0
 const LAST_CHAPTER := 4
+## 합친 블록: 사이 도로 구간을 없애고 한 부지(랜드마크)로 쓴다 — 한 줄(가로 또는 세로)로만 잇는다(사이에 교차로가 안 남게).
+## 남산(타워 공원과 양옆 숲을 한 산으로), 롯데월드(놀이 궁 + 석촌호수), 롯데월드타워(타워 + 몰). 끊긴 구간 양끝 교차로는 세 갈래가 된다
+const MERGES: Array[Rect2i] = [Rect2i(1, -6, 3, 1), Rect2i(6, 2, 1, 2), Rect2i(7, 1, 1, 2)]
 
 ## 열린 장. 게임(main)이 정한다 — 테스트마다 main이 새로 정하므로 이전 값이 남지 않는다
 static var chapter := 1
@@ -132,6 +135,21 @@ static func flanks(c: Vector2i, d: int) -> Array[Vector2i]:
 		_: return [c + Vector2i(-1, -1), c + Vector2i(-1, 0)]
 
 
+## 블록이 속한 합친 블록 묶음 (없으면 크기 0)
+static func merge_of(b: Vector2i) -> Rect2i:
+	for m in MERGES:
+		if m.has_point(b):
+			return m
+	return Rect2i()
+
+
+## 교차로 c에서 d 방향 구간이 합친 블록 사이라 없어졌는가 (물이 아니라 부지다)
+static func merged_segment(c: Vector2i, d: int) -> bool:
+	var fl := flanks(c, d)
+	var m := merge_of(fl[0])
+	return m.has_area() and m.has_point(fl[1])
+
+
 ## 교차로 c에서 d 방향으로 도로 구간이 있는가 (잠김과 상관없이)
 static func road(c: Vector2i, d: int) -> bool:
 	var key := Vector3i(c.x, c.y, d)
@@ -139,7 +157,7 @@ static func road(c: Vector2i, d: int) -> bool:
 	if hit != null:
 		return hit
 	var result := false
-	if node_in_bounds(c) and node_in_bounds(c + STEPS[d]):
+	if node_in_bounds(c) and node_in_bounds(c + STEPS[d]) and not merged_segment(c, d):
 		for b in flanks(c, d):
 			result = result or is_land(b)
 		result = result or is_bridge(c, d)

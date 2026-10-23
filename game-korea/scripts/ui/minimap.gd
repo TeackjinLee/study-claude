@@ -121,7 +121,7 @@ func _draw() -> void:
 			var b := Vector2i(i, j)
 			if not CityMap.is_land(b):
 				continue
-			var r := City.block_rect(i, j)
+			var r := City.block_area(b)   # 합친 블록은 사이 도로였던 띠까지
 			if not CityMap.is_open_block(b):
 				_fill(r.grow(City.ROAD * 0.5), me, c, circle, LOCKED_ROAD)
 				_fill(r, me, c, circle, LOCKED_COLOR)

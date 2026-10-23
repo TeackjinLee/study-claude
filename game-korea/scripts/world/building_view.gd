@@ -182,6 +182,9 @@ var lights := false            ## 불빛 조각이다 (켜질 창·간판만 그
 var glow: BuildingView         ## 이 조각의 불빛 조각 (자식)
 var pad := 0.0                 ## 비탈에서 이 덩어리가 선 높이 (노드를 그만큼 올린다 — City._place_views). 축대는 부지 단(City.Terrace)이 그린다
 var _mute := false             ## 불빛 조각이 창을 훑는 동안: 벽·창틀(_quad·_hline)은 그리지 않는다
+var edge := -1                 ## 돌린 덩어리(poly)의 조각: 그리는 변 번호와 그 변의 구간 (s0, s1)
+var edge_s := Vector2.ZERO
+const POLY_PART := 110.0       ## 돌린 덩어리의 벽 조각 길이 (깊이 정렬 단위, 월드 px)
 
 # 지금 그리는 벽 한 면 (_face 동안만 쓴다)
 var _p: BuildingModel.Piece
@@ -200,6 +203,11 @@ var _floors := 1
 static func make(parent: Node, c: City, i: int, p: BuildingModel.Piece) -> Array[BuildingView]:
 	var out: Array[BuildingView] = []
 	var parts := split(p.rect)
+	var edges := poly_parts(p.poly) if p.poly.size() >= 3 else []
+	if not edges.is_empty():
+		parts.clear()
+		for e: Array in edges:
+			parts.append(Rect2(e[3], Vector2.ZERO))
 	for k in parts.size():
 		var v := BuildingView.new()
 		v.city = c
@@ -209,6 +217,9 @@ static func make(parent: Node, c: City, i: int, p: BuildingModel.Piece) -> Array
 		v.part = parts[k]
 		v.roof = k == parts.size() - 1
 		v.height = p.top()
+		if not edges.is_empty():
+			v.edge = edges[k][0]
+			v.edge_s = Vector2(edges[k][1], edges[k][2])
 		if p.skin or p.sprite:
 			v.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # 크게 그린 벽면 그림을 줄여 그린다 (불빛 조각도 따른다)
 		parent.add_child(v)
@@ -223,6 +234,8 @@ static func make(parent: Node, c: City, i: int, p: BuildingModel.Piece) -> Array
 		l.roof = v.roof
 		l.height = v.height
 		l.lights = true
+		l.edge = v.edge
+		l.edge_s = v.edge_s
 		l.material = light_material()
 		v.glow = l
 		v.add_child(l)
@@ -240,6 +253,11 @@ func _draw() -> void:
 	if piece.sprite:
 		_sprite_draw()
 		return
+	if edge >= 0:
+		_poly_face(piece, edge, edge_s.x, edge_s.y)
+		if roof:
+			_top(piece)
+		return
 	_walls(piece, part)
 	if roof:
 		_top(piece)
@@ -250,7 +268,11 @@ func _draw() -> void:
 # ── 벽 ────────────────────────────────────────────────────
 
 func _walls(p: BuildingModel.Piece, seg: Rect2) -> void:
-	if p.roof in [&"tree", &"chimney", &"tank", &"tent"] or p.roof in SpecialDecor.BARE or p.roof in StreetDecor.BARE:
+	if p.poly.size() >= 3:
+		for k in p.poly.size():
+			_poly_face(p, k, 0.0, INF)
+		return
+	if p.roof in [&"tree", &"chimney", &"tank", &"tent"] or p.roof in SpecialDecor.BARE or p.roof in StreetDecor.BARE or p.roof in Namsan.BARE:
 		return   # 벽 없이 지붕 그림에서 통째로 그린다
 	var r := p.rect
 	if seg.end.x >= r.end.x - 0.5:
@@ -272,6 +294,11 @@ func _face(p: BuildingModel.Piece, a: Vector2, b: Vector2, n: Vector2) -> void:
 	_len = p.rect.size.x if south else p.rect.size.y
 	_s0 = (a - _fa).dot(_along)
 	_s1 = (b - _fa).dot(_along)
+	_face_body(p, a, b, south)
+
+
+## 벽 한 면의 몸통 (_fa·_along·_len·_s0·_s1·_n·_shade를 정한 뒤) — 이 조각 구간 a→b
+func _face_body(p: BuildingModel.Piece, a: Vector2, b: Vector2, south: bool) -> void:
 	_floors = maxi(1, roundi((p.h1 - p.h0) / p.floor_height))
 	_fh = (p.h1 - p.h0) / _floors
 	if p.skin:
@@ -307,6 +334,95 @@ func _face(p: BuildingModel.Piece, a: Vector2, b: Vector2, n: Vector2) -> void:
 		_architecture(p, wall)
 	if &"number" in p.deco:
 		_deco(&"number", south)   # 동 번호판은 벽 기둥·층 띠 위에 얹는다 (먼저 그리면 기둥이 글자를 가른다)
+
+
+# ── 돌린 덩어리 (바닥 다각형) ─────────────────────────────
+
+## 볼록 다각형의 k번 변 바깥 법선
+static func poly_normal(poly: PackedVector2Array, k: int) -> Vector2:
+	var a := poly[k]
+	var b := poly[(k + 1) % poly.size()]
+	var n := Vector2(b.y - a.y, a.x - b.x).normalized()
+	var c := Vector2.ZERO
+	for q in poly:
+		c += q
+	c /= poly.size()
+	return n if ((a + b) * 0.5 - c).dot(n) >= 0.0 else -n
+
+
+## 보이는 변을 POLY_PART 길이로 나눈 조각들 [변, s0, s1, 정렬점] — 앞(남동)일수록 뒤에 온다 (마지막 조각이 지붕을 그린다)
+static func poly_parts(poly: PackedVector2Array) -> Array:
+	var out := []
+	for k in poly.size():
+		var n := poly_normal(poly, k)
+		if not IsoView.faces_viewer(n):
+			continue
+		var a := poly[k]
+		var b := poly[(k + 1) % poly.size()]
+		var length := a.distance_to(b)
+		var m := maxi(1, ceili(length / POLY_PART))
+		for i in m:
+			var s0 := length * i / m
+			var s1 := length * (i + 1) / m
+			out.append([k, s0, s1, a.lerp(b, (s0 + s1) * 0.5 / length) - n * 3.0])
+	out.sort_custom(func(x: Array, y: Array) -> bool: return x[3].x + x[3].y < y[3].x + y[3].y)
+	return out
+
+
+## 돌린 덩어리의 k번 변 중 [s0, s1] 구간 벽
+func _poly_face(p: BuildingModel.Piece, k: int, s0: float, s1: float) -> void:
+	var n := poly_normal(p.poly, k)
+	if not IsoView.faces_viewer(n):
+		return
+	var a := p.poly[k]
+	var b := p.poly[(k + 1) % p.poly.size()]
+	_p = p
+	_n = n
+	_shade = IsoView.face_shade(n)
+	_fa = a
+	_along = (b - a).normalized()
+	_len = a.distance_to(b)
+	_s0 = maxf(s0, 0.0)
+	_s1 = minf(s1, _len)
+	_face_body(p, a + _along * _s0, a + _along * _s1, n.y >= n.x)
+	if not lights and _s1 >= _len - 0.5:
+		draw_line(b + IsoView.lift(p.h0), b + IsoView.lift(p.h1), p.wall.lightened(0.1).darkened(_shade), 1.0)   # 모서리
+
+
+## 돌린 덩어리 지붕: 평지붕(다각형 + 테두리) · 뾰족 지붕(꼭짓점으로 모이는 삼각형, 뒤부터)
+func _poly_top(p: BuildingModel.Piece) -> void:
+	var top := PackedVector2Array()
+	for q in p.poly:
+		top.append(q + IsoView.lift(p.h1))
+	match p.roof:
+		&"flat":
+			draw_colored_polygon(top, p.roof_color)
+			var c := BuildingModel.bounds(p.poly).get_center()
+			if p.rect.size.x > 40.0 and p.rect.size.y > 40.0:
+				var inset := PackedVector2Array()
+				for q in BuildingModel.scaled(p.poly, c, 0.9):
+					inset.append(q + IsoView.lift(p.h1))
+				inset.append(inset[0])
+				draw_polyline(inset, p.roof_color.darkened(0.25), 1.2)
+			top.append(top[0])
+			draw_polyline(top, p.wall.lightened(0.22), 1.5)
+		&"spire":
+			var c := Vector2.ZERO
+			for q in p.poly:
+				c += q
+			c /= p.poly.size()
+			var apex := c + IsoView.lift(p.h1 + p.rise)
+			var order := range(p.poly.size())
+			order.sort_custom(func(x: int, y: int) -> bool:
+				var mx := (p.poly[x] + p.poly[(x + 1) % p.poly.size()])
+				var my := (p.poly[y] + p.poly[(y + 1) % p.poly.size()])
+				return mx.x + mx.y < my.x + my.y)
+			for k: int in order:
+				var n := poly_normal(p.poly, k)
+				var shade := clampf(0.12 + 0.12 * (n.x + n.y) + 0.06 * (n.y - n.x), 0.0, 0.45)
+				draw_colored_polygon(PackedVector2Array([top[k], top[(k + 1) % top.size()], apex]), p.roof_color.darkened(shade))
+			if not p.accent.is_equal_approx(Color.WHITE):
+				draw_line(apex, apex + IsoView.lift(10.0), p.accent, 1.5)   # 꼭대기 장식
 
 
 ## 종류별 돌출 구조. 창 위에 겹치는 기둥은 창 사이 경계에만 배치한다.
@@ -930,10 +1046,35 @@ func _top(p: BuildingModel.Piece) -> void:
 			LandmarkDecor.glow(self, p)
 		elif p.roof in StreetDecor.GLOWS:
 			StreetDecor.glow(self, p)
+		elif p.roof in Namsan.GLOWS:
+			Namsan.glow(self, p)
 		for s: BuildingModel.Piece in p.on_top:
 			_walls(s, s.rect)
 			_top(s)
 		return
+	if p.poly.size() >= 3:
+		_poly_top(p)
+	elif p.roof in Namsan.ROOFS:
+		Namsan.roof(self, p)
+	else:
+		_box_top(p)
+	if p.on_top.is_empty():
+		return
+	var tops := p.on_top.duplicate()
+	tops.sort_custom(func(a, b): return a.rect.get_center().x + a.rect.get_center().y < b.rect.get_center().x + b.rect.get_center().y)
+	if p.surface_detail and p.roof == &"flat" and p.poly.is_empty():
+		for s: BuildingModel.Piece in tops:
+			var cast := Rect2(s.rect.position+Vector2(4,6),s.rect.size+Vector2(5,7)).intersection(p.rect.grow(-3))
+			if cast.has_area():
+				draw_colored_polygon(_corners(cast,p.h1),Color(0.015,0.025,0.03,0.32))
+	for s: BuildingModel.Piece in tops:
+		_walls(s, s.rect)
+		_top(s)
+
+
+
+## 상자 덩어리 지붕 (지붕 종류별)
+func _box_top(p: BuildingModel.Piece) -> void:
 	match p.roof:
 		&"flat":
 			if p.skin:
@@ -950,18 +1091,6 @@ func _top(p: BuildingModel.Piece) -> void:
 		&"tank": _cylinder(p, false)
 		&"tent": _tent(p)
 		_: SpecialDecor.roof(self, p)
-	if p.on_top.is_empty():
-		return
-	var tops := p.on_top.duplicate()
-	tops.sort_custom(func(a, b): return a.rect.get_center().x + a.rect.get_center().y < b.rect.get_center().x + b.rect.get_center().y)
-	if p.surface_detail and p.roof == &"flat":
-		for s: BuildingModel.Piece in tops:
-			var cast := Rect2(s.rect.position+Vector2(4,6),s.rect.size+Vector2(5,7)).intersection(p.rect.grow(-3))
-			if cast.has_area():
-				draw_colored_polygon(_corners(cast,p.h1),Color(0.015,0.025,0.03,0.32))
-	for s: BuildingModel.Piece in tops:
-		_walls(s, s.rect)
-		_top(s)
 
 
 func _corners(r: Rect2, h: float) -> PackedVector2Array:

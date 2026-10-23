@@ -59,6 +59,8 @@ class Piece extends RefCounted:
 	var lot := Rect2()
 	## 통째 그림 안에서 이 덩어리의 번호 (짓는 차례, 얹힌 것은 바로 뒤) — 덩어리마다 윤곽을 넓힐 몫을 찾는 열쇠
 	var sprite_index := -1
+	## 돌린 덩어리: 바닥 다각형(월드, 볼록). 있으면 rect는 그 둘레 상자이고, 벽은 변마다·지붕은 다각형으로 그린다 (_prism)
+	var poly := PackedVector2Array()
 
 	func top() -> float:
 		var h := h1 + rise
@@ -79,6 +81,85 @@ static func _box(r: Rect2, h0: float, h1: float, wall: Color, roof := &"flat", r
 	p.windows = windows
 	p.seed = seed
 	return p
+
+
+## 돌린 덩어리 (바닥 다각형 poly — 볼록). 지붕은 flat 평지붕 · spire 뾰족 지붕(rise) · none
+static func _prism(poly: PackedVector2Array, h0: float, h1: float, wall: Color, roof := &"flat", roof_color := Color(0.3, 0.3, 0.32),
+		windows := &"none", seed := 0) -> Piece:
+	var p := _box(bounds(poly), h0, h1, wall, roof, roof_color, windows, seed)
+	p.poly = poly
+	return p
+
+
+static func bounds(poly: PackedVector2Array) -> Rect2:
+	var r := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		r = r.expand(q)
+	return r
+
+
+## 가운데 c, 반폭 half, 모서리 반지름 corner인 둥근 사각형을 angle만큼 돌린 다각형 (모서리마다 segs토막)
+static func rounded_square(c: Vector2, half: Vector2, corner: float, angle: float, segs := 2) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	corner = minf(corner, minf(half.x, half.y))
+	var inner := half - Vector2.ONE * corner
+	var quads := [Vector2(1, 1), Vector2(-1, 1), Vector2(-1, -1), Vector2(1, -1)]
+	for q in 4:
+		var o: Vector2 = inner * quads[q]
+		for k in segs + 1:
+			var a := PI * 0.5 * q + PI * 0.5 * k / segs
+			if corner < 0.5 and k > 0:
+				break
+			out.append(c + (o + Vector2.from_angle(a) * corner).rotated(angle))
+	return out
+
+
+## 가운데 c, 반지름 rad(가로·세로)인 n각형을 angle만큼 돌린 다각형
+static func ngon(c: Vector2, rad: Vector2, n: int, angle := 0.0) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for k in n:
+		var a := TAU * k / n
+		out.append(c + (Vector2(cos(a), sin(a)) * rad).rotated(angle))
+	return out
+
+
+## 다각형 poly를 가운데 c로 f배 줄인 것
+static func scaled(poly: PackedVector2Array, c: Vector2, f: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for q in poly:
+		out.append(c + (q - c) * f)
+	return out
+
+
+## 볼록 다각형 안에 드는 가로 띠 사각형들 (충돌용 — 띠마다 위·아래 줄의 좁은 폭을 쓴다)
+static func poly_rects(poly: PackedVector2Array, strip := 20.0) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	var b := bounds(poly)
+	var n := maxi(1, ceili(b.size.y / strip))
+	for k in n:
+		var y0 := b.position.y + b.size.y * k / n
+		var y1 := b.position.y + b.size.y * (k + 1) / n
+		var a := _span(poly, lerpf(y0, y1, 0.02))
+		var c := _span(poly, lerpf(y0, y1, 0.98))
+		var x0 := maxf(a.x, c.x)
+		var x1 := minf(a.y, c.y)
+		if x1 - x0 > 1.0:
+			out.append(Rect2(x0, y0, x1 - x0, y1 - y0))
+	return out
+
+
+## 볼록 다각형을 가로줄 y로 자른 x 구간
+static func _span(poly: PackedVector2Array, y: float) -> Vector2:
+	var lo := INF
+	var hi := -INF
+	for k in poly.size():
+		var a := poly[k]
+		var b := poly[(k + 1) % poly.size()]
+		if (a.y - y) * (b.y - y) <= 0.0 and not is_equal_approx(a.y, b.y):
+			var x := lerpf(a.x, b.x, (y - a.y) / (b.y - a.y))
+			lo = minf(lo, x)
+			hi = maxf(hi, x)
+	return Vector2(lo, hi)
 
 
 ## seed·k로 정해지는 0~1 값 (같은 건물은 늘 같은 값)
@@ -731,7 +812,9 @@ static func ground_obstacles(pieces: Array[Piece]) -> Array[Rect2]:
 			continue
 		if p.roof in LandmarkBuilding.OPEN_ROOFS:
 			continue
-		if p.roof == &"pavilion":
+		if p.poly.size() >= 3:
+			out.append_array(poly_rects(p.poly))
+		elif p.roof == &"pavilion":
 			out.append_array(LandmarkBuilding._pavilion_posts(p.rect))
 		elif p.roof == &"tree":
 			out.append(Rect2(p.rect.get_center()-Vector2(3,3),Vector2(6,6)))

@@ -142,7 +142,7 @@ M += [
  dict(id='oldtown_01',gang='oldtown',set=0,tier=0,order=0,title='시장 심부름',reward=70000,respect=8,time=110,
   briefing='어이 강남 촌놈, 우리 쪽 일도 해 볼래?\n시장 가게 세 곳에 들러서 형님 물건 받아 와.',
   steps=[dict(kind=GOTO,text='물건 받기 (1/3)',points=[sw(2,-7,0,0.5)],radius=40),
-         dict(kind=GOTO,text='물건 받기 (2/3)',points=[sw(3,-6,3,0.5)],radius=40),
+         dict(kind=GOTO,text='물건 받기 (2/3)',points=[sw(3,-6,2,0.5)],radius=40),   # 서쪽 인도는 남산(합친 블록) 안이 됐다
          dict(kind=GOTO,text='물건 받기 (3/3)',points=[sw(0,-6,1,0.5)],radius=40)]),
  dict(id='oldtown_02',gang='oldtown',set=0,tier=0,order=1,title='포르타 짐',reward=70000,respect=8,time=35,
   briefing='짐 실은 포르타를 홍대 쪽 창고 앞까지.\n밀수단 구역이니 오래 머물지 마.',
