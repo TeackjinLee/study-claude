@@ -18,9 +18,11 @@ const SPOTS := [
 	["terrain_tower", Vector2i(2, -6), Vector2(0.5, 0.5), 1.0],    # 랜드마크 공터 단
 	["landmark_namsan", Vector2i(2, -6), Vector2(0.5, 0.3), 0.45],  # 남산 (산 위 타워)
 	["landmark_namsan_top", Vector2i(2, -6), Vector2(0.5, 0.2), 0.9],
+	["landmark_namsan_summit", Vector2i(2, -6), Vector2(-0.3, -0.33), 1.3],   # 꼭대기 통째 그림
 	["landmark_namsan_cable", Vector2i(1, -6), Vector2(0.6, 0.3), 0.8],   # 케이블카
 	["landmark_namsan_south", Vector2i(2, -6), Vector2(0.5, 1.1), 0.75],  # 남쪽 길에서 본 산
 	["landmark_jamsil", Vector2i(7, 3), Vector2(0.0, 0.0), 0.3],    # 롯데월드타워·롯데월드
+	["building_hideout", Vector2i(2, 3), Vector2(0.6, 0.35), 1.0],   # 은신처 오피스텔 (통째 그림)
 	["landmark_lotte_tower", Vector2i(6, 2), Vector2(0.5, 0.2), 0.55],
 	["landmark_lotte_world", Vector2i(7, 3), Vector2(0.5, 0.5), 0.55],
 ]

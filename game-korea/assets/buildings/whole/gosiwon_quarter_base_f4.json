@@ -1,0 +1,25 @@
+{
+  "id": "GOSIWON",
+  "lot": "quarter",
+  "lot_size": [
+    251.0,
+    251.0
+  ],
+  "seed": 7,
+  "size": [
+    1440,
+    1092
+  ],
+  "origin": [
+    718.81,
+    684.48
+  ],
+  "scale": 2.79822,
+  "floors": 4,
+  "hull_pieces": {
+    "0": [
+      8,
+      0
+    ]
+  }
+}

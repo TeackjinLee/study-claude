@@ -5,7 +5,7 @@ extends Node
 ##   godot --path . res://tools/building_guide.tscn -- --ids=VILLA,APT
 ##   ... -- --set=street            (base 15종 · special 8종 · street 10종 · landmarks 12종, 기본 base)
 ##   ... -- --lots=all              (그 종이 놓이는 부지 크기 전부. 기본은 첫 부지)
-##   ... -- --lots=half_y           (부지 이름을 직접: full·half_x·half_y·quarter·merge_1x2·merge_3x1, 쉼표로 여럿 — 랜드마크는 구역에 통째 부지가
+##   ... -- --lots=half_y           (부지 이름을 직접: full·half_x·half_y·quarter·merge_1x2·merge_3x1·lot_<가로>x<세로>, 쉼표로 여럿 — 랜드마크는 구역에 통째 부지가
 ##                                    없으면 반쪽 부지에 선다. 실제 부지는 landmark_city_preview 출력의 lot=으로 본다)
 ##   ... -- --scale=2 --seed=7      (그림 배율: 게임 줌 1 화면 px의 몇 배 · 모형 무작위 시드)
 ##   ... -- --floors=4              (층수를 바꿔 찍는다 — <ID>_<부지>_f4. 도시가 층을 ±1 바꾼 건물에 붙일 그림용)
@@ -89,10 +89,14 @@ void fragment() { COLOR = vec4(1.0); }"""
 			for f in (t.footprints if want == "all" else [t.footprints[0]]):
 				lots.append_array(FOOTPRINT_LOTS[f])
 		for lot_name: String in lots:
+			var size: Vector2 = LOTS.get(lot_name, Vector2.ZERO)
+			if lot_name.begins_with("lot_"):   # 블록을 나눈 부지가 아닌 크기: lot_<가로>x<세로> (남산 꼭대기 lot_300x168)
+				var wh := lot_name.trim_prefix("lot_").split("x")
+				size = Vector2(float(wh[0]), float(wh[1]))
 			if hulls:
-				await _hulls(t, lot_name, LOTS[lot_name], seed, scale)
+				await _hulls(t, lot_name, size, seed, scale)
 			else:
-				await _whole(t, lot_name, LOTS[lot_name], seed, scale)
+				await _whole(t, lot_name, size, seed, scale)
 	get_tree().quit()
 
 
@@ -398,7 +402,8 @@ func _flat(pieces: Array) -> Array:
 # ── 공통 ──────────────────────────────────────────────────
 
 func _type(id: StringName) -> BuildingType:
-	if String(id) in Gallery.LANDMARKS or String(id) in Gallery.STREET:
+	var path := "res://data/buildings/landmarks/%s.tres" % String(id).to_lower()
+	if String(id) in Gallery.LANDMARKS or String(id) in Gallery.STREET or ResourceLoader.exists(path):   # 도감에 없는 랜드마크 조각 (남산 꼭대기)
 		return load("res://data/buildings/landmarks/%s.tres" % String(id).to_lower()) as BuildingType
 	var all: Array = City.BUILDING_TYPES + City.SCATTER_LOOKS + [City.LOOK_POLICE, City.LOOK_HOSPITAL, City.LOOK_CAR_CENTER]
 	for g in City.GANGS:

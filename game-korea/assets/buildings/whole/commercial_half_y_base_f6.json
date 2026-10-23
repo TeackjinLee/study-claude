@@ -1,0 +1,25 @@
+{
+  "id": "COMMERCIAL",
+  "lot": "half_y",
+  "lot_size": [
+    251.0,
+    520.0
+  ],
+  "seed": 7,
+  "size": [
+    1417,
+    1159
+  ],
+  "origin": [
+    708.24,
+    763.06
+  ],
+  "scale": 1.81659,
+  "floors": 6,
+  "hull_pieces": {
+    "0": [
+      2,
+      26
+    ]
+  }
+}

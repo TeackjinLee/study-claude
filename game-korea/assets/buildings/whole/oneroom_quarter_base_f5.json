@@ -1,0 +1,25 @@
+{
+  "id": "ONEROOM",
+  "lot": "quarter",
+  "lot_size": [
+    251.0,
+    251.0
+  ],
+  "seed": 7,
+  "size": [
+    1511,
+    1230
+  ],
+  "origin": [
+    755.43,
+    793.12
+  ],
+  "scale": 2.66739,
+  "floors": 5,
+  "hull_pieces": {
+    "0": [
+      0,
+      8
+    ]
+  }
+}

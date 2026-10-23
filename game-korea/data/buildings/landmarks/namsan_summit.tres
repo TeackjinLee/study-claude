@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BuildingType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/building_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"NAMSAN_SUMMIT"
+display_name = "남산 꼭대기"
+style = &"namsan_summit"
+footprints = Array[int]([0])
+weight = 0.0
+floors = 4
+surface_detail = true

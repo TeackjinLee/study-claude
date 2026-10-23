@@ -18,8 +18,9 @@ const FOUNDATION_CAP := Color(0.6, 0.59, 0.56)   ## 축대 위 갓돌
 const STONE_ROW := 9.0                          ## 축대 돌 한 줄 높이 (화면 px)
 const STONE_LEN := 26.0                         ## 축대 돌 한 장 길이 (월드 px)
 const STEP_RAMP := 14.0                         ## 단 가장자리에서 사람·차가 단 높이까지 오르는 거리 (월드 px, 단 안쪽)
-## 산으로 솟은 합친 블록 (남산): [그 안 블록, 꼭대기 평지 반폭(월드 px), 높이(화면 px)]. 부지(인도 안) 가장자리에서 0이고
-## 가운데로 갈수록 부드럽게 솟는다 — 격자 표본(192px)으로는 모자라 수식으로 더하고, 셰이더도 같은 수식을 쓴다
+## 산으로 솟은 합친 블록 (남산): [그 안 블록, 꼭대기 평지 반폭(월드 px), 높이(화면 px)]. 부지(인도 안) 가장자리에서는 원래 땅이고
+## 가운데로 갈수록 부드럽게 꼭대기 높이(평지 안 원래 땅의 가장 높은 곳 + 높이)로 바뀐다 — 더하지 않고 바꾸므로 꼭대기 평지는
+## 밑의 언덕이 기울어도 평평하다(통째 그림이 붙는 꼭대기 건물이 한 높이에 선다). 격자 표본(192px)으로는 모자라 수식으로 하고, 셰이더도 같은 수식을 쓴다
 const MOUNDS := [[Vector2i(2, -6), Vector2(150, 84), 230.0]]
 const MOUND_SHADING := 2.6                      ## 산 비탈 그늘을 지형보다 세게 (나무 사이로 비탈이 읽히게)
 const MOUND_CELL := 48.0                        ## 산 안에서 바닥 도형을 자르는 간격 (월드 px)
@@ -39,28 +40,44 @@ uniform vec2 light = vec2(0.95, 0.32);
 uniform int terrace_count = 0;
 uniform vec4 terrace_rects[MAX_TERRACES];
 uniform float terrace_heights[MAX_TERRACES];
-// 산 (Terrain.MOUNDS — 수식은 Terrain._mound와 같다): 부지 (x0, y0, x1, y1), (평지 반폭 x, y, 높이, 0)
+// 산 (Terrain.MOUNDS — 수식은 Terrain._apply_mounds와 같다): 부지 (x0, y0, x1, y1), (평지 반폭 x, y, 꼭대기 높이, 0)
 uniform int mound_count = 0;
 uniform vec4 mound_rects[MAX_MOUNDS];
 uniform vec4 mound_shapes[MAX_MOUNDS];
 varying vec2 ground;
 
-float mound(vec2 p) {
-	float h = 0.0;
+float h_at(ivec2 k) {
+	ivec2 s = textureSize(heights, 0);
+	return texelFetch(heights, clamp(k, ivec2(0), s - ivec2(1)), 0).r;
+}
+
+// 격자 표본을 쌍선형으로 이은 원래 땅
+float base_h(vec2 p) {
+	vec2 g = (p - origin) / cell;
+	vec2 f = floor(g);
+	ivec2 k = ivec2(f);
+	vec2 t = g - f;
+	return mix(mix(h_at(k), h_at(k + ivec2(1, 0)), t.x), mix(h_at(k + ivec2(0, 1)), h_at(k + ivec2(1, 1)), t.x), t.y);
+}
+
+// 산: 가장자리 원래 땅 → 꼭대기 높이로 부드럽게 바꾼다
+float mounded(vec2 p, float h) {
 	for (int i = 0; i < mound_count; i++) {
 		vec4 r = mound_rects[i];
+		if (p.x < r.x || p.y < r.y || p.x >= r.z || p.y >= r.w) {
+			continue;
+		}
 		vec4 s = mound_shapes[i];
 		vec2 c = (r.xy + r.zw) * 0.5;
 		vec2 half_size = (r.zw - r.xy) * 0.5;
 		vec2 q = max(abs(p - c) - s.xy, vec2(0.0)) / max(half_size - s.xy, vec2(1.0));
-		h += s.z * (1.0 - smoothstep(0.0, 1.0, length(q)));
+		h = mix(h, s.z, 1.0 - smoothstep(0.0, 1.0, length(q)));
 	}
 	return h;
 }
 
-float h_at(ivec2 k) {
-	ivec2 s = textureSize(heights, 0);
-	return texelFetch(heights, clamp(k, ivec2(0), s - ivec2(1)), 0).r;
+float ground_h(vec2 p) {
+	return mounded(p, base_h(p));
 }
 
 void vertex() {
@@ -70,7 +87,7 @@ void vertex() {
 	ivec2 k = ivec2(f);
 	vec2 t = g - f;
 	float h = mix(mix(h_at(k), h_at(k + ivec2(1, 0)), t.x), mix(h_at(k + ivec2(0, 1)), h_at(k + ivec2(1, 1)), t.x), t.y);
-	h += mound(VERTEX);
+	h = mounded(VERTEX, h);
 	for (int i = 0; i < terrace_count; i++) {
 		vec4 r = terrace_rects[i];
 		if (VERTEX.x >= r.x && VERTEX.y >= r.y && VERTEX.x < r.z && VERTEX.y < r.w) {
@@ -94,8 +111,12 @@ void fragment() {
 		float h11 = h_at(k + ivec2(1, 1));
 		vec2 grad = vec2(mix(h10 - h00, h11 - h01, t.y), mix(h01 - h00, h11 - h10, t.x)) / cell;
 		if (mound_count > 0) {
-			grad += vec2(mound(ground + vec2(2.0, 0.0)) - mound(ground - vec2(2.0, 0.0)),
-				mound(ground + vec2(0.0, 2.0)) - mound(ground - vec2(0.0, 2.0))) * 0.25 * MOUND_SHADING;
+			// 산이 바꾼 몫의 기울기를 세게 (나무 사이로 비탈이 읽히게)
+			vec2 dx = vec2(2.0, 0.0);
+			vec2 dy = vec2(0.0, 2.0);
+			vec2 total = vec2(ground_h(ground + dx) - ground_h(ground - dx), ground_h(ground + dy) - ground_h(ground - dy)) * 0.25;
+			vec2 base = vec2(base_h(ground + dx) - base_h(ground - dx), base_h(ground + dy) - base_h(ground - dy)) * 0.25;
+			grad += (total - base) * MOUND_SHADING;
 		}
 		c.rgb *= clamp(1.0 + dot(grad, light) * shading * strength, 0.62, 1.3);
 	}
@@ -124,12 +145,19 @@ static func _ensure() -> void:
 	_flatten_overpasses()
 	_mounds.clear()
 	for m: Array in MOUNDS:
-		_mounds.append([City.block_area(m[0]).grow(-City.SIDEWALK), m[1], m[2]])
+		var r := City.block_area(m[0]).grow(-City.SIDEWALK)
+		var flat: Vector2 = m[1]
+		# 꼭대기 높이 = 평지 안 원래 땅의 가장 높은 곳 + 높이
+		var top := -INF
+		var plateau := Rect2(r.get_center() - flat, flat * 2.0)
+		for y in 9:
+			for x in 9:
+				top = maxf(top, _base(plateau.position + plateau.size * Vector2(x / 8.0, y / 8.0)))
+		_mounds.append([r, flat, top + float(m[2])])
 
 
-## 산이 더하는 높이 (셰이더의 mound와 같은 수식)
-static func _mound(p: Vector2) -> float:
-	var h := 0.0
+## 산: 가장자리 원래 땅 h에서 가운데 꼭대기 높이로 부드럽게 바꾼다 (셰이더의 mounded와 같은 수식)
+static func _apply_mounds(p: Vector2, h: float) -> float:
 	for m: Array in _mounds:
 		var r: Rect2 = m[0]
 		if not r.has_point(p):
@@ -137,8 +165,18 @@ static func _mound(p: Vector2) -> float:
 		var flat: Vector2 = m[1]
 		var half := r.size * 0.5
 		var d := ((p - r.get_center()).abs() - flat).max(Vector2.ZERO) / (half - flat).max(Vector2.ONE)
-		h += m[2] * (1.0 - smoothstep(0.0, 1.0, d.length()))
+		h = lerpf(h, m[2], 1.0 - smoothstep(0.0, 1.0, d.length()))
 	return h
+
+
+## 격자 표본을 쌍선형으로 이은 원래 땅 (산 빼고)
+static func _base(pos: Vector2) -> float:
+	var g := (pos - DATA.origin) / DATA.cell
+	var i := floori(g.x)
+	var j := floori(g.y)
+	var tx := g.x - i
+	var ty := g.y - j
+	return lerpf(lerpf(_sample(i, j), _sample(i + 1, j), tx), lerpf(_sample(i, j + 1), _sample(i + 1, j + 1), tx), ty)
 
 
 ## 산 부지들 (남산 — 그리는 쪽에서 길·나무를 놓을 때)
@@ -265,12 +303,7 @@ static func slope(pos: Vector2) -> float:
 	if not enabled or not IsoView.enabled:
 		return 0.0
 	_ensure()
-	var g := (pos - DATA.origin) / DATA.cell
-	var i := floori(g.x)
-	var j := floori(g.y)
-	var tx := g.x - i
-	var ty := g.y - j
-	return lerpf(lerpf(_sample(i, j), _sample(i + 1, j), tx), lerpf(_sample(i, j + 1), _sample(i + 1, j + 1), tx), ty) + _mound(pos)
+	return _apply_mounds(pos, _base(pos))
 
 
 ## 사각형 안 가장 높은 땅 — 단은 빼고 지형 그대로

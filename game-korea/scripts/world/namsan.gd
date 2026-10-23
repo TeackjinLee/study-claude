@@ -6,6 +6,9 @@ class_name Namsan
 ## 서·북·동에서 오르는 흙 등산로, 나머지는 숲과 바위. 모든 자리는 부지 사각형에서 계산한다 (RNG 없이 — 늘 같은 산).
 
 const FOREST := preload("res://data/buildings/forest.tres")
+## 꼭대기 평지: 산 부지 안의 작은 부지 (Terrain.MOUNDS의 평지 반폭과 같다 — 평평해서 통째 그림을 붙인다, lot_300x168)
+const SUMMIT := preload("res://data/buildings/landmarks/namsan_summit.tres")
+const SUMMIT_HALF := Vector2(150, 84)
 const VILLAGE_BUS := "res://data/vehicles/bus_village.tres"
 ## 지붕 이름: 벽 없이 여기서 그린다 (BuildingView._walls는 BARE를 건너뛴다)
 const ROOFS: Array[StringName] = [&"lock_fence", &"tower_glow", &"cable_pylon"]
@@ -106,44 +109,25 @@ static func _plaza(c: Vector2) -> PackedVector2Array:
 
 # ── 덩어리 ────────────────────────────────────────────────
 
+## 꼭대기 평지 부지 (산 부지 가운데)
+static func summit_rect(r: Rect2) -> Rect2:
+	return Rect2(r.get_center() - SUMMIT_HALF, SUMMIT_HALF * 2.0)
+
+
 static func build(out: Array[BuildingModel.Piece], r: Rect2, seed: int) -> void:
 	var f := frame(r)
 	var c: Vector2 = f.c
-	_tower(out, f.tower, seed)
-	# 팔각정 (기둥만 막는다)
-	var pc: Vector2 = f.pavilion
-	var pav := LandmarkBuilding.box(out, Rect2(pc - Vector2(22, 22), Vector2(44, 44)), 0, 24, Color("8b2b22"), &"none", &"pavilion")
-	pav.roof_color = Color("4b5157")
-	pav.accent = Color("3f7a5a")
-	pav.rise = 15.0
-	pav.eave = 10.0
-	# 봉수대 다섯: 둥근 돌 굴뚝
-	for at: Vector2 in f.beacons:
-		var b := BuildingModel._prism(BuildingModel.ngon(at, Vector2(6, 6), 8, 0.2), 0, 18, Color("a19b8d"), &"flat", Color("3d3a36"), &"none", seed)
-		out.append(b)
-	# 케이블카 승강장 (꼭대기·기슭)
-	for key in ["top_station", "base_station"]:
-		var rect: Rect2 = f[key]
-		var st := LandmarkBuilding.box(out, rect, 0, STATION_H, Color("e1ddd2"), &"punched")
-		st.deco = [&"entrance", &"name"]
-		st.text = "남산 케이블카"
-		st.roof_color = Color("7d8a91")
-		st.accent = Color("c8372c")
-		# 옥상 바퀴집: 줄이 감기는 곳 (줄 끝 높이 = 승강장 + WHEEL_H)
-		var wheel := BuildingModel._box(Rect2(rect.get_center() - Vector2(12, 10), Vector2(24, 20)), STATION_H, STATION_H + WHEEL_H,
-			Color("c8372c"), &"flat", Color("8e2a22"), &"none", seed)
-		st.on_top.append(wheel)
+	# 꼭대기 건물들은 따로 짓는다 (통째 그림 NAMSAN_SUMMIT_lot_300x168이 있으면 붙는다)
+	var summit := BuildingModel.build(summit_rect(r), SUMMIT, seed, 0.0)
+	for p in summit:
+		if p.roof == &"tower_glow":
+			p.sprite = null   # 탑신 밤 조명은 그림이 있어도 코드로 (불빛 조각만 그린다)
+	out.append_array(summit)
+	# 기슭 케이블카 승강장
+	_station(out, f.base_station, seed)
 	# 케이블 철탑 둘 (볼록한 산을 넘게 줄을 받친다)
 	for at in pylons(r):
 		LandmarkBuilding.box(out, Rect2(at - Vector2(7, 7), Vector2(14, 14)), 0, PYLON_H, Color("7f878d"), &"none", &"cable_pylon")
-	# 사랑의 자물쇠 난간: 평지 남쪽 끝과 타워 뒤
-	_fence(out, c + Vector2(-20, 82), c + Vector2(140, 82))
-	_fence(out, c + Vector2(-60, -96), c + Vector2(70, -96))
-	# 평지 가로등과 벤치
-	for d in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
-		StreetBuilding._lamp(out, c + Vector2(0, -12) + d * Vector2(106, 76), 40.0)
-	for x in [-40.0, 40.0]:
-		LandmarkBuilding.box(out, Rect2(c + Vector2(x - 11, 60), Vector2(22, 7)), 0, 6, LandmarkBuilding.WOOD)
 	# 순환로 가로등 (길 바깥쪽, 150px마다)
 	var rd := road(r)
 	var walked := 0.0
@@ -157,6 +141,44 @@ static func build(out: Array[BuildingModel.Piece], r: Rect2, seed: int) -> void:
 	_forest(out, r, f, seed)
 
 
+## 꼭대기 평지 sr의 건물: N서울타워·팔각정·봉수대·꼭대기 승강장·자물쇠 난간·가로등·벤치 (자리는 frame — 가운데 기준)
+static func build_summit(out: Array[BuildingModel.Piece], sr: Rect2, seed: int) -> void:
+	var f := frame(sr)
+	var c: Vector2 = f.c
+	_tower(out, f.tower, seed)
+	# 팔각정 (기둥만 막는다)
+	var pc: Vector2 = f.pavilion
+	var pav := LandmarkBuilding.box(out, Rect2(pc - Vector2(22, 22), Vector2(44, 44)), 0, 24, Color("8b2b22"), &"none", &"pavilion")
+	pav.roof_color = Color("4b5157")
+	pav.accent = Color("3f7a5a")
+	pav.rise = 15.0
+	pav.eave = 10.0
+	# 봉수대 다섯: 둥근 돌 굴뚝
+	for at: Vector2 in f.beacons:
+		var b := BuildingModel._prism(BuildingModel.ngon(at, Vector2(6, 6), 8, 0.2), 0, 18, Color("a19b8d"), &"flat", Color("3d3a36"), &"none", seed)
+		out.append(b)
+	_station(out, f.top_station, seed)
+	# 사랑의 자물쇠 난간: 평지 남쪽 끝과 타워 뒤
+	_fence(out, c + Vector2(-20, 82), c + Vector2(140, 82))
+	_fence(out, c + Vector2(-60, -96), c + Vector2(70, -96))
+	# 평지 가로등과 벤치
+	for d in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+		StreetBuilding._lamp(out, c + Vector2(0, -12) + d * Vector2(106, 76), 40.0)
+	for x in [-40.0, 40.0]:
+		LandmarkBuilding.box(out, Rect2(c + Vector2(x - 11, 60), Vector2(22, 7)), 0, 6, LandmarkBuilding.WOOD)
+
+
+## 케이블카 승강장 하나와 옥상 바퀴집 (줄이 감기는 곳 — 줄 끝 높이 = 승강장 + WHEEL_H)
+static func _station(out: Array[BuildingModel.Piece], rect: Rect2, seed: int) -> void:
+	var st := LandmarkBuilding.box(out, rect, 0, STATION_H, Color("e1ddd2"), &"punched")
+	st.deco = [&"entrance", &"name"]
+	st.text = "남산 케이블카"
+	st.roof_color = Color("7d8a91")
+	st.accent = Color("c8372c")
+	st.on_top.append(BuildingModel._box(Rect2(rect.get_center() - Vector2(12, 10), Vector2(24, 20)), STATION_H, STATION_H + WHEEL_H,
+		Color("c8372c"), &"flat", Color("8e2a22"), &"none", seed))
+
+
 ## N서울타워: 둥근 로비 위 가는 탑신, 전망대 셋, 흰 뚜껑, 빨강·흰 송신탑. 탑신에 밤 조명(불빛 조각만 그린다)
 static func _tower(out: Array[BuildingModel.Piece], t: Vector2, seed: int) -> void:
 	var lobby := BuildingModel._prism(BuildingModel.ngon(t, Vector2(44, 44), 16, 0.1), 0, 26, Color("d8d4c6"), &"flat", Color("b9b3a2"), &"glass", seed)
@@ -168,9 +190,10 @@ static func _tower(out: Array[BuildingModel.Piece], t: Vector2, seed: int) -> vo
 	lobby.on_top.append(ring)
 	var shaft := BuildingModel._prism(BuildingModel.ngon(t, Vector2(12, 12), 12, 0.0), 34, 230, Color("eeece4"), &"flat", Color("d9d5c8"), &"none", seed + 2)
 	ring.on_top.append(shaft)
+	# 탑신 밤 조명: 얹지 않고 따로 세운다 (통째 그림이 붙어도 이것만 코드로 그리게)
 	var lights := BuildingModel._box(Rect2(t - Vector2(12, 12), Vector2(24, 24)), 34, 230, Color.WHITE, &"tower_glow", Color.WHITE, &"none", seed)
 	lights.blocks_ground = false
-	shaft.on_top.append(lights)
+	out.append(lights)
 	var under := shaft
 	var decks := [[36.0, 230.0, 244.0, Color("cfcac0"), true], [42.0, 244.0, 260.0, Color("e4e0d4"), true], [34.0, 260.0, 272.0, Color("d6d1c4"), true],
 		[18.0, 272.0, 288.0, Color("f0eee8"), false]]
@@ -295,7 +318,21 @@ static func draw_ground(ci: CanvasItem, r: Rect2, seed: int) -> void:
 	var rim := plaza.duplicate()
 	rim.append(plaza[0])
 	ci.draw_polyline(rim, Color("8f897c"), 3.0)
-	# 타워 둘레 둥근 마당, 팔각정·봉수대 흙 마당
+	# 꼭대기 부지 바닥 (통째 그림이 있으면 그림, 없으면 summit_ground)
+	BuildingModel.draw_ground(ci, summit_rect(r), SUMMIT, seed)
+	# 기슭 승강장 앞 마당
+	var base: Rect2 = f.base_station
+	Terrain.rect(ci, base.grow(16.0), Color("b9b2a3"))
+
+
+## 꼭대기 평지 바닥 (코드 그림): 타워 둘레 둥근 마당, 팔각정·봉수대 흙 마당, 버스 정류장
+static func summit_ground(ci: CanvasItem, sr: Rect2, _seed: int) -> void:
+	var f := frame(sr)
+	ci.draw_rect(sr, STONE)
+	var y := sr.position.y + 16.0
+	while y < sr.end.y:
+		ci.draw_line(Vector2(sr.position.x, y), Vector2(sr.end.x, y), STONE_LINE, 1.0)
+		y += 16.0
 	var t: Vector2 = f.tower
 	ci.draw_colored_polygon(BuildingModel.ngon(t, Vector2(58, 58), 24), Color("dcd6c8"))
 	ci.draw_polyline(_closed(BuildingModel.ngon(t, Vector2(58, 58), 24)), Color("a49d8f"), 2.0)
@@ -306,9 +343,6 @@ static func draw_ground(ci: CanvasItem, r: Rect2, seed: int) -> void:
 	var bus: Vector2 = f.bus
 	ci.draw_rect(Rect2(bus - Vector2(18, 56), Vector2(36, 112)), Color("8f8b82"))
 	ci.draw_rect(Rect2(bus - Vector2(18, 56), Vector2(36, 112)), Color(0.95, 0.75, 0.15, 0.9), false, 2.0)
-	# 기슭 승강장 앞 마당
-	var base: Rect2 = f.base_station
-	Terrain.rect(ci, base.grow(16.0), Color("b9b2a3"))
 
 
 ## 꼭대기 평지를 가로줄 y로 자른 x 구간 (초타원 안)

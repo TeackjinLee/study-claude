@@ -34,6 +34,11 @@ static var margins := true
 
 
 ## 그 종류·부지의 그림 (없으면 null). 부지 이름은 building_guide.gd와 같다
+## 블록을 나눈 부지의 한 변인가 (통째 520 · 반쪽 251)
+static func _standard(v: float) -> bool:
+	return absf(v - 520.0) < 3.0 or absf(v - 251.0) < 3.0
+
+
 ## 블록을 합친 부지(CityMap.MERGES)인가 — 그림 이름의 부지는 merge_<가로>x<세로>라 블록 하나 그림을 늘려 쓰지 않는다
 static func merged_lot(lot: Rect2) -> bool:
 	return lot.size.x > City.BLOCK or lot.size.y > City.BLOCK
@@ -108,6 +113,8 @@ static func variants(t: BuildingType, lot: Rect2) -> Array:
 static func lot_name(s: Vector2) -> String:
 	if merged_lot(Rect2(Vector2.ZERO, s)):   # 합친 블록 부지 (CityMap.MERGES): 가로·세로 블록 수 — merge_1x2
 		return "merge_%dx%d" % [roundi((s.x + City.SIDEWALK * 2.0 + City.ROAD) / City.PITCH), roundi((s.y + City.SIDEWALK * 2.0 + City.ROAD) / City.PITCH)]
+	if not (_standard(s.x) and _standard(s.y)):   # 블록을 나눈 부지가 아닌 크기 (남산 꼭대기 평지): lot_<가로>x<세로>
+		return "lot_%dx%d" % [roundi(s.x), roundi(s.y)]
 	if s.x > 400.0 and s.y > 400.0:
 		return "full"
 	if s.x > 400.0:

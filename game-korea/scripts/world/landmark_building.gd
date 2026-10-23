@@ -6,7 +6,7 @@ class_name LandmarkBuilding
 ## 모든 위치는 부지 사각형에서 계산한다 (RNG 없이 — 늘 같은 도시).
 
 const STYLES := [&"landmark_tower", &"terminal", &"market", &"dock_crane", &"broadcast", &"checkpoint", &"container", &"dock_warehouse", &"barrier", &"industrial_dock",
-	&"sky_tower", &"lake_park"]
+	&"sky_tower", &"lake_park", &"namsan_summit"]
 const YELLOW := Color(0.88, 0.61, 0.12)
 ## 부두 헬기장에 세워 두는 헬기 (4장 부두가 열려야 생긴다)
 const DOCK_HELI := "res://data/vehicles/sp_heli.tres"
@@ -52,6 +52,7 @@ static func build(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingType, se
 		&"industrial_dock": _dock(out, r, seed)
 		&"sky_tower": Lotte.build_tower(out, r, seed)
 		&"lake_park": Lotte.build_park(out, r, seed)
+		&"namsan_summit": Namsan.build_summit(out, r, seed)   # 남산 꼭대기 평지 (산 부지 안의 작은 부지 — 통째 그림이 붙는다)
 		&"checkpoint":
 			var booth := box(out, Rect2(c - Vector2(38, 30), Vector2(76, 60)), 0, 46, Color("b7b6a9"), &"punched")
 			booth.deco = [&"landmark_sign", &"door"]
@@ -551,6 +552,7 @@ static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int) ->
 		&"industrial_dock": _dock_ground(ci, r, seed)
 		&"sky_tower": Lotte.tower_ground(ci, r, seed)
 		&"lake_park": Lotte.park_ground(ci, r, seed)
+		&"namsan_summit": Namsan.summit_ground(ci, r, seed)
 		_: BuildingModel._plinth(ci, r, seed)
 
 

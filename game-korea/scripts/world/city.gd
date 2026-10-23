@@ -976,7 +976,7 @@ func _pieces(idx: int) -> Array[BuildingModel.Piece]:
 	var h := building_height(idx)
 	if looks.has(idx):
 		return BuildingModel.build(r, looks[idx], seed_of(idx), h)
-	if kind == null or r == hq or r == hideout:
+	if kind == null or r == hq:   # 은신처(오피스텔)는 보통 오피스텔처럼 짓는다 — 통째 그림이 붙는다
 		var windows := &"glass" if kind and kind.style == &"office" else (&"officetel" if kind else &"punched")
 		return BuildingModel.special(r, h, kind.wall_color if kind else _special_wall(r), windows, seed_of(idx))
 	return BuildingModel.build(r, kind, seed_of(idx), h)
@@ -1012,7 +1012,7 @@ func _ground_kind(idx: int) -> BuildingType:
 	if looks.has(idx):
 		return looks[idx]
 	var r := buildings[idx]
-	return null if r == hq or r == hideout else kinds[idx]
+	return null if r == hq else kinds[idx]
 
 
 func _special_wall(r: Rect2) -> Color:
