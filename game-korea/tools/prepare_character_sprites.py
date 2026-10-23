@@ -652,7 +652,7 @@ def process_dir8(cid: str, sources: dict, debug: bool) -> None:
 
 DIR8_SHEET_ROWS = ["s", "sw", "w", "nw", "n"]   ## 한 장짜리 8방향 시트의 줄 (나머지 ↘ → ↗는 게임이 좌우를 뒤집어 쓴다)
 PUNCH_H = 0.95   ## 주먹 칸 키 / 걷기 키 — 무릎을 굽힌 싸움 자세
-RUN_H_OF = {"office": 0.92, "soldier": 0.92}   ## 달리기 키 / 걷기 키를 머리 폭 대신 이 값으로 (걷기·달리기를 같은 키로 그린 시트 — 주인공 비율)
+RUN_H_OF = {"office": 0.92, "soldier": 0.92, "foreigner": 0.92}   ## 달리기 키 / 걷기 키를 머리 폭 대신 이 값으로 (걷기·달리기를 같은 키로 그린 시트 — 주인공 비율)
 RUN_H_RANGE = (0.85, 0.92)   ## 달리기 키 / 걷기 키 — 머리 폭으로 맞춘 크기가 이 밖이면 끝으로 당긴다
 RUN_ROW_K = (0.85, 1.25)     ## 달리기 줄마다 키를 시트 가운데값에 맞출 때 배율 한도 (튀는 줄만 당긴다)
 NEON = {"firefighter"}   ## 형광 반사띠가 초록 기운이라 _despill로 걷지 않는다
@@ -705,6 +705,12 @@ def _despill(cell, over: int = 30):
     hit = (img[:, :, 3] > 0) & (rgb[:, :, 1] - top > over)
     img[:, :, 1][hit] = top[hit]
     return (img,) + tuple(cell[1:])
+
+
+def _green_bg(path: Path) -> bool:
+    """시트 배경이 초록인가 (왼쪽 위 구석) — 마젠타 배경 시트에는 초록 기운이 남지 않아 _despill이 초록 옷만 어둡게 한다"""
+    r, g, b = Image.open(path).convert("RGB").getpixel((2, 2))
+    return g > r + 60 and g > b + 60
 
 
 def _head_w(cell) -> float:
@@ -937,7 +943,7 @@ def process_dir8_sheet(cid: str, walk_src: "Path | None", frames: int, run_src: 
     meta = {"dirs": present, "frames": frames}
     if run_src:
         rcells = load_cells(run_src, run_frames, _sheet_nrows(run_src), **opts)
-        if cid in KEEP_TINT and cid not in NEON:
+        if cid in KEEP_TINT and cid not in NEON and _green_bg(run_src):
             rcells = {k: _despill(c) for k, c in rcells.items()}
         runs = {d: [c for c in (rcells[(i, k)] for k in keep) if c] for i, d, keep, _ in run_rows}
         # 걷기 그림의 머리 폭(게임 크기)과 같아지게

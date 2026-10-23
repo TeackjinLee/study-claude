@@ -1554,7 +1554,7 @@ func _npc_ko_shots(main: Node2D) -> void:
 	if peds.size() < 4:
 		print("  보행자가 모자람 (%d)" % peds.size())
 		return
-	for id in ["civ_m", "civ_f", "office", "paramedic"]:
+	for id in ["civ_m", "civ_f", "office", "paramedic", "soldier", "foreigner"]:
 		for i in 4:
 			var p: Pedestrian = peds[i]
 			var k := i * 2
