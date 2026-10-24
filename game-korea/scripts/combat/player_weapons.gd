@@ -205,6 +205,10 @@ func shoot() -> bool:
 		if not w.melee:
 			from += dir * w.muzzle
 	arsenal.fire()
+	if v == null and w.pose != &"":
+		# 총구 좌표도 이번 발사의 첫 장에서 잰다. 직전 발사 반동이나 다른 총의 장면을 쓰지 않는다.
+		player.set_meta(&"shot_at", Time.get_ticks_msec() / 1000.0)
+		player.set_meta(&"shot_weapon", w.id)
 	var shown: Variant = null
 	var rear: Variant = null
 	if v == null:
@@ -213,8 +217,6 @@ func shoot() -> bool:
 		shown = PersonRig.gun_muzzle(player, player.facing, 1.0, gait, w)
 		rear = PersonRig.gun_breech(player, player.facing, 1.0, gait, w)   # 로켓포 발사관 뒤끝 — 후폭풍
 	combat.fire(from, dir, w, true, exclude, 0.0, v.level if v else player.level, shown, rear)
-	if v == null and w.pose != &"":
-		player.set_meta(&"shot_at", Time.get_ticks_msec() / 1000.0)   # 그림: 쏠 때마다 발사 장면을 처음부터 (PersonRig._draw_gun)
 	if w.melee and v == null:
 		player.punch()
 	return true

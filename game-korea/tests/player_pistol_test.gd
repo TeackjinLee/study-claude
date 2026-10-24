@@ -73,7 +73,8 @@ func _ready() -> void:
 		p.facing = Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(spec[1]))
 		c.shows.clear()
 		check(w.shoot() and p.has_meta(&"shot_at"), "권총을 쏘면 발사 장면 시작 (%s)" % spec[0])
-		var m: Array = muzzles.get(spec[0], [])
+		var row := 8 if spec[0] == "e" else 0
+		var m: Array = PersonRig.gun32_for("pistol")["muzzles"][row][1]
 		var seen: Vector2 = IsoView.to_screen_dir(c.shows[0] - p.global_position) if c.shows.size() == 1 and c.shows[0] is Vector2 else Vector2.INF
 		check(m.size() == 2 and seen.distance_to(Vector2(m[0], m[1]) * scale) < 1.5, "궤적은 그림 속 총구에서 (%s, 화면 %s)" % [spec[0], seen])
 	p.velocity = Vector2(Player.WALK_SPEED, 0)

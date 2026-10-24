@@ -1483,9 +1483,62 @@ static func _draw_dir8_punch(ci: CanvasItem, facing: float, size: float, look: N
 	return true
 
 
-## 총 자세 그림 (주인공만, `WeaponType.pose` — rifle 소총 · pistol 권총 · rocket 로켓포). 서 있으면 조준(aim 되풀이), 쏜 뒤(메타 shot_at)
+static var _guns32 := {}
+
+
+## 새 사격 그림은 보행 시트와 분리해 한 번만 읽는다. NPC·기존 로켓포·이동 모션은 기존 경로를 쓴다.
+static func gun32_for(pose: String) -> Dictionary:
+	if pose not in ["pistol", "smg", "shotgun", "rifle"]:
+		return {}
+	if not _guns32.has(pose):
+		var path := SPRITE_DIR + "player_" + pose + "_dir32"
+		var info: Dictionary = {}
+		if FileAccess.file_exists(path + ".json") and ResourceLoader.exists(path + ".png"):
+			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path + ".json"))
+			if parsed is Dictionary and int(parsed.get("directions", 0)) == 32:
+				info = parsed
+				info["tex"] = load(path + ".png")
+		_guns32[pose] = info
+	return _guns32[pose]
+
+
+## 화면 아래부터 오른쪽으로 한 바퀴. 그림은 32구간, 실제 총알 방향은 기존 연속 각도를 유지한다.
+static func gun32_pick(screen_dir: Vector2) -> int:
+	return posmod(roundi(atan2(screen_dir.x, screen_dir.y) * 32.0 / TAU), 32)
+
+
+## 총을 바꿀 때 이전 총의 반동을 물려받지 않고, 연사 간격 안에서 복귀한다.
+static func gun32_col(ci: CanvasItem, weapon: WeaponType, info: Dictionary) -> int:
+	var since := Time.get_ticks_msec() / 1000.0 - float(ci.get_meta(&"shot_at", -100.0))
+	var duration := minf(float(info["fire_duration"]), weapon.fire_interval)
+	if ci.get_meta(&"shot_weapon", weapon.id) != weapon.id or since < 0.0 or since >= duration:
+		return int(info["aim_col"])
+	return int(info["fire_col"]) + mini(int(since / duration * int(info["fire_frames"])), int(info["fire_frames"]) - 1)
+
+
+static func _draw_gun32(ci: CanvasItem, facing: float, size: float, weapon: WeaponType) -> bool:
+	if weapon == null:
+		return false
+	var info := gun32_for(String(weapon.pose))
+	if info.is_empty():
+		return false
+	var row := gun32_pick(IsoView.to_screen_dir(Vector2.UP.rotated(facing)))
+	var col := gun32_col(ci, weapon, info)
+	var g := PersonDrawer._ground(ci)
+	var scale := SPRITE_HEIGHT * size / SPRITE_BODY
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g))
+	ci.draw_colored_polygon(_ellipse_pts(Vector2.ZERO, 7.5 * size, 2.8 * size), Color(0, 0, 0, 0.32))
+	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(scale, scale)))
+	ci.draw_texture_rect_region(info["tex"], Rect2(-DIR4_FOOT, DIR4_CELL), Rect2(Vector2(col, row) * DIR4_CELL, DIR4_CELL))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	return true
+
+
+## 총 자세 그림 (주인공은 서 있을 때 32방향 우선). 서 있으면 조준, 쏜 뒤(메타 shot_at)
 ## 발사 장면을 처음부터, 겨눈 채 걷는 장면(walk)이 있으면 걸을 때 걸음 박자(phase)로 넘긴다. 뛰면 평소 그림
 static func _draw_gun(ci: CanvasItem, facing: float, phase: float, size: float, look: NpcType, gait: float, weapon: WeaponType) -> bool:
+	if look == null and gait <= 0.3 and _draw_gun32(ci, facing, size, weapon):
+		return true
 	var pose := _gun_pose(look, gait, weapon)
 	if pose == "":
 		return false
@@ -1546,6 +1599,15 @@ static func _gun_pose(look: NpcType, gait: float, weapon: WeaponType) -> String:
 ## 로켓포는 탄두 끝(로켓이 나가는 곳)이다
 ## look을 주면 그 보행자(군인)의 그림에서
 static func gun_muzzle(ci: Node2D, facing: float, size: float, gait: float, weapon: WeaponType, look: NpcType = null) -> Variant:
+	if IsoView.enabled and look == null and gait <= 0.3 and weapon != null:
+		var info := gun32_for(String(weapon.pose))
+		if not info.is_empty():
+			var dir := IsoView.to_screen_dir(Vector2.UP.rotated(facing))
+			var row := gun32_pick(dir)
+			var col := gun32_col(ci, weapon, info)
+			var point: Array = info["muzzles"][row][col]
+			var px := Vector2(float(point[0]), float(point[1])) * (SPRITE_HEIGHT * size / SPRITE_BODY)
+			return ci.global_position + IsoView.screen_frame(Vector2.ZERO, PersonDrawer._ground(ci)) * px
 	return _gun_point(ci, facing, size, gait, weapon, "_muzzle", look)
 
 

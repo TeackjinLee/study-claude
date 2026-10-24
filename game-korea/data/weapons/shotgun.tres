@@ -17,3 +17,4 @@ pickup_ammo = 8
 max_ammo = 50
 tracer_color = Color(1, 0.6, 0.3, 1)
 sound = &"shotgun"
+pose = &"shotgun"

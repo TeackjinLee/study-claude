@@ -58,8 +58,8 @@ func _ready() -> void:
 	p.facing = Vector2.UP.angle_to(IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT))   # 화면 → 쪽
 	check(w.shoot() and p.has_meta(&"shot_at"), "소총을 쏘면 발사 장면 시작")
 	check(c.froms.size() == 1 and absf(c.froms[0].distance_to(p.global_position) - rifle.muzzle) < 0.5, "총알은 총구 거리에서 나간다")
-	# 궤적 시작: 화면 → 쪽으로 서서 쏘면 그림 속 총구(발끝에서 화면 오른쪽 위, .json rifle_muzzle e)
-	var muzzle: Array = info.get("rifle_muzzle", {}).get("e", [])
+	# 궤적 시작: 화면 → 쪽의 새 32방향 시트, 발사 첫 장에 기록한 총구.
+	var muzzle: Array = PersonRig.gun32_for("rifle")["muzzles"][8][1]
 	var scale := PersonRig.SPRITE_HEIGHT / PersonRig.SPRITE_BODY
 	var seen: Vector2 = IsoView.to_screen_dir(c.shows[0] - p.global_position) if c.shows.size() == 1 and c.shows[0] is Vector2 else Vector2.INF
 	check(muzzle.size() == 2 and seen.distance_to(Vector2(muzzle[0], muzzle[1]) * scale) < 1.5,
@@ -83,7 +83,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check(drawn.size() == 3 and drawn[0], "서 있으면 소총 그림")
 	check(drawn.size() == 3 and not drawn[1], "걸을 때는 평소 걷기 그림")
-	check(drawn.size() == 3 and not drawn[2], "기관단총은 총 자세 그림이 없다 (평소 그림)")
+	check(drawn.size() == 3 and drawn[2], "기관단총도 전용 32방향 사격 그림")
 	w.pedestrians.free()
 	w.free()
 	c.free()
