@@ -652,7 +652,7 @@ def process_dir8(cid: str, sources: dict, debug: bool) -> None:
 
 DIR8_SHEET_ROWS = ["s", "sw", "w", "nw", "n"]   ## 한 장짜리 8방향 시트의 줄 (나머지 ↘ → ↗는 게임이 좌우를 뒤집어 쓴다)
 PUNCH_H = 0.95   ## 주먹 칸 키 / 걷기 키 — 무릎을 굽힌 싸움 자세
-RUN_H_OF = {"office": 0.92, "soldier": 0.92, "foreigner": 0.92, "merchant": 0.92, "gang_gangnam": 0.92}   ## 달리기 키 / 걷기 키를 머리 폭 대신 이 값으로 (걷기·달리기를 같은 키로 그린 시트 — 주인공 비율)
+RUN_H_OF = {"office": 0.92, "soldier": 0.92, "foreigner": 0.92, "merchant": 0.92, "gang_gangnam": 0.92, "delivery": 0.92}   ## 달리기 키 / 걷기 키를 머리 폭 대신 이 값으로 (걷기·달리기를 같은 키로 그린 시트 — 주인공 비율)
 RUN_H_RANGE = (0.85, 0.92)   ## 달리기 키 / 걷기 키 — 머리 폭으로 맞춘 크기가 이 밖이면 끝으로 당긴다
 RUN_ROW_K = (0.85, 1.25)     ## 달리기 줄마다 키를 시트 가운데값에 맞출 때 배율 한도 (튀는 줄만 당긴다)
 NEON = {"firefighter"}   ## 형광 반사띠가 초록 기운이라 _despill로 걷지 않는다

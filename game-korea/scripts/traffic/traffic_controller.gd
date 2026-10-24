@@ -70,6 +70,11 @@ func walk(cell: Vector2i, leg: int) -> Light:
 	return Light.RED
 
 
+## 신호로 보아 지금 이 교차로에 들어갈 수 있는가 (try_reserve가 신호 때문에 거절할 일이 없는가)
+func may_enter(cell: Vector2i, dir_in: int) -> bool:
+	return CityMap.over_axis(cell) >= 0 or light(cell, dir_in) == Light.GREEN
+
+
 func try_reserve(cell: Vector2i, dir_in: int, dir_out: int, who: int) -> bool:
 	if CityMap.over_axis(cell) >= 0:
 		return true   # 고가차도가 넘는 교차로: 직진만 있고 위아래가 따로 지나가므로 겹치는 이동이 없다

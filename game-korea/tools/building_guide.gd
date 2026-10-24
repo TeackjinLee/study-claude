@@ -405,7 +405,7 @@ func _type(id: StringName) -> BuildingType:
 	var path := "res://data/buildings/landmarks/%s.tres" % String(id).to_lower()
 	if String(id) in Gallery.LANDMARKS or String(id) in Gallery.STREET or ResourceLoader.exists(path):   # 도감에 없는 랜드마크 조각 (남산 꼭대기)
 		return load("res://data/buildings/landmarks/%s.tres" % String(id).to_lower()) as BuildingType
-	var all: Array = City.BUILDING_TYPES + City.SCATTER_LOOKS + [City.LOOK_POLICE, City.LOOK_HOSPITAL, City.LOOK_CAR_CENTER]
+	var all: Array = City.BUILDING_TYPES + City.SCATTER_LOOKS + [City.LOOK_POLICE, City.LOOK_HOSPITAL, City.LOOK_CAR_CENTER, City.FOREST]
 	for g in City.GANGS:
 		all.append(g.base_look)
 	for t in all:

@@ -1,6 +1,6 @@
 // tools/gen_motion_index.py가 만든다 — 손으로 고치지 않는다
 window.GAME_DIR8 = {
- "version": 1792810699,
+ "version": 1792826405,
  "chars": [
   {
    "name": "주인공",
@@ -1298,9 +1298,9 @@ window.GAME_DIR8 = {
    "meta": {
     "dirs": [
      "s",
-     "sw",
-     "w",
-     "nw",
+     "se",
+     "e",
+     "ne",
      "n"
     ],
     "frames": 12,
@@ -1309,13 +1309,60 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -27.0,
+      -72.0
+     ],
+     "ne": [
+      24.0,
+      -75.0
+     ],
+     "n": [
+      25.0,
+      -72.0
+     ],
+     "nw": [
+      -28.0,
+      -72.0
+     ],
+     "e": [
+      15.0,
+      -70.0
+     ],
+     "sw": [
+      -26.0,
+      -59.0
+     ]
+    }
    }
   },
   {
@@ -1414,7 +1461,23 @@ window.GAME_DIR8 = {
       -29.0,
       -57.0
      ]
-    }
+    },
+    "idle_dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n"
+    ],
+    "idle_clips": [
+     {
+      "name": "idle",
+      "col": 0,
+      "frames": 8,
+      "duration": 1.6,
+      "loop": true
+     }
+    ]
    }
   },
   {
@@ -1469,7 +1532,73 @@ window.GAME_DIR8 = {
      "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -27.0,
+      -72.0
+     ],
+     "ne": [
+      23.0,
+      -75.0
+     ],
+     "n": [
+      24.0,
+      -75.0
+     ],
+     "nw": [
+      -27.0,
+      -72.0
+     ],
+     "e": [
+      15.5,
+      -66.0
+     ],
+     "sw": [
+      -28.0,
+      -57.0
+     ]
+    },
+    "idle_dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n"
+    ],
+    "idle_clips": [
+     {
+      "name": "idle",
+      "col": 0,
+      "frames": 8,
+      "duration": 1.6,
+      "loop": true
+     }
+    ]
    }
   },
   {

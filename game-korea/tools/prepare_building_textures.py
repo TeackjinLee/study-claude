@@ -88,6 +88,26 @@ def find_blocks(solid: np.ndarray) -> list:
     return out
 
 
+# 가져오기 설정: VRAM 압축(BC7)·밉맵 (BuildingSkin._vram이 보고 그대로 쓴다 — RGBA로 풀면 GPU 메모리가 4배).
+# 벽면 그림·통째 그림(prepare_building_sprites.py) 모두 그림 옆 .import에 적는다
+IMPORT_PARAMS = {"compress/mode": "2", "compress/high_quality": "true", "mipmaps/generate": "true"}
+
+
+def import_settings(png: Path) -> None:
+    """그림 옆 .import에 IMPORT_PARAMS를 넣는다. 없으면 이것만 적은 파일을 두고 godot --import가 나머지를 채운다."""
+    imp = png.with_name(png.name + ".import")
+    if not imp.exists():
+        imp.write_text('[remap]\n\nimporter="texture"\ntype="CompressedTexture2D"\n\n[params]\n\n'
+                       + "".join(f"{k}={v}\n" for k, v in IMPORT_PARAMS.items()))
+        return
+    lines = imp.read_text().splitlines()
+    for i, ln in enumerate(lines):
+        k = ln.split("=", 1)[0]
+        if k in IMPORT_PARAMS:
+            lines[i] = f"{k}={IMPORT_PARAMS[k]}"
+    imp.write_text("\n".join(lines) + "\n")
+
+
 def bleed(rgba: np.ndarray, steps: int = 6) -> np.ndarray:
     """투명한 칸의 색을 옆 불투명 칸 색으로 채운다 (밉맵·선형 보간에 마젠타가 번지지 않게)."""
     rgb = rgba[..., :3].astype(float)
@@ -364,6 +384,7 @@ def prepare(tid: str, debug: bool) -> None:
     rgba = np.dstack([despill(day, grow(bg, 6)), np.where(opaque, 255, 0).astype(np.uint8)])
     img = Image.fromarray(bleed(rgba)).crop(crop).resize(size, Image.LANCZOS)
     img.save(DST / f"{tid.lower()}.png")
+    import_settings(DST / f"{tid.lower()}.png")
     if lit is not None:
         # 밝은 곳만 불빛으로 (밤 그림의 어두운 건물은 버린다). 알파 = 밝기, 색은 원래 불빛 색
         lum = lit.max(2).astype(float)
@@ -371,6 +392,7 @@ def prepare(tid: str, debug: bool) -> None:
         a[~keep] = 0.0
         la = np.dstack([lit, (a * 255).astype(np.uint8)])
         Image.fromarray(bleed(la, 3)).crop(crop).resize(size, Image.LANCZOS).save(DST / f"{tid.lower()}_lights.png")
+        import_settings(DST / f"{tid.lower()}_lights.png")
     (DST / f"{tid.lower()}.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
     print(f"  → {DST.relative_to(ROOT)}/{tid.lower()}.png {size[0]}×{size[1]}" + (" + 불빛" if lit is not None else ""))
 

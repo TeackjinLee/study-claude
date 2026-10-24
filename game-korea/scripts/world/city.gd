@@ -161,6 +161,12 @@ const STATION_FLOORS := 4
 const HOSPITAL_FLOORS := 6
 const SPRAY_FLOORS := 2
 const FADE_ALPHA := 0.28                 ## 주인공을 가린 건물의 불투명도
+const FADE_MOVE := 30.0                  ## 이보다 빠르게 움직이면 가는 쪽 앞도 흐린다 (월드 px/초)
+const FADE_AHEAD_TIME := 1.2             ## 속도 × 이 값(초)만큼 앞까지 본다
+const FADE_AHEAD_MIN := 160.0            ## 앞으로 보는 거리 최소 (걸을 때)
+const FADE_AHEAD_MAX := 520.0            ## 앞으로 보는 거리 최대 (빠른 차)
+const FADE_STEP := 48.0                  ## 앞쪽 점 간격
+const FADE_WIDE := 56.0                  ## 앞쪽 띠 반폭 (가는 쪽 양옆)
 
 
 ## 블록 묶음 하나를 그리는 노드. 화면 밖 청크는 Godot가 그리지 않는다
@@ -1096,7 +1102,8 @@ func _place_views(idx: int) -> void:
 	if terrace:
 		Terrain.set_terrace(buildings[idx], whole)
 	for v: BuildingView in _views[idx]:
-		v.pad = whole if terrace or v.piece.sprite else Terrain.max_height(v.piece.rect)
+		# 통째 그림은 부지 하나로 올려야 윤곽이 맞는다 — 숲은 단이 없어 나무마다 제 땅에 선다 (그림도 나무 윤곽마다 오려 그린다)
+		v.pad = whole if terrace or (v.piece.sprite and kinds[idx] != FOREST) else Terrain.max_height(v.piece.rect)
 		v.position = IsoView.lift(v.pad)
 	if _terraces.has(idx):
 		_terraces[idx].position = IsoView.lift(whole)
@@ -1207,24 +1214,24 @@ func _process(delta: float) -> void:
 	if cam == null or cam.target == null or not is_instance_valid(cam.target):
 		return
 	var p := cam.target.global_position
-	var head := p + IsoView.lift(14.0 + Terrain.height(p))
-	# 주인공 둘레 블록의 건물과, 아직 흐린 건물만 본다
-	var here := CityMap.block_at(p)
+	var probes := _fade_probes(p, cam.target)
+	# 주인공 둘레 블록과 가는 쪽 앞 끝 둘레 블록의 건물, 아직 흐린 건물만 본다
 	var check := {}
 	for idx: int in _fade:
 		check[idx] = true
-	for j in range(here.y - 1, here.y + 3):
-		for i in range(here.x - 1, here.x + 3):
-			for idx: int in _by_block.get(Vector2i(i, j), []):
-				check[idx] = true
+	for at: Vector2 in [p, probes[probes.size() - 1][0]]:
+		var here := CityMap.block_at(at)
+		for j in range(here.y - 1, here.y + 3):
+			for i in range(here.x - 1, here.x + 3):
+				for idx: int in _by_block.get(Vector2i(i, j), []):
+					check[idx] = true
 	for idx: int in check:
 		if looks.has(idx) and LandmarkBuilding.owns(looks[idx].style):
-			_fade_pieces(idx, p, head, delta)
+			_fade_pieces(idx, probes, delta)
 			continue
 		var r := buildings[idx]
 		var goal := 1.0
-		if not r.has_point(p) and p.x < r.end.x and p.y < r.end.y \
-				and Geometry2D.is_point_in_polygon(head - IsoView.lift(_pads.get(idx, 0.0)), BuildingView.silhouette(r, building_top(idx))):
+		if _hides(r, building_top(idx), IsoView.lift(_pads.get(idx, 0.0)), probes, true):
 			goal = FADE_ALPHA
 		var now: float = _fade.get(idx, 1.0)
 		if is_equal_approx(now, goal):
@@ -1238,13 +1245,47 @@ func _process(delta: float) -> void:
 			v.modulate.a = now
 
 
+## 흐림을 재는 점들 [바닥 자리, 화면 머리 자리]: 주인공 머리 하나 + 움직이면 가는 쪽 앞 띠 (가는 쪽만 넓게 — 옆·뒤는 머리만)
+func _fade_probes(p: Vector2, target: Node2D) -> Array:
+	var out := [[p, p + IsoView.lift(14.0 + Terrain.height(p))]]
+	var vel: Vector2 = target.call("follow_velocity")
+	var speed := vel.length()
+	if speed < FADE_MOVE:
+		return out
+	var dir := vel / speed
+	var side := dir.orthogonal()
+	var reach := clampf(speed * FADE_AHEAD_TIME, FADE_AHEAD_MIN, FADE_AHEAD_MAX)
+	var d := FADE_STEP
+	while d <= reach + 0.5:
+		# 멀수록 띠를 조금 넓힌다 (갈 수 있는 길이 부채꼴로 퍼진다)
+		var w := FADE_WIDE * (0.6 + 0.4 * d / reach)
+		for k in [-1.0, 0.0, 1.0]:
+			var q: Vector2 = p + dir * d + side * w * k
+			out.append([q, q + IsoView.lift(14.0 + Terrain.height(q))])
+		d += FADE_STEP
+	return out
+
+
+## 그 덩어리(바닥 r, 높이 h, 화면 오프셋 off)가 점들 중 하나라도 가리는가. 점이 덩어리 뒤(북·서)에 있을 때만 가린다
+static func _hides(r: Rect2, h: float, off: Vector2, probes: Array, skip_inside: bool) -> bool:
+	var sil: PackedVector2Array
+	for pr: Array in probes:
+		var q: Vector2 = pr[0]
+		if q.x >= r.end.x or q.y >= r.end.y or (skip_inside and r.has_point(q)):
+			continue
+		if sil.is_empty():
+			sil = BuildingView.silhouette(r, h)
+		if Geometry2D.is_point_in_polygon(pr[1] - off, sil):
+			return true
+	return false
+
+
 ## 랜드마크는 부지 안 공터를 걸어 다닌다: 부지 전체가 아니라 주인공을 가리는 덩어리(탑·캐노피·크레인…)만 흐린다
-func _fade_pieces(idx: int, p: Vector2, head: Vector2, delta: float) -> void:
+func _fade_pieces(idx: int, probes: Array, delta: float) -> void:
 	var faded := false
 	for v: BuildingView in _views[idx]:
-		var r := v.rect
 		var goal := 1.0
-		if p.x < r.end.x and p.y < r.end.y and Geometry2D.is_point_in_polygon(head - v.position, BuildingView.silhouette(r, v.height)):
+		if _hides(v.rect, v.height, v.position, probes, false):
 			goal = FADE_ALPHA
 		v.modulate.a = move_toward(v.modulate.a, goal, delta * 3.0)
 		faded = faded or v.modulate.a < 1.0

@@ -13,6 +13,9 @@ const DODGE_TIME := 0.6
 const FLEE_TIME := 3.0
 const KNOCK_TIME := 2.5
 
+const PROP_SIDE := 15.0           ## 한자리 소품을 몸 옆으로 둘 거리 (월드 px)
+const PROP_AHEAD := 3.0           ## 길 쪽으로 조금 내놓는다
+const SPEAKER_BEAT := 3           ## 대기 그림 몇 장마다 스피커가 한 번 울리나 (DJ 12장 1.5초 → 약 160BPM)
 var npc: NpcType
 var rng: RandomNumberGenerator
 var loop: PackedVector2Array      ## 인도 순환 경로 (블록 둘레 4꼭짓점)
@@ -31,6 +34,7 @@ var rescuer: Object = null        ## 이 기절한 사람을 맡은 구급대 (�
 var targeted := false             ## 주인공이 고른 표적 (머리 위 체력 막대를 늘 띄운다 — PlayerWeapons.select)
 var carried := false              ## 들것에 실려 가는 중 (들것을 밑에 그린다)
 var stationed := false            ## 한자리에 서서 호객·공연하는 중 (NpcType.station) — 겁먹어 달아나면 그때부터 걷는다
+var prop_offset := Vector2.ZERO    ## 한자리 소품(NpcType.station_prop)을 둔 자리 — 몸에서 월드 오프셋 (길 쪽을 보고 오른쪽 옆)
 
 var shirt: Color
 var pants: Color
@@ -114,6 +118,8 @@ func station_at(pos: Vector2, out: Vector2) -> void:
 	position = pos
 	facing = Vector2.UP.angle_to(out)
 	stationed = true
+	var o := out.normalized()
+	prop_offset = Vector2(-o.y, o.x) * PROP_SIDE + o * PROP_AHEAD
 	_set_state(State.IDLE, INF)
 
 
@@ -278,7 +284,13 @@ func _draw() -> void:
 	var down := state == State.KNOCKED or state == State.DEAD
 	if IsoView.enabled:
 		# 2.5D: 4×2 스프라이트 시트(PersonRig)로 정지·걷기·달리기·쓰러짐을 그린다
+		var prop := stationed and not down and npc.station_prop == &"speaker"
+		var prop_behind := prop_offset.x + prop_offset.y < 0.0   # 월드 x+y가 작으면 화면 뒤 — 몸보다 먼저 그린다
+		if prop and prop_behind:
+			_draw_speaker()
 		PersonRig.draw(self, facing, walk_phase, _draw_gait(), shirt, pants, hair, npc.body_scale, npc, look_seed, _drawn_weapon(), down)
+		if prop and not prop_behind:
+			_draw_speaker()
 		_draw_head_tag()
 		if speech_time > 0.0 and speech != "" and state != State.DEAD:
 			PersonDrawer.draw_speech(self, speech, npc.body_scale)
@@ -361,6 +373,33 @@ func _draw_stretcher() -> void:
 
 
 ## 기절 표시: 누운 사람 머리 위에 노란 별 셋 (들것에 실리면 그리지 않는다)
+## DJ 휴대 스피커 (2.5D, prop_offset 땅 위에 서 있는 상자): 앞면 우퍼·트위터·손잡이·불빛 띠.
+## 대기 그림(PersonRig.idle_frame)이 SPEAKER_BEAT장 넘어갈 때마다 우퍼가 부풀고 옆으로 소리 물결이 퍼진다
+func _draw_speaker() -> void:
+	draw_set_transform_matrix(IsoView.screen_frame(prop_offset, IsoView.ground(global_position + prop_offset, level)))
+	var f := PersonRig.idle_frame(self, npc, _draw_gait())
+	var beat := 0.0 if f < 0 else 1.0 - float(posmod(f, SPEAKER_BEAT)) / SPEAKER_BEAT
+	var body := Color(0.13, 0.13, 0.15)
+	var w := 4.5
+	var h := 10.0
+	draw_colored_polygon(PackedVector2Array([Vector2(-w - 1.0, 0.6), Vector2(w + 1.0, 0.6), Vector2(w + 2.5, 2.2), Vector2(-w + 0.5, 2.2)]), Color(0, 0, 0, 0.28))   # 그림자
+	draw_rect(Rect2(-w, -h, w * 2.0, h), body)
+	draw_colored_polygon(PackedVector2Array([Vector2(-w, -h), Vector2(w, -h), Vector2(w + 1.8, -h - 1.6), Vector2(-w + 1.8, -h - 1.6)]), body.lightened(0.18))   # 윗면
+	draw_colored_polygon(PackedVector2Array([Vector2(w, -h), Vector2(w + 1.8, -h - 1.6), Vector2(w + 1.8, -1.6), Vector2(w, 0)]), body.darkened(0.35))   # 옆면
+	draw_line(Vector2(-2.2, -h - 0.8), Vector2(2.2, -h - 0.8), Color(0.05, 0.05, 0.06), 1.0)   # 손잡이
+	draw_circle(Vector2(0, -3.6), 2.9 + beat * 0.6, Color(0.05, 0.05, 0.06))   # 우퍼
+	draw_circle(Vector2(0, -3.6), 1.1 + beat * 0.3, Color(0.32, 0.32, 0.36))
+	draw_circle(Vector2(0, -8.0), 1.0, Color(0.05, 0.05, 0.06))   # 트위터
+	draw_rect(Rect2(-w + 0.6, -h + 0.5, 1.4, h - 1.0), Color(0.2, 0.95, 1.0).lerp(Color(1.0, 0.3, 0.85), beat))   # 불빛 띠
+	if beat > 0.0:
+		var c := Color(1, 1, 1, 0.55 * beat)
+		for k in 2:
+			var r := 6.0 + k * 3.0 + (1.0 - beat) * 3.0
+			draw_arc(Vector2(0, -5.0), r, -0.7, 0.7, 6, c, 0.8)
+			draw_arc(Vector2(0, -5.0), r, PI - 0.7, PI + 0.7, 6, c, 0.8)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
 func _draw_out_stars() -> void:
 	if carried:
 		return

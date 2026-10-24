@@ -24,6 +24,8 @@ const LOCKED_COLOR := Color(0.07, 0.07, 0.09)
 const LOCKED_ROAD := Color(0.16, 0.17, 0.2)
 const WATER_COLOR := Color(0.13, 0.32, 0.58)
 const PARK_COLOR := Color(0.17, 0.36, 0.24)
+const FOREST_COLOR := Color(0.12, 0.27, 0.17)      ## 숲 블록·남산 (공원보다 짙게)
+const SUMMIT_COLOR := Color(0.5, 0.5, 0.45)        ## 남산 꼭대기 평지
 const ROUTE_COLOR := Color(1.0, 0.82, 0.18)
 const BEZEL := Color(0.04, 0.05, 0.08, 0.92)      ## 바깥 테
 const RIM := Color(0.92, 0.94, 1.0, 0.9)           ## 테 안쪽 흰 선
@@ -129,6 +131,9 @@ func _draw() -> void:
 				_fill(r, me, c, circle, LOCKED_COLOR)
 				continue
 			_fill(r, me, c, circle, BLOCK_COLOR)
+			if forest_block(b):
+				_fill(r.grow(-City.SIDEWALK), me, c, circle, FOREST_COLOR)
+				continue
 			for lot: Rect2 in _lots_of(b):
 				_fill(lot, me, c, circle, LOT_COLOR)
 	var view := RADIUS / scale_now + City.BLOCK
@@ -137,6 +142,7 @@ func _draw() -> void:
 			_fill(r, me, c, circle, WATER_COLOR)
 	for r in city.parks:
 		_fill(r, me, c, circle, PARK_COLOR)
+	_draw_namsan(me, c, circle)
 	# 안쪽 그늘 (테두리 쪽이 어둡다)
 	for k in 4:
 		draw_arc(c, RADIUS - 2.0 - k * 3.0, 0.0, TAU, 72, Color(0, 0, 0, 0.22 - k * 0.05), 3.0)
@@ -187,6 +193,41 @@ static func lots_by_block(buildings: Array[Rect2]) -> Dictionary:
 		lots[k].append(r)
 	lots[Vector2i(1 << 20, 0)] = []    # 건물이 없는 도시여도 다시 나누지 않게
 	return lots
+
+
+## 숲 블록인가 (Terrain.is_forest — 합친 블록은 그 안 블록 하나라도 숲이면 합친 땅 전체). 부지 대신 숲 색으로 칠한다
+static func forest_block(b: Vector2i) -> bool:
+	var m := CityMap.merge_of(b)
+	if not m.has_area():
+		return Terrain.is_forest(b)
+	for j in range(m.position.y, m.end.y):
+		for i in range(m.position.x, m.end.x):
+			if Terrain.is_forest(Vector2i(i, j)):
+				return true
+	return false
+
+
+## 남산 산 부지 (합친 블록에 선 남산 랜드마크, 없으면 빈 사각형)
+static func namsan_lot(c: City) -> Rect2:
+	var idx: int = c.landmark_indices.get("landmark_tower", -1)
+	if idx < 0 or not BuildingSprite.merged_lot(c.buildings[idx]):
+		return Rect2()
+	return c.buildings[idx]
+
+
+## 남산: 숲 위에 꼭대기 평지와 순환로
+func _draw_namsan(me: Vector2, c: Vector2, circle: PackedVector2Array) -> void:
+	var lot := namsan_lot(city)
+	if not lot.has_area() or not CityMap.is_open_block(CityMap.block_at(lot.get_center())):
+		return
+	if _to_map(lot.get_center(), me, c).distance_to(c) > RADIUS + lot.size.length() * 0.5 * scale_now:
+		return
+	var pts := PackedVector2Array()
+	for p in Namsan.road(lot):
+		pts.append(_to_map(p, me, c))
+	for part: PackedVector2Array in Geometry2D.intersect_polyline_with_polygon(pts, circle):
+		draw_polyline(part, ROAD_COLOR, 2.0, true)
+	_fill(Namsan.summit_rect(lot), me, c, circle, SUMMIT_COLOR)
 
 
 ## 노란 길: 검은 테 위에 굵은 노란 줄, 원 밖은 자른다

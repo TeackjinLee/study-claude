@@ -14,7 +14,7 @@ func _ready() -> void:
 	var heli_only := "--only=heli" in OS.get_cmdline_user_args()
 	var army_only := "--only=army" in OS.get_cmdline_user_args()
 	var heavy_only := "--only=heavy" in OS.get_cmdline_user_args()
-	if heli_only or army_only or heavy_only or "--only=npc_idle" in OS.get_cmdline_user_args():
+	if heli_only or army_only or heavy_only or "--only=npc_idle" in OS.get_cmdline_user_args() or "--only=dj_day" in OS.get_cmdline_user_args():
 		main.chapter = 4   # 헬기·군용 차량은 4장 부두에 있다
 	add_child(main)
 	if heli_only:
@@ -100,6 +100,11 @@ func _ready() -> void:
 	if "--only=npc_idle" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _npc_idle_shots(main)
+		get_tree().quit()
+		return
+	if "--only=dj_day" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _dj_day_shots(main)
 		get_tree().quit()
 		return
 	if "--only=citizen" in OS.get_cmdline_user_args():
@@ -565,7 +570,7 @@ func _collect_shots(main: Node2D) -> void:
 
 ## 일시정지 메뉴 (`-- --only=menu`): menu_main · menu_map(서울 지도) · menu_map_ch4(모든 구역이 열린 4장, 수배 ★2 — 카센터 고리) · menu_settings ·
 ## menu_settings_en(영어로 바꾼 설정) · menu_map_en(영어 범례·구역 이름) · menu_map_heli(★5 경찰 헬기 그림 표) ·
-## hud_en(영어 HUD, 차에 타서 라디오 채널 이름과 DJ 자막)
+## hud_en(영어 HUD, 차에 타서 라디오 채널 이름과 DJ 자막) · hud_namsan(남산 옆 미니맵 — 숲·꼭대기 평지·순환로)
 func _menu_shots(main: Node2D) -> void:
 	var menu: PauseMenu = main.pause_menu
 	var player: Player = main.player
@@ -626,6 +631,15 @@ func _menu_shots(main: Node2D) -> void:
 	await _save("hud_en")
 	Settings.values["lang"] = "ko"
 	Settings.apply()
+	# 남산 남쪽 길에서 본 미니맵 (숲·꼭대기 평지·순환로)
+	main.director.exit_vehicle()
+	main.set_chapter(CityMap.LAST_CHAPTER)
+	var namsan := Minimap.namsan_lot(main.city)
+	if namsan.has_area():
+		player.global_position = Vector2(namsan.get_center().x, namsan.end.y + City.ROAD * 0.5)
+		await _frames(20)
+		await _save("hud_namsan")
+	main.set_chapter(1)
 
 
 func _save(name: String) -> void:
@@ -1631,7 +1645,7 @@ func _soldier_shots(main: Node2D) -> void:
 		await _save("soldier_run_%d" % k)
 
 
-## 보행자 넘어짐·기절 (`-- --only=npc_ko`): 주인공 둘레 보행자 넷을 시민 남·여·직장인·구급대원으로 바꿔 화면 →·↓·←·↑을 보고
+## 보행자 넘어짐·기절 (`-- --only=npc_ko`): 주인공 둘레 보행자 넷을 그림이 있는 인물마다 바꿔 화면 →·↓·←·↑을 보고
 ## 기절시킨다 — 쓰러지는 도중(nko_<id>_fall)·다 누운 모습(nko_<id>_out, 머리 위 별). 주인공은 화면 밖으로 치운다
 func _npc_ko_shots(main: Node2D) -> void:
 	var cam: ChaseCamera = main.camera
@@ -1653,7 +1667,7 @@ func _npc_ko_shots(main: Node2D) -> void:
 	if peds.size() < 4:
 		print("  보행자가 모자람 (%d)" % peds.size())
 		return
-	for id in ["civ_m", "civ_f", "office", "paramedic", "soldier", "foreigner", "merchant", "homeless", "police", "gang_gangnam", "gang_oldtown", "gang_smuggler", "busker", "dj"]:
+	for id in ["civ_m", "civ_f", "office", "paramedic", "soldier", "foreigner", "merchant", "homeless", "police", "gang_gangnam", "gang_oldtown", "gang_smuggler", "busker", "dj", "delivery"]:
 		for i in 4:
 			var p: Pedestrian = peds[i]
 			var k := i * 2
@@ -1717,6 +1731,47 @@ func _npc_idle_shots(main: Node2D) -> void:
 		for n in 3:
 			await _save("idle_%s_%d" % [place[1], n])
 			await get_tree().create_timer(0.25).timeout
+
+
+## DJ 나오는 시간 (`-- --only=dj_day`): 홍대 블록 가운데에 카메라를 두고 시각마다 보행자를 새로 60명 더 뽑아 그중 DJ 수를 센다
+## (게임과 같은 `_spawn_on_sidewalk` — 시간대·구역·한자리 서기 규칙 그대로). 오후 3시 화면(dj_day — 가장 가까운 DJ 둘레)을 찍는다
+func _dj_day_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	var peds: PedestrianManager = main.pedestrians
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	var block := Vector2i(999, 999)
+	for b: Vector2i in City.shop_fronts:
+		var dist := CityMap.district_of(b)
+		if dist and dist.id == &"hongdae" and CityMap.is_open_block(b):
+			block = b
+			break
+	if block.x == 999:
+		print("  홍대 블록 없음")
+		return
+	var c := City.block_rect(block.x, block.y).get_center()
+	cam.target = null
+	cam.global_position = c
+	cam.zoom = Vector2(2.2, 2.2)
+	player.global_position = c + Vector2(600, 600)
+	for h in [9.0, 15.0, 23.0]:
+		main.sky.set_hour(h)
+		var fresh: Array = []
+		for i in 60:
+			var p := peds._spawn_on_sidewalk()
+			if p:
+				fresh.append(p)
+		var djs: Array = fresh.filter(func(p): return p.npc.id == &"DJ")
+		print("  %02d시: DJ %d명 / 새로 나온 보행자 %d명 (홍대 둘레)" % [int(h), djs.size(), fresh.size()])
+		if h == 15.0 and not djs.is_empty():
+			djs.sort_custom(func(a, b): return a.stationed if a.stationed != b.stationed else a.global_position.distance_to(c) < b.global_position.distance_to(c))
+			cam.global_position = djs[0].global_position
+			cam.zoom = Vector2(3.5, 3.5)
+			print("  15시 DJ: 한자리 %s · %s" % [djs.map(func(p): return p.stationed), djs.map(func(p): return p.global_position.round())])
+			await _frames(30)
+			await _save("dj_day")
 
 
 ## 주인공 넘어짐·기절 (`-- --only=player_ko`): 화면 →·↓·←·↑을 보고 체력이 0이 되면 쓰러지는 도중(pko_<방향>_fall)·

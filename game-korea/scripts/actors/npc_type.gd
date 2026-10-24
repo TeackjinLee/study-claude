@@ -50,6 +50,8 @@ extends Resource
 @export var station: StringName = &""
 ## 새로 나올 때 station 자리에 설 몫 (0~1, 나머지는 걷는다)
 @export var station_share := 0.0
+## 한자리에 서 있는 동안 옆 땅에 두는 소품 (speaker — DJ 휴대 스피커, 대기 그림 박자에 맞춰 울린다). 걷기 시작하면 들고 가 안 그린다
+@export var station_prop: StringName = &""
 ## 이 시각(게임 시각, 0~24시) 사이에만 나온다. x > y면 밤을 넘긴다 (예: 20 → 4)
 @export var hours := Vector2i(0, 24)
 @export var shirt_colors: Array[Color] = [Color(0.5, 0.5, 0.5)]

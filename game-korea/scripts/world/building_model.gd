@@ -659,11 +659,13 @@ static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int, fl
 
 ## 통째 그림의 부지 사각형만큼을 바닥에 편다
 static func draw_sprite_ground(ci: CanvasItem, r: Rect2, sprite: BuildingSprite) -> void:
-	var pts := PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
-	var uvs := PackedVector2Array()
-	for v in pts:
-		uvs.append(sprite.uv(v, r))
-	ci.draw_primitive(pts, PackedColorArray([Color.WHITE]), uvs, sprite.day)
+	# 지형 격자 칸마다 편다 — 비탈(숲·공원)에서 꼭짓점마다 땅 높이를 따른다 (평지면 칸이 하나 더 생길 뿐)
+	for c in Terrain.cells(r):
+		var pts := PackedVector2Array([c.position, Vector2(c.end.x, c.position.y), c.end, Vector2(c.position.x, c.end.y)])
+		var uvs := PackedVector2Array()
+		for v in pts:
+			uvs.append(sprite.uv(v, r))
+		ci.draw_primitive(pts, PackedColorArray([Color.WHITE]), uvs, sprite.day)
 
 
 ## 낮은 상자 (바닥에 그리는 화단·담장·팔레트): 남·동 옆면과 윗면

@@ -25,7 +25,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from prepare_building_textures import bleed, despill, grow, magenta, pinkish  # noqa: E402
+from prepare_building_textures import bleed, despill, grow, import_settings, magenta, pinkish  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "output/imagegen/buildings/whole"
@@ -474,25 +474,6 @@ def prepare(name: str, debug: bool) -> None:
             ov[lost] = (255, 40, 40)
             print(f"  윤곽을 넓히고도 잘리는 그림 {int(lost.sum())}px (빨강)")
         Image.fromarray(ov).save(SRC / f"{name}_fit_debug.png")
-
-
-# 가져오기 설정: VRAM 압축(BC7)·밉맵 (BuildingSkin._vram이 보고 그대로 쓴다 — RGBA로 풀면 GPU 메모리가 4배)
-IMPORT_PARAMS = {"compress/mode": "2", "compress/high_quality": "true", "mipmaps/generate": "true"}
-
-
-def import_settings(png: Path) -> None:
-    """그림 옆 .import에 IMPORT_PARAMS를 넣는다. 없으면 이것만 적은 파일을 두고 godot --import가 나머지를 채운다."""
-    imp = png.with_name(png.name + ".import")
-    if not imp.exists():
-        imp.write_text('[remap]\n\nimporter="texture"\ntype="CompressedTexture2D"\n\n[params]\n\n'
-                       + "".join(f"{k}={v}\n" for k, v in IMPORT_PARAMS.items()))
-        return
-    lines = imp.read_text().splitlines()
-    for i, ln in enumerate(lines):
-        k = ln.split("=", 1)[0]
-        if k in IMPORT_PARAMS:
-            lines[i] = f"{k}={IMPORT_PARAMS[k]}"
-    imp.write_text("\n".join(lines) + "\n")
 
 
 BASIS = np.array([[0.78, -0.78], [0.39, 0.39]])   # IsoView.BASIS (열 = x축·y축)

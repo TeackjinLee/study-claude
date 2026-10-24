@@ -153,8 +153,13 @@ func _intersection_limit(piece: LanePiece, speed: float, delta: float) -> float:
 	if to_stop > speed * speed / (2.0 * DECEL) + 40.0:
 		return limit
 	pending_cell = piece.to_cell
-	if system.exit_has_room(route[2], self) \
-			and system.controller.try_reserve(piece.to_cell, next.dir_in, next.dir_out, id):
+	var ctl := system.controller
+	# 신호가 막혔으면 들어갈 자리를 볼 것 없이 못 간다 — 자리 확인(차 목록을 모두 돈다)을 건너뛴다.
+	# try_reserve는 그래도 불러 기다림 줄에서 뺀다 (예전과 같다)
+	if not ctl.may_enter(piece.to_cell, next.dir_in):
+		ctl.try_reserve(piece.to_cell, next.dir_in, next.dir_out, id)
+	elif system.exit_has_room(route[2], self) \
+			and ctl.try_reserve(piece.to_cell, next.dir_in, next.dir_out, id):
 		has_grant = true
 		grant_cell = piece.to_cell
 		grant_idle = 0.0

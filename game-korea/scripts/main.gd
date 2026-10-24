@@ -366,6 +366,7 @@ func _ready() -> void:
 	add_child(sky)
 	ambience = CityAmbience.new()
 	ambience.sky = sky
+	ambience.pedestrians = pedestrians
 	add_child(ambience)
 	radio = Radio.new()
 	radio.director = director

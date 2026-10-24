@@ -98,10 +98,13 @@ func _test_in_game() -> void:
 		return
 	var at: Vector2 = main.player.global_position
 	var none: Array[RID] = [main.player.get_rid()]
-	combat.fire(at, Vector2.RIGHT, PISTOL, true, none)
-	_expect(_last(sfx) == &"pistol", "권총을 쏘면 권총 소리 (%s)" % _last(sfx))
-	await _frames(5)
 	var n := sfx.heard.size()
+	combat.fire(at, Vector2.RIGHT, PISTOL, true, none)
+	# 총소리에 겁먹은 시민이 곧바로 비명을 지를 수 있으니 마지막이 아니라 이번에 난 첫 소리를 본다
+	var shot: StringName = sfx.heard[n][0] if sfx.heard.size() > n else &""
+	_expect(shot == &"pistol", "권총을 쏘면 권총 소리 (%s)" % shot)
+	await _frames(5)
+	n = sfx.heard.size()
 	combat.fire(at, Vector2.RIGHT, SHOTGUN, true, none)
 	_expect(sfx.heard.size() == n + 1 and _last(sfx) == &"shotgun",
 		"산탄 한 번은 소리 한 번 (%d)" % (sfx.heard.size() - n))
@@ -125,10 +128,12 @@ func _test_in_game() -> void:
 	var peds: PedestrianManager = main.pedestrians
 	var screamer: Pedestrian = null
 	for q in peds.peds:
-		if q.active and not q.is_dead() and q.get_instance_id() % 3 == 0 and not q.npc.fearless:
+		if q.active and not q.is_dead() and q.get_instance_id() % 3 == 0 and not q.npc.fearless \
+				and q.state != Pedestrian.State.FLEE:
 			screamer = q
 			break
 	if screamer:
+		sfx._last_scream = -INF   # 앞의 총소리에 다른 시민이 지른 비명이 SCREAM_GAP으로 막지 않게
 		screamer.panic(Vector2.RIGHT)
 		_expect(String(_last(sfx)).begins_with("scream"), "겁먹어 소리치면 비명 (%s)" % _last(sfx))
 	var victim: Pedestrian = null
@@ -243,6 +248,15 @@ func _test_ambience() -> void:
 	_expect(rain[&"rain"] > 0.0 and rain[&"birds"] == 0.0 and day[&"rain"] == 0.0, "비 오면 빗소리, 새는 없다")
 	_expect(CityAmbience.mix(13.0, false, 100.0)[&"river"] > 0.5 and day[&"river"] == 0.0, "강가에서는 강물 소리")
 	_expect(day[&"city"] > 0.0 and night[&"city"] > 0.0, "도시 웅웅은 늘")
+	_expect(day[&"beat"] == 0.0 and CityAmbience.mix(13.0, false, INF, 60.0)[&"beat"] > 0.8 and CityAmbience.mix(13.0, false, INF, 300.0)[&"beat"] > 0.0, "DJ 스피커 가까이에서만 비트가 들린다")
+	var beat := AmbienceSynth.loop(&"beat")
+	var b := int(AmbienceSynth.BEAT * AmbienceSynth.MIX_RATE)
+	var on := 0.0
+	var off := 0.0
+	for i in int(0.03 * AmbienceSynth.MIX_RATE):
+		on += absf(beat[b * 4 + i])
+		off += absf(beat[b * 4 + b / 4 + i])
+	_expect(on > off * 2.0, "비트: 박마다 킥이 온다 (%.1f / %.1f)" % [on, off])
 
 
 func _test_car_synth() -> void:

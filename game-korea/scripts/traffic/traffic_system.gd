@@ -54,6 +54,12 @@ var traffic_count := 20
 var seed := SEED
 var bus_count := 2
 var vehicles: Array[Vehicle] = []          ## 도시의 모든 차 (주차·플레이어 차 포함, main과 공유)
+## scan_ahead가 먼 차를 거르려고 틱마다 찍어 두는 차 자리·길이 (_refresh_snap)
+const SNAP_MARGIN := 60.0                   ## 찍은 뒤 한 틱 안에 움직일 수 있는 거리보다 넉넉히
+var _snap_tick := -1
+var _snap_cars: Array = []
+var _snap_pos := PackedVector2Array()
+var _snap_len := PackedFloat32Array()
 var pedestrians: PedestrianManager
 var player: Player
 
@@ -297,22 +303,36 @@ func scan_ahead(ai: TrafficAI) -> Dictionary:
 	var reach := scan + ai.half_length() + 60.0
 	var forward := me.motor.forward()
 
+	# 차마다 틱마다 모든 차·사람을 돌므로 내 자리는 한 번만 읽고, 거리는 제곱으로 잰다 (교통 AI 시간의 절반이 이 고리였다).
+	# 먼 차는 틱 첫머리에 찍어 둔 자리(_snap)로 넉넉히 걸러 노드 자리를 읽지 않는다
+	var me_pos := me.global_position
+	_refresh_snap()
 	var candidates: Array = []   # [검사점 배열, 반폭, 속도 벡터, 노드]
-	for v in vehicles:
+	for i in _snap_cars.size():
+		var far := reach + _snap_len[i] + SNAP_MARGIN
+		if _snap_pos[i].distance_squared_to(me_pos) > far * far:
+			continue
+		var v: Vehicle = _snap_cars[i]
+		if v == me or not is_instance_valid(v) or not vehicles.has(v):
+			continue
+		var vp := v.global_position
+		var vr := reach + v.stats.size.y
 		# 떠 있는 헬기·고가 위아래 차는 길을 막지 않는다
-		if v == me or v.global_position.distance_to(me.global_position) > reach + v.stats.size.y \
-				or v.apart(me.global_position, me.level):
+		if vp.distance_squared_to(me_pos) > vr * vr or v.apart(me_pos, me.level):
 			continue
 		var f := v.motor.forward() * v.stats.size.y * 0.45
-		candidates.append([[v.global_position + f, v.global_position, v.global_position - f],
-			v.stats.size.x * 0.5, v.motor.velocity, v])
+		candidates.append([[vp + f, vp, vp - f], v.stats.size.x * 0.5, v.motor.velocity, v])
+	var reach2 := reach * reach
 	if pedestrians:
 		for p in pedestrians.peds:
-			if p.active and not p.is_dead() and p.global_position.distance_to(me.global_position) < reach \
-					and CityMap.meet(p.global_position, p.level, me.global_position, me.level):
-				candidates.append([[p.global_position], Pedestrian.RADIUS + 4.0, p.velocity, p])
-	if player and player.visible and player.global_position.distance_to(me.global_position) < reach \
-			and CityMap.meet(player.global_position, player.level, me.global_position, me.level):
+			if not p.active:
+				continue
+			var pp := p.global_position
+			if pp.distance_squared_to(me_pos) < reach2 and not p.is_dead() \
+					and CityMap.meet(pp, p.level, me_pos, me.level):
+				candidates.append([[pp], Pedestrian.RADIUS + 4.0, p.velocity, p])
+	if player and player.visible and player.global_position.distance_squared_to(me_pos) < reach2 \
+			and CityMap.meet(player.global_position, player.level, me_pos, me.level):
 		candidates.append([[player.global_position], Player.RADIUS + 4.0, player.velocity, player])
 	if candidates.is_empty():
 		return {}
@@ -346,6 +366,20 @@ func scan_ahead(ai: TrafficAI) -> Dictionary:
 	return {}
 
 
+## 차 자리 찍어 두기: 물리 틱마다(또는 차 수가 바뀌면) 한 번 — 그 틱에 움직인 만큼은 SNAP_MARGIN이 덮는다
+func _refresh_snap() -> void:
+	var tick := Engine.get_physics_frames()
+	if tick == _snap_tick and _snap_cars.size() == vehicles.size():
+		return
+	_snap_tick = tick
+	_snap_cars = vehicles.duplicate()
+	_snap_pos.resize(vehicles.size())
+	_snap_len.resize(vehicles.size())
+	for i in vehicles.size():
+		_snap_pos[i] = vehicles[i].global_position
+		_snap_len[i] = vehicles[i].stats.size.y
+
+
 func _obstacle(gap: float, c: Array, forward: Vector2) -> Dictionary:
 	var node: Node2D = c[3]
 	var vel: Vector2 = c[2]
@@ -362,15 +396,20 @@ func _obstacle(gap: float, c: Array, forward: Vector2) -> Dictionary:
 func lane_clear(ai: TrafficAI, offset: float, from: float, to: float) -> bool:
 	var piece := ai.route[0]
 	var half_w := ai.vehicle.stats.size.x * 0.5
+	# 검사할 차(같은 층)의 검사점은 한 번만 뽑는다 — 예전엔 검사점 하나마다 모든 차를 다시 걸렀다
+	var others: Array = []   # [검사점 셋, 문턱]
+	for v in vehicles:
+		if v == ai.vehicle or v.apart(ai.vehicle.global_position, ai.vehicle.level):
+			continue
+		var f := v.motor.forward() * v.stats.size.y * 0.45
+		var vp := v.global_position
+		others.append([[vp + f, vp, vp - f], half_w + v.stats.size.x * 0.5 + 6.0])
 	var s := maxf(from, 0.0)
 	while s <= minf(to, piece.length):
 		var p := piece.point_at(s) + LaneGraph.right_of(piece.tangent_at(s)) * offset
-		for v in vehicles:
-			if v == ai.vehicle or v.apart(ai.vehicle.global_position, ai.vehicle.level):
-				continue
-			var f := v.motor.forward() * v.stats.size.y * 0.45
-			for q in [v.global_position + f, v.global_position, v.global_position - f]:
-				if (q as Vector2).distance_to(p) < half_w + v.stats.size.x * 0.5 + 6.0:
+		for o: Array in others:
+			for q: Vector2 in o[0]:
+				if q.distance_to(p) < o[1]:
 					return false
 		s += TrafficAI.SAMPLE_STEP
 	return true
@@ -386,11 +425,12 @@ func exit_has_room(seg: LanePiece, ai: TrafficAI) -> bool:
 	var right := LaneGraph.right_of(dir)
 	var start := seg.points[0]
 	for v in vehicles:
-		if v == ai.vehicle or v.apart(ai.vehicle.global_position, ai.vehicle.level):
+		if v == ai.vehicle:
 			continue
 		var rel := v.global_position - start
 		var along := rel.dot(dir) - v.stats.size.y * 0.5
-		if absf(rel.dot(right)) < 30.0 and along > -40.0 and along < need:
+		if absf(rel.dot(right)) < 30.0 and along > -40.0 and along < need \
+				and not v.apart(ai.vehicle.global_position, ai.vehicle.level):
 			return false
 	return true
 

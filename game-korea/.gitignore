@@ -4,5 +4,6 @@
 .claude/worktrees/
 .DS_Store
 output/
-# 통째 건물 그림은 VRAM 압축·밉맵 가져오기 설정을 저장소에 남긴다 (BuildingSkin._vram)
+# 건물 그림(통째·벽면)은 VRAM 압축·밉맵 가져오기 설정을 저장소에 남긴다 (BuildingSkin._vram)
 !assets/buildings/whole/*.import
+!assets/buildings/facade/*.import

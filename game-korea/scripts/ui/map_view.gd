@@ -76,6 +76,9 @@ func _draw() -> void:
 				draw_rect(r, Minimap.LOCKED_COLOR)
 				continue
 			draw_rect(r, Minimap.BLOCK_COLOR)
+			if Minimap.forest_block(b):
+				draw_rect(r.grow(-City.SIDEWALK), Minimap.FOREST_COLOR)
+				continue
 			for lot: Rect2 in lots.get(b, []):
 				draw_rect(lot, Minimap.LOT_COLOR)
 	for r in City.water_rects():
@@ -84,9 +87,19 @@ func _draw() -> void:
 		for r in main.city.parks:
 			if _open(r.get_center()):
 				draw_rect(r, Minimap.PARK_COLOR)
+		_draw_namsan(xf.get_scale().x)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 	if main == null:
 		_draw_names(self, xf)
+
+
+## 남산: 숲 위에 순환로와 꼭대기 평지 (k = 지도 배율, 선 굵기를 화면 px로)
+func _draw_namsan(k: float) -> void:
+	var lot := Minimap.namsan_lot(main.city)
+	if not lot.has_area() or not _open(lot.get_center()):
+		return
+	draw_polyline(Namsan.road(lot), Minimap.ROAD_COLOR, 2.0 / k, true)
+	draw_rect(Namsan.summit_rect(lot), Minimap.SUMMIT_COLOR)
 
 
 func _draw_marks(ci: CanvasItem) -> void:

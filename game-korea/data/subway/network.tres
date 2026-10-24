@@ -1,0 +1,74 @@
+[gd_resource type="Resource" script_class="SubwayNetwork" load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/subway_network.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/world/subway_station.gd" id="2"]
+
+[sub_resource type="Resource" id="s0"]
+script = ExtResource("2")
+id = &"gangnam"
+display_name = "강남"
+line = 2
+line_color = Color("1f9a55")
+block = Vector2i(2, 3)
+
+[sub_resource type="Resource" id="s1"]
+script = ExtResource("2")
+id = &"hongdae"
+display_name = "홍대입구"
+line = 2
+line_color = Color("1f9a55")
+block = Vector2i(-4, -6)
+
+[sub_resource type="Resource" id="s2"]
+script = ExtResource("2")
+id = &"jongno"
+display_name = "종각"
+line = 1
+line_color = Color("263c96")
+block = Vector2i(2, -8)
+
+[sub_resource type="Resource" id="s3"]
+script = ExtResource("2")
+id = &"yeouido"
+display_name = "여의도"
+line = 5
+line_color = Color("8b50a4")
+block = Vector2i(-3, -3)
+
+[sub_resource type="Resource" id="s4"]
+script = ExtResource("2")
+id = &"jamsil"
+display_name = "잠실"
+line = 2
+line_color = Color("1f9a55")
+block = Vector2i(7, 3)
+
+[sub_resource type="Resource" id="s5"]
+script = ExtResource("2")
+id = &"gwangjin"
+display_name = "건대입구"
+line = 7
+line_color = Color("6a7a21")
+block = Vector2i(7, -8)
+
+[sub_resource type="Resource" id="s6"]
+script = ExtResource("2")
+id = &"outskirts"
+display_name = "수유"
+line = 4
+line_color = Color("2c9ede")
+block = Vector2i(1, -10)
+
+[sub_resource type="Resource" id="s7"]
+script = ExtResource("2")
+id = &"industrial"
+display_name = "공단"
+line = 1
+line_color = Color("263c96")
+block = Vector2i(-4, 2)
+
+[resource]
+script = ExtResource("1")
+stations = Array[ExtResource("2")]([SubResource("s0"), SubResource("s1"), SubResource("s2"), SubResource("s3"), SubResource("s4"), SubResource("s5"), SubResource("s6"), SubResource("s7")])
+fare = 1500
+max_wanted = 0

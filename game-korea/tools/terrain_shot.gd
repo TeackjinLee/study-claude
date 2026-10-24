@@ -9,6 +9,7 @@ const SPOTS := [
 	["terrain_namsan_near", Vector2i(2, -6), Vector2(0.1, 1.2), 1.1],
 	["terrain_jongno_slope", Vector2i(3, -6), Vector2(0.6, 0.6), 1.0],
 	["terrain_bukak", Vector2i(3, -11), Vector2(0.5, 0.8), 0.7],
+	["terrain_forest", Vector2i(4, -11), Vector2(0.1, 0.7), 1.2],   # 북악 숲 부지 통째 그림 (나무마다 제 땅에)
 	["terrain_riverside", Vector2i(2, -5), Vector2(0.5, 0.6), 0.6],
 	["terrain_gangnam_south", Vector2i(2, 4), Vector2(0.5, 0.5), 0.6],
 	["terrain_overpass", Vector2i(1, 2), Vector2(0.6, 0.0), 0.7],

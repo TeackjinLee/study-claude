@@ -434,6 +434,17 @@ static func _cuts(a: float, b: float, o: float, axis := -1) -> PackedFloat32Arra
 	return out if fine.is_empty() else _merge(out, fine)
 
 
+## r을 격자 선(산 안은 MOUND_CELL)에서 자른 칸들 — 바닥 그림을 칸마다 펴야 비탈에서 땅 높이를 따른다
+static func cells(r: Rect2) -> Array[Rect2]:
+	var xs := _cuts(r.position.x, r.end.x, DATA.origin.x, 0)
+	var ys := _cuts(r.position.y, r.end.y, DATA.origin.y, 1)
+	var out: Array[Rect2] = []
+	for j in ys.size() - 1:
+		for i in xs.size() - 1:
+			out.append(Rect2(xs[i], ys[j], xs[i + 1] - xs[i], ys[j + 1] - ys[j]))
+	return out
+
+
 ## r을 칠하되 holes(단 부지)는 비운다 — 격자 선과 구멍 경계에서 잘라, 단 경계를 걸친 꼭짓점이 없게 한다
 static func rect_except(ci: CanvasItem, r: Rect2, color: Color, holes: Array[Rect2]) -> void:
 	var hx := PackedFloat32Array()

@@ -5,6 +5,7 @@ extends Node
 ##  3. 건물: 충돌 건물마다 입체 조각이 있고, 조각은 정사각형에 가깝다. 지붕은 한 조각만 그린다.
 ##     건물 바로 동·남쪽 인도에 선 사람은 그 건물보다 앞에, 북·서쪽은 뒤에 그린다.
 ##  4. 주인공이 건물 뒤에 가면 그 건물이 흐려지고, 나오면 다시 진해진다.
+##     움직이면 가는 쪽 앞 띠를 가리는 건물도 흐리고, 서 있거나 반대로 가면 흐리지 않는다.
 ##  5. F9: 위에서 보는 화면으로 바꾸면 변환이 회전·기울기 없는 확대로 돌아오고 입체 건물이 숨는다.
 ##  6. 다리: 강 위 다리 구간만 떠 있고(가운데 DECK_HEIGHT), 양끝 경사로는 땅에서 매끈하게 오른다.
 ##     다리 위에 세운 차는 그 높이로 그리고, 위에서 보기에선 0이다.
@@ -193,7 +194,28 @@ func _test_fade() -> void:
 	main.camera.snap()
 	await _frames(40)
 	_expect(view.modulate.a > 0.99, "앞으로 나오면 다시 진하다 (%.2f)" % view.modulate.a)
+	# 건물 서쪽 도로를 북쪽으로 간다: 앞 길을 건물이 가리면 흐리고, 서 있거나 남쪽으로 가면 그대로
+	var top := city.building_top(idx)
+	var off := IsoView.lift(city._pads.get(idx, 0.0))
+	var mover := Mover.new()
+	mover.global_position = Vector2(r.position.x - 40.0, r.end.y + 200.0)
+	var still := city._fade_probes(mover.global_position, mover)
+	_expect(still.size() == 1, "서 있으면 머리 한 점만 본다 (%d)" % still.size())
+	_expect(not City._hides(r, top, off, still, true), "건물 앞 남쪽에 서 있으면 흐리지 않는다")
+	mover.vel = Vector2(0, -300.0)
+	var ahead := city._fade_probes(mover.global_position, mover)
+	_expect(City._hides(r, top, off, ahead, true), "북쪽으로 가면 앞 길을 가리는 건물을 흐린다 (점 %d)" % ahead.size())
+	mover.vel = Vector2(0, 300.0)
+	_expect(not City._hides(r, top, off, city._fade_probes(mover.global_position, mover), true), "반대로 가면 흐리지 않는다")
+	mover.free()
 	await _free(main)
+
+
+class Mover extends Node2D:
+	var vel := Vector2.ZERO
+
+	func follow_velocity() -> Vector2:
+		return vel
 
 
 func _test_toggle() -> void:

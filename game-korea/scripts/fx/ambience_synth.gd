@@ -6,16 +6,24 @@ extends RefCounted
 ## - birds: 낮의 참새·까치 (짧게 짹짹 오르내리는 소리가 드문드문)
 ## - rain: 빗소리 (걸러 낸 흰 잡음 + 빗방울 톡톡)
 ## - river: 강물 출렁임 (낮은 대역 잡음이 느리게 일렁인다)
+## - beat: 홍대 DJ 휴대 스피커의 댄스 비트 (킥 4박·뒷박 하이햇·2·4박 박수·뒷박 베이스·마디 첫 박 화음) — 박자는 DJ 대기 그림과 같다
 
 const MIX_RATE := GunSynth.MIX_RATE
-const LOOPS := {&"city": 12.0, &"night": 8.0, &"birds": 14.0, &"rain": 6.0, &"river": 10.0}   ## 토막 길이 (초)
+const LOOPS := {&"city": 12.0, &"night": 8.0, &"birds": 14.0, &"rain": 6.0, &"river": 10.0, &"beat": BEAT * 16}   ## 토막 길이 (초)
 const XFADE := 0.6                 ## 이음매를 섞는 길이 (초)
+const BEAT := 0.375                ## 비트 한 박 (초) — DJ 대기 그림 1.5초가 4박 (Pedestrian.SPEAKER_BEAT)
 
 
 static func loop(kind: StringName) -> PackedFloat32Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(String(kind)) + 5
 	var n := int(float(LOOPS[kind]) * MIX_RATE)
+	if kind == &"beat":
+		# 박자가 토막 길이에 딱 맞으니 섞지 않고 끝을 넘는 소리만 처음으로 감는다 (섞으면 박이 두 겹으로 번진다)
+		var wrap := PackedFloat32Array()
+		wrap.resize(n)
+		_beat(wrap, rng)
+		return _normalize(wrap, 0.5)
 	var f := int(XFADE * MIX_RATE)
 	var raw := PackedFloat32Array()
 	raw.resize(n + f)
@@ -116,6 +124,51 @@ static func _river(out: PackedFloat32Array, rng: RandomNumberGenerator) -> void:
 		a += (w - a) * 0.08
 		b += (a - b) * 0.08          # 두 번 걸러 낮은 출렁임
 		out[i] = (a - b) * 2.0 * (0.6 + 0.4 * sin(ph + TAU * t / 2.7)) + b * 0.5
+
+
+## 4박 × 4마디. 소리는 out 길이로 감아 쓴다 (마디 끝 꼬리가 처음 박 위에 겹친다 — 되풀이 이음매가 없다)
+static func _beat(out: PackedFloat32Array, rng: RandomNumberGenerator) -> void:
+	var n := out.size()
+	var b := int(BEAT * MIX_RATE)
+	var bass := [55.0, 55.0, 65.41, 49.0]    # 마디마다 베이스 음 (A1·A1·C2·G1)
+	var chords := [[220.0, 261.63, 329.63], [220.0, 261.63, 329.63], [261.63, 329.63, 392.0], [196.0, 246.94, 293.66]]
+	for k in 16:
+		var at := k * b
+		var bar := k / 4
+		# 킥: 120Hz에서 45Hz로 떨어지는 사인, 빨리 사라진다
+		var ph := 0.0
+		for i in int(0.28 * MIX_RATE):
+			var t := float(i) / MIX_RATE
+			ph += TAU * lerpf(45.0, 120.0, exp(-t * 28.0)) / MIX_RATE
+			out[(at + i) % n] += sin(ph) * exp(-t * 11.0) * 0.9
+		# 2·4박 박수: 잡음 덩이 셋이 조금씩 어긋나 겹친다
+		if k % 2 == 1:
+			for c in 3:
+				var o := int(c * 0.011 * MIX_RATE)
+				for i in int(0.12 * MIX_RATE):
+					var t := float(i) / MIX_RATE
+					out[(at + o + i) % n] += rng.randf_range(-1.0, 1.0) * exp(-t * 38.0) * 0.28
+		# 뒷박: 열린 하이햇(흰 잡음의 차분) + 베이스 한 음
+		var off := at + b / 2
+		var prev := 0.0
+		for i in int(0.07 * MIX_RATE):
+			var t := float(i) / MIX_RATE
+			var w := rng.randf_range(-1.0, 1.0)
+			out[(off + i) % n] += (w - prev) * exp(-t * 45.0) * 0.18
+			prev = w
+		var hz: float = bass[bar]
+		for i in int(BEAT * 0.45 * MIX_RATE):
+			var t := float(i) / MIX_RATE
+			var saw := 2.0 * fmod(hz * t, 1.0) - 1.0
+			out[(off + i) % n] += (sin(TAU * hz * t) * 0.7 + saw * 0.18) * minf(t * 200.0, 1.0) * exp(-t * 6.0) * 0.55
+		# 마디 첫 박: 짧은 신스 화음
+		if k % 4 == 0:
+			for i in int(BEAT * 0.8 * MIX_RATE):
+				var t := float(i) / MIX_RATE
+				var v := 0.0
+				for f: float in chords[bar]:
+					v += sin(TAU * f * t) + 0.3 * sin(TAU * f * 2.0 * t)
+				out[(at + i) % n] += v * minf(t * 120.0, 1.0) * exp(-t * 5.0) * 0.07
 
 
 static func _normalize(out: PackedFloat32Array, peak: float) -> PackedFloat32Array:

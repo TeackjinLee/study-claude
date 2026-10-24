@@ -13,7 +13,7 @@ extends Node
 ##     불이 오래 타면 소방차가 와서 끈다. 쓰러진 군인은 소총을 떨어뜨린다.
 ##  9. 부업 6종: 택시는 손님을 태워 내려 주면 보상, 차에서 오래 내리면 끝, 10단계를 끝내면 보너스(저장된다).
 ##     자경단은 수배를 풀고 범인 차를 부수게 하고, 소방은 소방차 물대포로 불을 끈다.
-## 10. 시간대·날씨: 밤·낮 색이 다르고, 비가 오면 노면이 미끄럽다. 밤에만 나오는 사람(DJ)이 있다.
+## 10. 시간대·날씨: 밤·낮 색이 다르고, 비가 오면 노면이 미끄럽다. 오후부터 새벽까지만 나오는 사람(DJ)이 있다.
 ## 실행: godot --headless --fixed-fps 60 --path . res://tests/m6_test.tscn
 
 const SAVE_PREFIX := "user://m6_test_save_"
@@ -661,7 +661,7 @@ func _test_day_night() -> void:
 	_expect(DayNight.tint(0.0) != DayNight.tint(12.0), "밤과 낮 색이 다르다")
 	_expect(DayNight.is_night(21.0) and not DayNight.is_night(12.0), "21시는 밤, 12시는 낮")
 	var dj: NpcType = load("res://data/npc/dj.tres")
-	_expect(PedestrianManager.in_hours(dj.hours, 23.0) and not PedestrianManager.in_hours(dj.hours, 12.0), "DJ는 밤에만 나온다")
+	_expect(PedestrianManager.in_hours(dj.hours, 15.0) and PedestrianManager.in_hours(dj.hours, 23.0) and not PedestrianManager.in_hours(dj.hours, 9.0), "DJ는 오후부터 새벽까지 나온다")
 	var main := _make_main()
 	var sky: DayNight = main.sky
 	sky.paused_clock = true
