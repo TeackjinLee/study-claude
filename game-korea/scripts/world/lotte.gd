@@ -113,6 +113,7 @@ static func build_tower(out: Array[BuildingModel.Piece], r: Rect2, seed: int) ->
 	mall.floor_height = 14.5
 	mall.deco = [&"entrance", &"top_sign"]
 	mall.text = "롯데월드몰"
+	mall.deck = true   # 옥상 정원에 헬기가 내려앉고 사람이 걷는다
 	out.append(mall)
 	var upper := BuildingModel._prism(_rot_rect(f.mall + Vector2(-20, -24) * _s(r), f.mall_half * Vector2(0.62, 0.55), MALL_ANGLE), 58, 76,
 		Color("e5e2da"), &"flat", Color("b8c0b4"), &"glass", seed + 61)
@@ -212,6 +213,7 @@ static func build_park(out: Array[BuildingModel.Piece], r: Rect2, seed: int) -> 
 	# 호텔 탑 (북쪽 끝)
 	var hotel := BuildingModel._prism(_rot_rect(f.hotel, f.hotel_half, PARK_ANGLE), 0, 250, Color("d8d2c4"), &"flat", Color("9a958a"), &"punched", seed)
 	hotel.text = "롯데호텔"
+	hotel.deck = true   # 옥상 헬리포트
 	hotel.deco = [&"top_sign", &"entrance"]
 	out.append(hotel)
 	hotel.on_top.append(BuildingModel._prism(_rot_rect(f.hotel, (f.hotel_half as Vector2) * Vector2(0.4, 0.6), PARK_ANGLE), 250, 266,

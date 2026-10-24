@@ -7,6 +7,8 @@ var move_world := Vector2.ZERO
 var sprint := false
 var throttle := 0.0
 var steer := 0.0
+var turn := 0.0                   ## 도보 제자리 회전 (←→, −1 왼쪽 · 1 오른쪽)
+var forward := 0.0                ## 도보 바라보는 쪽 앞뒤 걷기 (↑↓)
 var handbrake := false
 var fire := false
 var turret := 0.0
@@ -20,6 +22,8 @@ func copy_from(other: PlayerInputCommand) -> void:
 	sprint = other.sprint
 	throttle = clampf(other.throttle, -1.0, 1.0) if is_finite(other.throttle) else 0.0
 	steer = clampf(other.steer, -1.0, 1.0) if is_finite(other.steer) else 0.0
+	turn = clampf(other.turn, -1.0, 1.0) if is_finite(other.turn) else 0.0
+	forward = clampf(other.forward, -1.0, 1.0) if is_finite(other.forward) else 0.0
 	handbrake = other.handbrake
 	fire = other.fire
 	turret = clampf(other.turret, -1.0, 1.0) if is_finite(other.turret) else 0.0

@@ -67,12 +67,15 @@ static func z_of(pos: Vector2) -> int:
 const DECK_Z_AHEAD := 48.0
 
 
-## 층까지 본 그리는 순서: 고가 위(level 1)면 상판 앞 가장자리 + DECK_Z_AHEAD 기준으로 밀어 상판 조각 위에 그린다
+## 층까지 본 그리는 순서: 고가 위(level 1)면 상판 앞 가장자리 + DECK_Z_AHEAD 기준으로 밀어 상판 조각 위에, 옥상 위면 본채 앞에 그린다
 static func z_at(pos: Vector2, level: int) -> int:
 	if level == 1:
 		var o := CityMap.overpass_at(pos)
 		if o >= 0:
 			return deck_z(CityMap.OVERPASSES[o], pos, DECK_Z_AHEAD) + 1
+		var rf := CityMap.roof_at(pos)
+		if rf >= 0:
+			return z_of(CityMap.roofs[rf].rect.end) + 1   # 옥상 위는 그 건물 본채보다 앞
 	return z_of(pos)
 
 

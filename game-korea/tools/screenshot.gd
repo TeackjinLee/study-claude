@@ -558,10 +558,12 @@ func _collect_shots(main: Node2D) -> void:
 	await _save("collect_rampage_on")
 
 
-## 일시정지 메뉴 (`-- --only=menu`): menu_main · menu_map(서울 지도) · menu_map_ch4(모든 구역이 열린 4장, 수배 ★2 — 카센터 고리) · menu_settings · menu_settings_en(영어로 바꾼 설정) ·
+## 일시정지 메뉴 (`-- --only=menu`): menu_main · menu_map(서울 지도) · menu_map_ch4(모든 구역이 열린 4장, 수배 ★2 — 카센터 고리) · menu_settings ·
+## menu_settings_en(영어로 바꾼 설정) · menu_map_en(영어 범례·구역 이름) · menu_map_heli(★5 경찰 헬기 그림 표) ·
 ## hud_en(영어 HUD, 차에 타서 라디오 채널 이름과 DJ 자막)
 func _menu_shots(main: Node2D) -> void:
 	var menu: PauseMenu = main.pause_menu
+	var player: Player = main.player
 	main.street_events.enabled = false
 	menu.open()
 	await get_tree().process_frame
@@ -577,8 +579,6 @@ func _menu_shots(main: Node2D) -> void:
 	for i in 3:
 		await get_tree().process_frame
 	await _save("menu_map_ch4")
-	main.police.wanted.clear()
-	main.set_chapter(1)
 	menu._show_settings()
 	await get_tree().process_frame
 	await _save("menu_settings")
@@ -587,6 +587,31 @@ func _menu_shots(main: Node2D) -> void:
 	menu._show_settings()
 	await get_tree().process_frame
 	await _save("menu_settings_en")
+	menu._show_map()
+	for i in 3:
+		await get_tree().process_frame
+	await _save("menu_map_en")
+	Settings.values["lang"] = "ko"
+	Settings.apply()
+	menu.close()
+	main.police.last_known = player.global_position
+	main.police.wanted.raise_to(5)
+	for f in 60 * 20:
+		await _frames(1)
+		main.police._arrest = 0.0
+		player.revive()
+		if not main.police.helis.is_empty() and main.police.helis[0].global_position.distance_to(player.global_position) < 600.0:
+			break
+	menu.open()
+	await get_tree().process_frame
+	menu._show_map()
+	for i in 3:
+		await get_tree().process_frame
+	await _save("menu_map_heli")
+	main.police.reset()
+	main.set_chapter(1)
+	Settings.values["lang"] = "en"
+	Settings.apply()
 	menu.visible = false
 	get_tree().paused = false
 	main.director.enter_immediately(main.vehicles[0])
@@ -919,7 +944,7 @@ func _river_shots(main: Node2D) -> void:
 	await _save("river_bank_night")
 
 
-## 군용 차량 (`-- --only=army`): 부두에 선 자주포·전술차량 → 자주포 포탑 조준(조준점) → 포격(포구 불꽃·포탄) → 차를 깔고 올라탄 모습 → 전술차량 기관총
+## 군용 차량 (`-- --only=army`): 군 창고 안 자주포(밖·안·몰고 나오기) → 부두에 선 자주포·전술차량 → 자주포 포탑 조준(조준점) → 포격(포구 불꽃·포탄) → 차를 깔고 올라탄 모습 → 전술차량 기관총
 func _army_shots(main: Node2D) -> void:
 	var cam: ChaseCamera = main.camera
 	var player: Player = main.player
@@ -934,6 +959,32 @@ func _army_shots(main: Node2D) -> void:
 	if spg == null:
 		print("자주포가 없다")
 		return
+	# 군 창고(격납고): 밖에서 열린 문으로 본 모습 → 안에 들어가면 지붕·앞벽이 흐려진다 → 몰고 나온다
+	var home := spg.global_position
+	player.screen_walk = false
+	player.global_position = home + Vector2(70, 150)
+	cam.target = player
+	cam.snap()
+	await _frames(40)
+	await _save("army_hangar")
+	player.global_position = home + Vector2(40, 30)
+	cam.snap()
+	await _frames(60)
+	await _save("army_hangar_in")
+	main.director.enter_immediately(spg)
+	cam.target = spg
+	cam.snap()
+	Input.action_press("accelerate")
+	for f in 60 * 3:
+		await _frames(1)
+		player.revive()
+		if spg.global_position.y > home.y + 190.0:
+			break
+	Input.action_release("accelerate")
+	await _frames(20)
+	await _save("army_hangar_out")
+	main.director.exit_vehicle()
+	spg.place(home + Vector2(0, 230), PI * 0.5)
 	cam.target = null
 	cam.global_position = spg.global_position + Vector2(-60, 60)
 	await _frames(20)
@@ -1243,6 +1294,8 @@ func _hud_shots(main: Node2D) -> void:
 	for q: Pedestrian in peds.peds:
 		q.queue_redraw()
 	await _frames(2)
+	main.weapons.cycle_target()      # 가장 가까운 사람을 표적으로 고른다 (빨간 원)
+	await _frames(2)
 	await _save("hud_foot")
 	player.global_position = at     # 걸어서 멀어진 차 옆으로 되돌린다
 	await _frames(2)
@@ -1532,59 +1585,6 @@ func _citizen_shots(main: Node2D) -> void:
 		print("  %s: 걷기·달리기 %.0f px/s" % [id, ped.velocity.length()])
 
 
-## 보행자 넘어짐·기절 (`-- --only=npc_ko`): 주인공 둘레 보행자 넷을 시민 남·여·직장인·구급대원으로 바꿔 화면 →·↓·←·↑을 보고
-## 기절시킨다 — 쓰러지는 도중(nko_<id>_fall)·다 누운 모습(nko_<id>_out, 머리 위 별). 주인공은 화면 밖으로 치운다
-func _npc_ko_shots(main: Node2D) -> void:
-	var cam: ChaseCamera = main.camera
-	var player: Player = main.player
-	if main.director.current_vehicle:
-		main.director.exit_vehicle()
-	await _frames(20)
-	var at := player.global_position
-	player.global_position = at + Vector2(400, 400)
-	cam.target = null
-	cam.global_position = at
-	cam.zoom = Vector2(3.5, 3.5)
-	var peds: Array = []
-	for p in main.pedestrians.peds:
-		if is_instance_valid(p) and p.npc and not p.is_dead():
-			peds.append(p)
-	peds.sort_custom(func(a, b): return a.global_position.distance_to(at) < b.global_position.distance_to(at))
-	peds = peds.slice(0, 4)
-	if peds.size() < 4:
-		print("  보행자가 모자람 (%d)" % peds.size())
-		return
-	for id in ["civ_m", "civ_f", "office", "paramedic", "soldier", "foreigner"]:
-		for i in 4:
-			var p: Pedestrian = peds[i]
-			var k := i * 2
-			var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(k * PI / 4.0)).normalized()
-			p.npc = load("res://data/npc/%s.tres" % id)
-			p.health = p.npc.health
-			p._set_state(Pedestrian.State.IDLE, 100.0)
-			p.velocity = Vector2.ZERO
-			p.global_position = at + IsoView.BASIS.affine_inverse().basis_xform(Vector2((i % 2) * 70.0 - 35.0, (i / 2) * 50.0 - 25.0))
-			p.facing = Vector2.UP.angle_to(world_dir)
-		await _frames(10)
-		for i in 4:
-			peds[i].die(Vector2.ZERO)
-		await _frames(30)
-		await _save("nko_%s_fall" % id)
-		await _frames(90)
-		await _save("nko_%s_out" % id)
-		print("  %s: 머리 %s" % [id, peds.map(func(p): return p.get_meta(&"ko_head", "없음"))])
-
-
-## 주인공 넘어짐·기절 (`-- --only=player_ko`): 화면 →·↓·←·↑을 보고 체력이 0이 되면 쓰러지는 도중(pko_<방향>_fall)·
-## 다 누워 기절한 모습(pko_<방향>_out, 머리 위 별), 매에 쓰러진 체포 모습(pko_bust — 별 없음)
-func _player_ko_shots(main: Node2D) -> void:
-	var cam: ChaseCamera = main.camera
-	var player: Player = main.player
-	if main.director.current_vehicle:
-		main.director.exit_vehicle()
-	await _frames(20)
-	cam.target = null
-	cam.global_position = player.global_position
 ## 군인 (`-- --only=soldier`): 주인공 둘레에 선 군인 넷(화면 →·↓·←·↑)이 소총을 겨누고(soldier_aim) 쏘고(soldier_fire),
 ## 소총을 든 채 뛰어간다(soldier_run) — 수배 없이 경계(GUARD)·복귀(RETURN)로 세우고 뛰게 한다
 func _soldier_shots(main: Node2D) -> void:
@@ -1626,6 +1626,59 @@ func _soldier_shots(main: Node2D) -> void:
 		await _save("soldier_run_%d" % k)
 
 
+## 보행자 넘어짐·기절 (`-- --only=npc_ko`): 주인공 둘레 보행자 넷을 시민 남·여·직장인·구급대원으로 바꿔 화면 →·↓·←·↑을 보고
+## 기절시킨다 — 쓰러지는 도중(nko_<id>_fall)·다 누운 모습(nko_<id>_out, 머리 위 별). 주인공은 화면 밖으로 치운다
+func _npc_ko_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	var at := player.global_position
+	player.global_position = at + Vector2(400, 400)
+	cam.target = null
+	cam.global_position = at
+	cam.zoom = Vector2(3.5, 3.5)
+	var peds: Array = []
+	for p in main.pedestrians.peds:
+		if is_instance_valid(p) and p.npc and not p.is_dead():
+			peds.append(p)
+	peds.sort_custom(func(a, b): return a.global_position.distance_to(at) < b.global_position.distance_to(at))
+	peds = peds.slice(0, 4)
+	if peds.size() < 4:
+		print("  보행자가 모자람 (%d)" % peds.size())
+		return
+	for id in ["civ_m", "civ_f", "office", "paramedic", "soldier", "foreigner", "merchant", "homeless", "police", "gang_gangnam", "gang_oldtown", "gang_smuggler"]:
+		for i in 4:
+			var p: Pedestrian = peds[i]
+			var k := i * 2
+			var world_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2.RIGHT.rotated(k * PI / 4.0)).normalized()
+			p.npc = load("res://data/npc/%s.tres" % id)
+			p.health = p.npc.health
+			p._set_state(Pedestrian.State.IDLE, 100.0)
+			p.velocity = Vector2.ZERO
+			p.global_position = at + IsoView.BASIS.affine_inverse().basis_xform(Vector2((i % 2) * 70.0 - 35.0, (i / 2) * 50.0 - 25.0))
+			p.facing = Vector2.UP.angle_to(world_dir)
+		await _frames(10)
+		for i in 4:
+			peds[i].die(Vector2.ZERO)
+		await _frames(30)
+		await _save("nko_%s_fall" % id)
+		await _frames(90)
+		await _save("nko_%s_out" % id)
+		print("  %s: 머리 %s" % [id, peds.map(func(p): return p.get_meta(&"ko_head", "없음"))])
+
+
+## 주인공 넘어짐·기절 (`-- --only=player_ko`): 화면 →·↓·←·↑을 보고 체력이 0이 되면 쓰러지는 도중(pko_<방향>_fall)·
+## 다 누워 기절한 모습(pko_<방향>_out, 머리 위 별), 매에 쓰러진 체포 모습(pko_bust — 별 없음)
+func _player_ko_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	cam.target = null
+	cam.global_position = player.global_position
 	cam.zoom = Vector2(4.0, 4.0)
 	player.died.disconnect(main._on_died)   # 쓰러진 뒤 병원으로 보내지 않게
 	for k in [0, 2, 4, 6]:

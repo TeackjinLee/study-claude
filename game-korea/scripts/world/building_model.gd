@@ -44,6 +44,8 @@ class Piece extends RefCounted:
 	var text := ""                          ## 대표 간판·동 번호
 	var signs := PackedStringArray()        ## 1층 가게 간판 후보
 	var accent := Color.WHITE
+	## 헬기가 내려앉고 사람이 걷는 옥상 (City._build_roofs — 윗면이 층 1이 된다)
+	var deck := false
 	## 커튼월(glass) 유리 색. 비어 있으면(a 0) 기본 짙은 유리 (BuildingView.GLASS)
 	var glass_tint := Color(0, 0, 0, 0)
 	var on_top: Array = []                  ## 이 덩어리 위에 얹혀 같이 그리는 덩어리 (윗층·옥상 소품·굴뚝)
@@ -59,6 +61,10 @@ class Piece extends RefCounted:
 	var lot := Rect2()
 	## 통째 그림 안에서 이 덩어리의 번호 (짓는 차례, 얹힌 것은 바로 뒤) — 덩어리마다 윤곽을 넓힐 몫을 찾는 열쇠
 	var sprite_index := -1
+	## 통째 그림 부지에서도 코드로 그린다 (그림에 없는 덩어리 — 부두 군 창고처럼 안이 비어 흐려지면 속이 보여야 하는 것)
+	var code_look := false
+	## code_look 덩어리가 예전 덩어리 하나의 그림 번호 자리를 차지한다 (뒤 덩어리들의 hull_pieces 번호가 밀리지 않게)
+	var takes_slot := false
 	## 돌린 덩어리: 바닥 다각형(월드, 볼록). 있으면 rect는 그 둘레 상자이고, 벽은 변마다·지붕은 다각형으로 그린다 (_prism)
 	var poly := PackedVector2Array()
 
@@ -230,6 +236,10 @@ static func build(r: Rect2, t: BuildingType, seed: int, height: float) -> Array[
 
 
 static func _set_sprite(p: Piece, sprite: BuildingSprite, lot: Rect2, n: Array) -> void:
+	if p.code_look:
+		if p.takes_slot:
+			n[0] += 1
+		return
 	p.sprite = sprite
 	p.lot = lot
 	p.sprite_index = n[0]
@@ -608,6 +618,8 @@ static func draw_ground(ci: CanvasItem, r: Rect2, t: BuildingType, seed: int, fl
 	var sprite := BuildingSprite.pick(t, r, seed, floors) if IsoView.enabled else null
 	if sprite:
 		draw_sprite_ground(ci, r, sprite)
+		if t and LandmarkBuilding.owns(t.style):
+			LandmarkBuilding.draw_ground_over_sprite(ci, r, t)   # 그림에 없는 덩어리(code_look)의 바닥
 		return
 	var style: StringName = t.style if t else &"special"
 	match style:

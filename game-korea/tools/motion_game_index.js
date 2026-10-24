@@ -1,6 +1,6 @@
 // tools/gen_motion_index.py가 만든다 — 손으로 고치지 않는다
 window.GAME_DIR8 = {
- "version": 1792766499,
+ "version": 1792800197,
  "chars": [
   {
    "name": "주인공",
@@ -881,24 +881,68 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
-    "frames": 8,
+    "frames": 12,
     "run_dirs": [
      "s",
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -26.0,
+      -72.0
+     ],
+     "ne": [
+      23.0,
+      -71.0
+     ],
+     "n": [
+      25.0,
+      -69.0
+     ],
+     "nw": [
+      -26.0,
+      -69.0
+     ],
+     "e": [
+      13.0,
+      -73.0
+     ],
+     "sw": [
+      -28.0,
+      -54.0
+     ]
+    }
    }
   },
   {
@@ -1025,9 +1069,9 @@ window.GAME_DIR8 = {
    "meta": {
     "dirs": [
      "s",
-     "sw",
-     "w",
-     "nw",
+     "se",
+     "e",
+     "ne",
      "n"
     ],
     "frames": 12,
@@ -1036,13 +1080,60 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -30.0,
+      -74.0
+     ],
+     "ne": [
+      26.0,
+      -76.0
+     ],
+     "n": [
+      26.0,
+      -71.0
+     ],
+     "nw": [
+      -30.0,
+      -72.0
+     ],
+     "e": [
+      17.0,
+      -71.0
+     ],
+     "sw": [
+      -29.0,
+      -57.0
+     ]
+    }
    }
   },
   {

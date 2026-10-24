@@ -4,6 +4,10 @@ extends Node
 ## 창 모드로 실행한다 (헤드리스는 그리지 않는다):
 ##   godot --path . res://tools/vehicle_guide.tscn                 (기본 sp_heli)
 ##   ... -- --ids=sp_heli,sp_fire_heli --cell=384
+##   ... -- --ids=army_spg --split        (포탑 차: 차체 <id>와 포탑 <id>_turret를 따로 — 포탑은 차와 따로 돈다)
+##
+## 포탑 차를 나눠 찍으면: 차체 가이드는 포탑·포신을 빼고, 포탑 가이드는 포탑만(포신 빼고 — 게임이 든 각만큼 코드로 그린다)
+## 포탑이 도는 축(Part.axis_y)을 칸 원점에 두고 찍는다. 포탑 칸 k는 포탑이 월드에서 보는 방향이다.
 ##
 ## 방향: 한 바퀴 32방향(11.25°). 화면 좌우 거울 = 월드 x↔y 교환이고 헬기는 좌우 대칭이라,
 ## 화면 위(↑) → 오른쪽(→) → 아래(↓) 반 바퀴 17방향만 받고 왼쪽 반은 좌우로 뒤집어 쓴다 (회전 r ↔ −90° − r).
@@ -46,15 +50,42 @@ func _ready() -> void:
 	if not FileAccess.file_exists(gd):
 		FileAccess.open(gd, FileAccess.WRITE).store_string("")
 	var cell := int(_arg("cell", "384"))
+	var split := "--split" in OS.get_cmdline_user_args()
 	for id in _arg("ids", "sp_heli").split(","):
 		var stats: VehicleType = load("res://data/vehicles/%s.tres" % id)
 		if stats == null:
 			push_warning("차종 없음: %s" % id)
 			continue
-		await _guide(id, stats, cell)
+		var axis := turret_axis(stats)
+		if split and axis >= 0.0:
+			VehicleModel.only = VehicleModel.Only.HULL
+			await _guide(id, stats, cell)
+			VehicleModel.only = VehicleModel.Only.TURRET
+			await _guide(id + "_turret", stats, cell, axis)
+			VehicleModel.only = VehicleModel.Only.ALL
+		else:
+			await _guide(id, stats, cell)
 	VehicleModel.hide_blades = false
 	VehicleModel.even_light = false
 	get_tree().quit()
+
+
+## 포탑이 도는 축의 y (포탑 부품이 없으면 −1)
+static func turret_axis(stats: VehicleType) -> float:
+	for p: VehicleModel.Part in VehicleModel.model(stats):
+		if p.turret == 1:
+			return p.axis_y
+	return -1.0
+
+
+## 지금 찍는 부품인가 (VehicleModel.only를 따른다 — 날개는 늘 뺀다)
+static func _drawn(p: VehicleModel.Part) -> bool:
+	if p.blade:
+		return false
+	match VehicleModel.only:
+		VehicleModel.Only.HULL: return p.turret == 0
+		VehicleModel.Only.TURRET: return p.turret == 1
+	return true
 
 
 ## 반 바퀴 17방향의 회전 (k = 0 화면 ↑, 8 화면 →, 16 화면 ↓)
@@ -62,17 +93,19 @@ static func rotation_of(k: int) -> float:
 	return -PI * 0.25 + k * TAU / DIRS
 
 
-func _guide(id: String, stats: VehicleType, cell: int) -> void:
+## axis ≥ 0이면 포탑 가이드: 축 (0, axis)를 칸 원점에 둔다
+func _guide(id: String, stats: VehicleType, cell: int, axis := -1.0) -> void:
+	var pivot := Vector3(0, maxf(axis, 0.0), 0)
 	var parts: Array = VehicleModel.model(stats)
 	# 모든 방향을 합친 화면 범위 (월드 원점·땅 기준, 줌 1) → 배율과 칸 안 원점을 정한다. 모든 칸이 같은 원점을 쓴다
 	var box := Rect2()
 	var first := true
 	for k in DIRS / 2 + 1:
 		for p: VehicleModel.Part in parts:
-			if p.blade:
+			if not _drawn(p):
 				continue
 			for q in p.pts:
-				var s := _screen(q, rotation_of(k))
+				var s := _screen(q - pivot, rotation_of(k))
 				if first:
 					box = Rect2(s, Vector2.ZERO)
 					first = false
@@ -103,8 +136,8 @@ func _guide(id: String, stats: VehicleType, cell: int) -> void:
 				"mirror_rotation": -PI * 0.5 - r,
 				"origin": [corner.x + origin.x, corner.y + origin.y],
 			})
-		var ref := await _shot(stats, ks, at, scale, px, false)
-		var guide := await _shot(stats, ks, at, scale, px, true)
+		var ref := await _shot(stats, ks, at, scale, px, false, pivot.y)
+		var guide := await _shot(stats, ks, at, scale, px, true, pivot.y)
 		_save_on_magenta(ref, "%s_%s_ref" % [id, sheet])
 		_save_on_magenta(guide, "%s_%s_guide" % [id, sheet])
 		print("가이드 저장: %s_%s (%d×%d, 칸 %d개)" % [id, sheet, px.x, px.y, ks.size()])
@@ -114,6 +147,8 @@ func _guide(id: String, stats: VehicleType, cell: int) -> void:
 		# 칸 안 그림 좌표 = 칸 원점 + scale × (BASIS × (월드 x, y)를 회전 r로 돌린 것 − (0, 높이))
 		"basis": [[IsoView.BASIS.x.x, IsoView.BASIS.x.y], [IsoView.BASIS.y.x, IsoView.BASIS.y.y]],
 		"rotor_z": Vehicle.rotor_z(stats), "bank_pivot": Vehicle.BANK_PIVOT,
+		# 무엇을 찍었나: all 통째 · hull 포탑 뺀 차체 · turret 포탑만 (원점 = 포탑 축 (0, turret_axis_y), 칸 k = 포탑이 월드에서 보는 방향)
+		"part": ["all", "hull", "turret"][VehicleModel.only], "turret_axis_y": maxf(axis, 0.0),
 		"size": [stats.size.x, stats.size.y], "height": stats.height,
 		"cells": cells,
 	}
@@ -126,7 +161,7 @@ static func _screen(q: Vector3, r: float) -> Vector2:
 	return IsoView.BASIS.basis_xform(Vector2(q.x, q.y).rotated(r)) - Vector2(0, q.z)
 
 
-func _shot(stats: VehicleType, ks: Array, at: Array, scale: float, px: Vector2i, gray: bool) -> Image:
+func _shot(stats: VehicleType, ks: Array, at: Array, scale: float, px: Vector2i, gray: bool, axis := 0.0) -> Image:
 	var sub := SubViewport.new()
 	sub.size = px
 	sub.transparent_bg = true
@@ -154,7 +189,7 @@ func _shot(stats: VehicleType, ks: Array, at: Array, scale: float, px: Vector2i,
 		var d := Drawer.new()
 		d.car = car
 		d.rotation = car.rotation
-		d.position = inv * at[i]
+		d.position = inv * at[i] - Vector2(0, axis).rotated(car.rotation)   # 포탑 가이드는 축이 칸 원점에
 		sub.add_child(d)
 	for f in 3:
 		await get_tree().process_frame

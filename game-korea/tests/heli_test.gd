@@ -9,6 +9,9 @@ extends Node
 ##  7. 소리: 세워 둔 헬기는 조용하고, 타면 날개가 빨라진다. 합성 소리는 날개가 지날 때마다 "두두두" 박자로 터진다.
 ##  7. 큰불이면 119 구조헬기가 날아와 불 위에서 물을 쏟아 끄고, 다 끄면 돌아간다 (Fires).
 ##  8. NPC 헬기(경찰·군·119)는 입체 모형으로 그린다: 모형 차종이 있고, 기수가 진행 방향으로 돌고, 돌면 기운다.
+##  9. 병원 옥상(층 1): 구급헬기 말고는 헬기가 서 있지 않다. 헬기로 옥상 빈 자리에 내려앉아 내리면 옥상 높이에 서서 걷고(둘레 벽에 막힌다),
+##     옥상에 세운 헬기에 다시 타 날아 나가면 그리는 높이가 툭 떨어지지 않는다. 옥상 계단(F)으로 인도와 옥상을 오르내린다.
+##     롯데월드몰·롯데호텔 옥상에도 내려앉는다.
 ## 실행: godot --headless --fixed-fps 60 --path . res://tests/heli_test.tscn
 
 const SEDAN: VehicleType = preload("res://data/vehicles/car_avela.tres")
@@ -22,6 +25,7 @@ func _ready() -> void:
 	await _test_chapter_gate()
 	await _test_flight()
 	await _test_rescue_heli()
+	await _test_roof()
 	_test_npc_heli_look()
 	CityMap.set_chapter(1)
 	if _failures.is_empty():
@@ -44,10 +48,19 @@ func _make_main(chapter: int) -> Node2D:
 	return main
 
 
+## 땅(부두)의 탈 수 있는 헬기 — 병원 옥상(층 1)에 세워 둔 헬기는 _roof_helis
 func _helis(main: Node2D) -> Array[Vehicle]:
 	var out: Array[Vehicle] = []
 	for v: Vehicle in main.vehicles:
-		if v.stats.flies:
+		if v.stats.flies and v.level == 0:
+			out.append(v)
+	return out
+
+
+func _roof_helis(main: Node2D) -> Array[Vehicle]:
+	var out: Array[Vehicle] = []
+	for v: Vehicle in main.vehicles:
+		if v.stats.flies and v.level == 1:
 			out.append(v)
 	return out
 
@@ -55,10 +68,11 @@ func _helis(main: Node2D) -> Array[Vehicle]:
 func _test_chapter_gate() -> void:
 	var main := _make_main(1)
 	await _frames(2)
-	_expect(_helis(main).is_empty(), "1장에는 탈 수 있는 헬기가 없다")
+	_expect(_helis(main).is_empty() and _roof_helis(main).is_empty(), "1장에는 탈 수 있는 헬기가 없다 (병원 옥상에도)")
 	main.set_chapter(4)
 	await _frames(1)
 	_expect(_helis(main).size() == 1, "4장이 열리면 헬기가 한 대 생긴다 (%d)" % _helis(main).size())
+	_expect(_roof_helis(main).is_empty(), "병원 옥상에는 탈 수 있는 헬기를 세우지 않는다 — 구급헬기만 (%d)" % _roof_helis(main).size())
 	main.set_chapter(4)
 	_expect(_helis(main).size() == 1, "장을 다시 정해도 겹쳐 세우지 않는다 (%d)" % _helis(main).size())
 	main.queue_free()
@@ -352,6 +366,125 @@ func _test_synth() -> void:
 	_expect(absi(beats - expect) <= 1, "날개 박자: 1초에 %d번 \"두\" (기대 %d)" % [beats, expect])
 
 
+func _test_roof() -> void:
+	var main := _make_main(4)
+	await _frames(2)
+	var d: Director = main.director
+	_expect(_roof_helis(main).is_empty(), "병원 옥상에는 구급헬기 말고 헬기가 없다 (%d)" % _roof_helis(main).size())
+	var ems: EmsDispatcher = main.ems
+	var rf := CityMap.roof_at(ems.pad)
+	_expect(rf >= 0 and ems.heli != null and ems.heli.parked, "구급헬기는 병원 옥상 헬리패드에 서 있다 %s" % ems.pad)
+	if rf < 0 or _helis(main).is_empty():
+		main.queue_free()
+		await _frames(2)
+		return
+	var roof: CityMap.Roof = CityMap.roofs[rf]
+	await _frames(2)
+
+	# 부두 헬기로 옥상 서쪽 빈 자리 위에 와서 F — 옥상에 내려앉아 내린다
+	var heli := _helis(main)[0]
+	d.enter_immediately(heli)
+	heli.altitude = heli.stats.fly_height
+	var spot := Vector2(roof.rect.position.x + roof.rect.size.x * 0.25, roof.rect.get_center().y)
+	heli.place(spot, PI * 0.5)
+	await _frames(2)
+	d.request_enter_exit()
+	_expect(heli.landing, "옥상 위에서 F를 누르면 착륙을 시작한다")
+	for f in 600:
+		await _frames(1)
+		if d.current_vehicle == null:
+			break
+	var p: Player = main.player
+	_expect(d.current_vehicle == null and heli.level == 1 and not heli.airborne(),
+		"옥상에 내려앉으면 내린다 (높이 %.1f, 층 %d)" % [heli.altitude, heli.level])
+	_expect(not IsoView.enabled or absf(heli.ground - IsoView.ground(heli.global_position) - roof.height) < 0.5,
+		"옥상에 선 헬기는 옥상 높이에 그린다 (%.0f, 옥상 %.0f)" % [heli.ground, roof.height])
+	var spare := heli
+	_expect(p.level == 1 and roof.rect.has_point(p.global_position), "주인공은 옥상(층 1)에 선다 %s" % p.global_position)
+	_expect(p.z_index > IsoView.z_of(roof.rect.get_center()), "옥상의 주인공은 병원 본채 앞에 그린다 (z %d)" % p.z_index)
+
+	# 걸어 다닌다: 서쪽으로 계속 걸어도 옥상 둘레 벽에 막힌다
+	var cmd := PlayerInputCommand.new()
+	cmd.move_world = Vector2.LEFT
+	p.control.submit(cmd)
+	var from := p.global_position
+	await _frames(150)
+	_expect(p.global_position.distance_to(from) > 30.0, "옥상을 서쪽으로 걸어 다닌다 (%.0f)" % p.global_position.distance_to(from))
+	_expect(roof.rect.grow(2.0).has_point(p.global_position) and p.level == 1, "옥상 밖으로 걸어 나가지 못한다 %s" % p.global_position)
+	cmd.move_world = Vector2.ZERO
+	p.control.submit(cmd)
+	p.control.use_local()
+
+	# 계단: 옥탑 문 앞에서 F → 인도로 내려오고, 인도의 계단 끝에서 F → 다시 옥상
+	p.global_position = roof.stair_top
+	await _frames(2)
+	_expect(not p.blocked_at(roof.stair_top), "옥상 계단 윗끝은 막혀 있지 않다 %s" % roof.stair_top)
+	_expect(d.nearest_stairs() == [rf, false], "옥탑 문 앞에서 계단으로 내려갈 수 있다 %s" % [d.nearest_stairs()])
+	d.request_enter_exit()
+	await _frames(2)
+	_expect(p.level == 0 and p.global_position.distance_to(roof.stair_ground) < 2.0 and not p.blocked_at(p.global_position),
+		"계단으로 내려오면 인도에 선다 (층 %d) %s" % [p.level, p.global_position])
+	_expect(d.nearest_stairs() == [rf, true], "인도의 계단 끝에서 옥상으로 오를 수 있다")
+	d.request_enter_exit()
+	await _frames(2)
+	_expect(p.level == 1 and roof.has_point(p.global_position), "계단으로 오르면 옥상에 선다 (층 %d)" % p.level)
+
+	# 옥상에 세운 헬기에 다시 타 날아 나간다
+	p.global_position = spare.door_position(false)
+	await _frames(2)
+	_expect(d.nearest_enterable() == spare, "옥상에 세운 헬기 문 앞에서 다시 탈 수 있다")
+	d.enter_immediately(spare)
+	Input.action_press("accelerate")
+	var seen := 0.0
+	var jump := 0.0
+	var last := spare.altitude + spare.ground
+	for f in 400:
+		await _frames(1)
+		var now := spare.altitude + spare.ground
+		jump = maxf(jump, absf(now - last))
+		last = now
+		seen = f
+		if spare.level == 0 and not roof.rect.has_point(spare.global_position):
+			break
+	Input.action_release("accelerate")
+	_expect(spare.level == 0 and spare.airborne(), "옥상 헬기로 이륙해 옥상 밖으로 날아 나간다 (층 %d, %d틱)" % [spare.level, seen])
+	_expect(jump < 6.0, "옥상을 벗어날 때 그리는 높이가 툭 떨어지지 않는다 (가장 큰 변화 %.1f)" % jump)
+
+	# 롯데월드몰·롯데호텔 옥상: 호텔 옥상(날 높이보다 높다) 끝에 내려앉고, 옥상마다 계단 윗끝이 비어 있다
+	var hotel: CityMap.Roof = null
+	for r2: CityMap.Roof in CityMap.roofs:
+		if r2.height > 200.0:
+			hotel = r2
+	_expect(hotel != null and CityMap.roofs.size() >= 3, "롯데호텔 옥상이 있다 (옥상 %d곳)" % CityMap.roofs.size())
+	if hotel:
+		var a := hotel.poly[1] - hotel.poly[0]
+		if (hotel.poly[2] - hotel.poly[1]).length() > a.length():
+			a = hotel.poly[2] - hotel.poly[1]
+		var hspot := hotel.rect.get_center() + a.normalized() * (a.length() * 0.5 - 46.0)
+		spare.place(hspot, a.angle() + PI * 0.5)
+		await _frames(2)
+		d.request_enter_exit()
+		for f in 900:
+			await _frames(1)
+			if d.current_vehicle == null:
+				break
+		_expect(d.current_vehicle == null and spare.level == 1 and hotel.has_point(p.global_position),
+			"날 높이보다 높은 롯데호텔 옥상 끝에도 내려앉아 내린다 (층 %d, 높이 %.1f)" % [spare.level, spare.altitude])
+	if d.current_vehicle:
+		d.exit_vehicle()
+	for r2: CityMap.Roof in CityMap.roofs:
+		p.set_level(1)
+		p.global_position = r2.stair_top
+		await _frames(1)
+		_expect(r2.has_point(r2.stair_top) and not p.blocked_at(r2.stair_top), "옥상(높이 %.0f) 계단 윗끝이 비어 있다 %s" % [r2.height, r2.stair_top])
+		p.set_level(0)
+		p.global_position = r2.stair_ground
+		await _frames(1)
+		_expect(not p.blocked_at(r2.stair_ground), "옥상(높이 %.0f) 계단 아래끝(인도)이 비어 있다 %s" % [r2.height, r2.stair_ground])
+	main.queue_free()
+	await _frames(2)
+
+
 func _big_building(main: Node2D) -> Rect2:
 	var best := Rect2()
 	var box := RectangleShape2D.new()
@@ -362,6 +495,7 @@ func _big_building(main: Node2D) -> Rect2:
 	var space: PhysicsDirectSpaceState2D = main.get_world_2d().direct_space_state
 	for r: Rect2 in main.city.buildings:
 		if not CityMap.is_open_block(CityMap.block_at(r.get_center())) or r.size.y < 150.0 or r.size.x < 120.0 \
+				or CityMap.roof_at(r.get_center()) >= 0 \
 				or r.get_area() <= best.get_area():
 			continue
 		query.transform = Transform2D(0.0, r.get_center())

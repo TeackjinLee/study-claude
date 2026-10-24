@@ -9,6 +9,7 @@ signal entering_started(vehicle: Vehicle)
 signal notice(text: String)          ## HUD에 띄울 안내 (헬기 착륙 등)
 
 const ENTER_RANGE := 90.0        ## 운전석 문에서 이 거리 안이면 탈 수 있다
+const STAIR_RANGE := 28.0        ## 옥상 계단 끝(CityMap.Roof의 stair_top·stair_ground)에서 이 거리 안이면 F로 오르내린다
 const ENTER_TIME := 0.25         ## 문까지 가서 타는 시간 (M1 기준: 0.3초 이내)
 const MAX_ENTER_SPEED := 200.0   ## 이보다 빠른 차에는 못 탄다
 const EJECT_OFFSET := 16.0
@@ -56,9 +57,46 @@ func request_enter_exit() -> void:
 	elif current_vehicle:
 		exit_vehicle()
 	else:
+		var st := nearest_stairs()
 		var v := nearest_enterable()
-		if v:
+		if not st.is_empty() and stairs_before(v):
+			use_stairs(st)
+		elif v:
 			_begin_enter(v)
+
+
+## 걸어서 닿는 옥상 계단 끝 [옥상 번호, 오르는가] (없으면 []) — 옥상(층 1)에서는 윗끝, 땅에서는 아래끝
+func nearest_stairs() -> Array:
+	if current_vehicle or _entering or not player.visible or not player.input_enabled:
+		return []
+	for i in CityMap.roofs.size():
+		var rf: CityMap.Roof = CityMap.roofs[i]
+		if player.level == 1 and player.global_position.distance_to(rf.stair_top) < STAIR_RANGE:
+			return [i, false]
+		if player.level == 0 and player.global_position.distance_to(rf.stair_ground) < STAIR_RANGE:
+			return [i, true]
+	return []
+
+
+## F를 계단에 쓰는가: 계단 끝이 가장 가까운 탈것의 문보다 가깝다 (옥상에 내려앉은 헬기 옆 계단)
+func stairs_before(v: Vehicle) -> bool:
+	if v == null:
+		return true
+	var st := nearest_stairs()
+	if st.is_empty():
+		return false
+	var rf: CityMap.Roof = CityMap.roofs[st[0]]
+	var at := rf.stair_ground if st[1] else rf.stair_top
+	return player.global_position.distance_to(at) < player.global_position.distance_to(v.door_position(false))
+
+
+## 계단으로 옥상에 오르거나 내려온다 (건물 안 계단은 그리지 않고 문에서 문으로 옮긴다)
+func use_stairs(st: Array) -> void:
+	var rf: CityMap.Roof = CityMap.roofs[st[0]]
+	var up: bool = st[1]
+	player.global_position = rf.stair_top if up else rf.stair_ground
+	player.set_level(1 if up else 0)
+	notice.emit("계단으로 옥상에 올라왔다" if up else "계단으로 내려왔다")
 
 
 func nearest_enterable() -> Vehicle:

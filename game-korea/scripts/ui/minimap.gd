@@ -3,10 +3,10 @@ extends Control
 ## 원형 미니맵 (docs/06 HUD). 주인공이 가운데. 위에서 보는 화면에서는 위가 북쪽,
 ## 2.5D 화면에서는 화면과 같은 방향(위가 북서쪽)으로 45° 돌린다 — N 표시가 북쪽을 가리킨다.
 ## 밝은 도로 사이에 어두운 블록과 부지(건물), 강·공원, 기능 건물은 동그란 그림 표(병원 십자·경찰 별·은신처 집·카센터 붓·
-## 아지트 왕관·창고 상자), 공중전화·경찰차·쫓는 범인 점을 찍는다. 미션·부업 목표가 있으면 도로를 따라 노란 길(GPS,
+## 아지트 왕관·창고 상자), 공중전화·경찰차·쫓는 범인 점을 찍는다. 경찰·군 헬기(★5~)는 도는 날개 그림 표로, 원 밖이면 테두리에 붙인다. 미션·부업 목표가 있으면 도로를 따라 노란 길(GPS,
 ## RoadNav.next_cell)을 긋고 목표에 핀을 꽂는다 — 원 밖이면 테두리에 방향 화살과 남은 거리.
 ## 달릴수록 넓게 본다 (SCALE_FOOT → SCALE_FAST). 아래 이름표에 구역 이름과 목표까지 거리.
-## 수배 중에는 카센터도 테두리에 붙여 방향을 보여 준다.
+## 수배 중에는 카센터도 테두리에 붙여 방향을 보여 준다 (★5부터는 도색으로 못 떼니 붙이지 않는다).
 ## 그림 표·노란 길·핀·주인공 화살촉 그리기(draw_*)와 route·lots_by_block은 정적이라 일시정지 큰 지도(MapView)도 같이 쓴다.
 
 const RADIUS := 96.0
@@ -32,6 +32,8 @@ const OUTLINE := Color(0, 0, 0, 0.85)
 const ICON_R := 8.0              ## 그림 표 반지름
 const POLICE_BLUE := Color(0.35, 0.55, 1.0)
 const POLICE_RED := Color(1, 0.2, 0.25)
+const HELI_POLICE := Color(0.12, 0.2, 0.45)
+const HELI_ARMY := Color(0.33, 0.4, 0.2)
 
 enum Icon { HOSPITAL, POLICE, HIDEOUT, SPRAY, HQ, WAREHOUSE }
 
@@ -149,11 +151,14 @@ func _draw() -> void:
 	_icon(city.hq.get_center(), me, c, Icon.HQ, false)
 	_icon(city.warehouse.get_center(), me, c, Icon.WAREHOUSE, false)
 	_icon(City.hideout_door(), me, c, Icon.HIDEOUT, false)
-	_icon(City.spray_bay(), me, c, Icon.SPRAY, police.wanted.level > 0)
+	_icon(City.spray_bay(), me, c, Icon.SPRAY, police.wanted.level > 0 and not police.wanted.locked())
 	for p in missions.phones:
 		_dot(p.pos, me, c, (p.gang as GangType).accent, 3.5, false)
 	for car in police.cars:
 		_dot(car.global_position, me, c, police_color(car), 3.5, false)
+	for h in police.helis:
+		if not h.crashed():
+			_heli(h, me, c)
 	var thief := events.target_position() if events else Vector2.INF
 	if thief != Vector2.INF:
 		_dot(thief, me, c, Color(1.0, 0.3, 0.2), 4.0 + 1.0 * sin(_time * 10.0), true)   # 쫓는 범인 (거리 이벤트)
@@ -357,6 +362,34 @@ func _dot(world: Vector2, me: Vector2, c: Vector2, color: Color, r: float, pin: 
 		p = c + off.normalized() * (RADIUS - r)
 	draw_circle(p, r + 1.5, OUTLINE)
 	draw_circle(p, r, color)
+
+
+## 헬기: 원 밖이면 테두리에 붙여 어느 쪽에서 오는지 보여 준다
+func _heli(h: PoliceHeli, me: Vector2, c: Vector2) -> void:
+	var p := _to_map(h.global_position, me, c)
+	var off := p - c
+	if off.length() > RADIUS - ICON_R:
+		p = c + off.normalized() * (RADIUS - ICON_R)
+	draw_heli(self, p, h.heading + _turn(), not h.beacons)
+
+
+## 헬기 그림 표: 동그란 바탕(경찰 남색·경광등 깜박임 / 군 국방색) + 흰 몸통·꼬리 + 도는 주 날개. angle 0 = 기수가 위
+static func draw_heli(ci: CanvasItem, p: Vector2, angle: float, army: bool) -> void:
+	const R := ICON_R
+	var blink := (Time.get_ticks_msec() / 250) % 2 == 0
+	ci.draw_circle(p, R + 1.5, OUTLINE)
+	ci.draw_circle(p, R, HELI_ARMY if army else HELI_POLICE)
+	var fwd := Vector2.UP.rotated(angle)
+	var w := Color.WHITE
+	ci.draw_line(p, p - fwd * 6.5, w, 1.6, true)
+	ci.draw_line(p - fwd * 6.5 + fwd.orthogonal() * 2.0, p - fwd * 6.5 - fwd.orthogonal() * 2.0, w, 1.4, true)
+	ci.draw_circle(p + fwd * 1.0, 2.8, w)
+	var spin := Time.get_ticks_msec() * 0.012
+	for k in 2:
+		var blade := Vector2.from_angle(spin + k * PI * 0.5) * 6.5
+		ci.draw_line(p + fwd - blade, p + fwd + blade, Color(1, 1, 1, 0.8), 1.2, true)
+	if not army:
+		ci.draw_circle(p + fwd * 1.0, 1.2, POLICE_RED if blink else POLICE_BLUE)
 
 
 ## 기능 건물 그림 표: 동그란 바탕 + 흰 그림. pin이면 원 밖일 때 테두리에 붙인다

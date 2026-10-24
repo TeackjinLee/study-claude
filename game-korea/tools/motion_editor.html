@@ -316,7 +316,7 @@ details p,details li{color:var(--dim);font-size:12px}
       <button class="small" id="gPause">멈춤</button>
     </div>
     <h2 style="margin-top:12px">조작</h2>
-    <p class="hint">방향키·WASD 걷기 · Shift 달리기 · J(또는 Ctrl·클릭) 주먹 — 0.7초 안에 이어 누르면 잽 → 스트레이트 → 훅 · F 넘어지기/일어나기 · 스페이스 멈춤 · , . 한 장씩</p>
+    <p class="hint">방향키·WASD 걷기 · Shift 달리기 · J(또는 Ctrl·클릭) 주먹 — 0.7초 안에 이어 누르면 잽 → 스트레이트 → 훅 (총 겨누기 동작에서는 쏘기) · F 넘어지기/일어나기 · 스페이스 멈춤 · , . 한 장씩</p>
     <p class="hint">게임과 같은 규칙입니다: 없는 방향은 좌우 짝을 뒤집고(↘ ← ↙), 그것도 없으면 가장 가까운 방향. 경계에서는 직전 방향을 12° 더 지킵니다. 주인공은 크게 돌면 45°씩 0.07초마다 돌아 보입니다. 걸음은 속도에 맞춰 넘깁니다(걷기 위상 = 거리 ÷ 9).</p>
     <div class="card" id="gMeta"></div>
   </section>
@@ -2058,12 +2058,15 @@ const GR = {
   PUNCH_SEGS: [[1, 2, 3], [4, 5, 6], [7, 8, 9, 10]], COMBO_GAP: 0.7,   // Player.COMBO_GAP
   SPRITE_HEIGHT: 31, SPRITE_BODY: 96, SCREEN_ZOOM: 1.1,               // 화면 키 = SPRITE_HEIGHT × size × ChaseCamera.BASE_ZOOM
   MIRROR: [4, 3, 2, 1, 0, 7, 6, 5],
+  KO_CELL: [256, 112], KO_FOOT: [128, 108],  // PersonRig.KO_CELL·KO_FOOT (영상·포즈 옮기기 넘어짐 — 누운 몸이 옆으로 길다)
+  POSES: ['ko', 'rifle', 'pistol', 'rocket'], // 따로 한 장인 시트 <id>_<자세>_dir8.png (.json <자세>_dirs·<자세>_clips)
 };
-const GMODES = [['idle', '서 있기'], ['walk', '걷기'], ['run', '달리기'], ['fall', '넘어짐'], ['punch', '주먹 콤보']];
+const GMODES = [['idle', '서 있기'], ['walk', '걷기'], ['run', '달리기'], ['fall', '넘어짐'], ['punch', '주먹 콤보'], ['gun', '총 겨누기·쏘기']];
+const POSE_NAME = {rifle: '소총', pistol: '권총', rocket: '로켓포'};
 const G = {on: false, chars: [], cur: null, mode: 'walk', dir: 1, zoom: 3, all8: false, every: false, scale: true, move: true,
            smooth: true, speed: 1, paused: false, keys: new Set(), shift: false, last: 0, phase: 0, pos: {x: 0, y: 0},
            shown: {}, turnAt: 0, fallAt: -1, punch: null, queued: false, combo: 0, comboAt: -9, autoAt: 0, stepN: 0, clock: 0,
-           stripKey: '', stripIdx: -1};
+           stripKey: '', stripIdx: -1, shotAt: -99};
 
 // .json의 방향 목록 → 방향마다 [그릴 행, 뒤집기] 또는 null (PersonRig._dir8_ok)
 function gOk(have) {
@@ -2074,8 +2077,13 @@ function gInfo(m) {
   return {frames: m.frames ?? 16, ok: gOk(m.dirs || []), runFrames: m.run_frames || 0, runOk: gOk(m.run_dirs || []),
           fallFrames: m.fall_frames || 0, fallCol: m.fall_col || 0, fallOk: gOk(m.fall_dirs || []),
           punchFrames: m.punch_frames || 0, punchCol: m.punch_col || 0, punchOk: gOk(m.punch_dirs || []),
-          attackOk: gOk(m.attack_dirs || [])};
+          attackOk: gOk(m.attack_dirs || []),
+          // 따로 한 장인 시트: 넘어짐(ko — fall 한 번 · out 되풀이)·총 자세(aim 되풀이 · fire [· walk])
+          poses: Object.fromEntries(GR.POSES.filter(p => (m[p + '_clips'] || []).length).map(p => [p, {
+            ok: gOk(m[p + '_dirs'] || []), clips: Object.fromEntries(m[p + '_clips'].map(c => [c.name, c]))}]))};
 }
+// 이 인물의 총 자세 (게임 PersonRig._gun_pose: 보행자는 그림이 있는 첫 자세, 주인공은 소총부터)
+const gGunPose = (ch) => ['rifle', 'pistol', 'rocket'].find(p => ch.info.poses[p]) || null;
 const angDiff = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
 // 화면 진행 각도 → 8방향 번호 (PersonRig.dir8_pick)
 function gPick(a, prev, ok) {
@@ -2096,11 +2104,18 @@ function gLoad(list, base) {
     img.onload = () => gRenderList();
     // 영상 주먹 공격은 따로 한 장 (<id>_attacks_dir8.png — 걷기 시트 옆에 붙이면 텍스처 가로 한도를 넘는다)
     let atk = null;
+    const v = (window.GAME_DIR8 || {}).version || 0;
     if (!c.src && (c.meta?.attack_dirs || []).length) {
       atk = new Image();
-      atk.src = `${base}${c.id}_attacks_dir8.png?v=${(window.GAME_DIR8 || {}).version || 0}`;
+      atk.src = `${base}${c.id}_attacks_dir8.png?v=${v}`;
     }
-    return Object.assign({}, c, {img, atk, info: gInfo(c.meta || {})});
+    const info = gInfo(c.meta || {}), sheets = {};
+    for (const p of Object.keys(info.poses)) {
+      const im = new Image();
+      im.src = c.srcs?.[p] || `${base}${c.id}_${p}_dir8.png?v=${v}`;
+      sheets[p] = im;
+    }
+    return Object.assign({}, c, {img, atk, sheets, info});
   });
   if (!G.chars.find(c => c.id === (G.cur && G.cur.id))) G.cur = G.chars[0] || null;
   else G.cur = G.chars.find(c => c.id === G.cur.id);
@@ -2129,7 +2144,8 @@ async function gFromFolder(files) {
     try {
       const meta = JSON.parse(await f.text()), old = G.chars.find(c => c.id === m[1]);
       list.push({id: m[1], name: old ? old.name : m[1], scale: old ? old.scale : 1, walk: old ? old.walk : (m[1] === 'player' ? 110 : 50),
-                 run: old ? old.run : (m[1] === 'player' ? 190 : 150), meta, src: URL.createObjectURL(byName.get(m[1] + '_dir8.png'))});
+                 run: old ? old.run : (m[1] === 'player' ? 190 : 150), meta, src: URL.createObjectURL(byName.get(m[1] + '_dir8.png')),
+                 srcs: Object.fromEntries(GR.POSES.filter(p => byName.has(`${m[1]}_${p}_dir8.png`)).map(p => [p, URL.createObjectURL(byName.get(`${m[1]}_${p}_dir8.png`))]))});
     } catch (e) { console.warn(f.name, e); }
   }
   if (!list.length) return toast('그 폴더에 <id>_dir8.png·.json이 없습니다');
@@ -2138,10 +2154,10 @@ async function gFromFolder(files) {
   toast(`폴더에서 ${list.length}종을 읽었습니다`);
 }
 
-function gCell(ctx, ch, col, row, flip, x, y, z, alpha, img) {
+function gCell(ctx, ch, col, row, flip, x, y, z, alpha, img, cell, foot) {
   img = img || ch.img;
   if (!img.complete || !img.naturalWidth) return;
-  const [w, h] = GR.CELL, [fx, fy] = GR.FOOT;
+  const [w, h] = cell || GR.CELL, [fx, fy] = foot || GR.FOOT;
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(flip ? -z : z, z);
@@ -2169,8 +2185,10 @@ function gRenderList() {
   box.replaceChildren(...G.chars.map(ch => {
     const i = ch.info, tags = [i.frames ? `걷기 ${i.frames}` : '걷기 없음(게임은 예전 그림)'];
     if (i.runFrames) tags.push(`달리기 ${i.runFrames}`);
-    if (i.fallFrames) tags.push('넘어짐');
-    if (i.punchFrames) tags.push('주먹');
+    if (i.poses.ko || i.fallFrames) tags.push('넘어짐');
+    if (i.punchFrames || ch.atk) tags.push('주먹');
+    const gp = gGunPose(ch);
+    if (gp) tags.push(POSE_NAME[gp]);
     if (ch.scale !== 1) tags.push(`키 ×${ch.scale}`);
     return el('button', {class: 'gc' + (ch === G.cur ? ' on' : ''), title: ch.id, onclick: () => { G.cur = ch; G.shown = {}; G.fallAt = -1; G.punch = null; gRenderList(); gRenderPanel(); }},
       gThumb(ch), el('span', {}, el('b', {}, ch.name), el('small', {}, `${ch.id} · ${tags.join(' · ')}`)));
@@ -2201,14 +2219,19 @@ function gRenderPanel() {
     el('div', {}, `키 배율 ×${ch.scale} · 걷는 속도 ${ch.walk} · 달리는 속도 ${ch.run}`),
     el('div', {}, `걷기 ${i.frames}장 (1~${i.frames}열): ${names(i.ok)}`),
     el('div', {}, i.runFrames ? `달리기 ${i.runFrames}장 (${1 + i.frames}~${i.frames + i.runFrames}열): ${names(i.runOk)}` : '달리기 그림 없음 — 걷기를 빠르게 넘긴다'),
-    el('div', {}, i.fallFrames ? `넘어짐 ${i.fallFrames}장 (${i.fallCol}열~): ${names(i.fallOk)}` : '넘어짐 그림 없음 (게임은 눕힌 그림)'),
+    el('div', {}, i.poses.ko ? `넘어짐 ${ch.id}_ko_dir8.png — 쓰러짐 ${i.poses.ko.clips.fall.frames}장 · 기절 숨쉬기 ${i.poses.ko.clips.out.frames}장: ${names(i.poses.ko.ok)}`
+      : i.fallFrames ? `넘어짐 ${i.fallFrames}장 (${i.fallCol}열~): ${names(i.fallOk)}` : '넘어짐 그림 없음 (게임은 눕힌 그림)'),
     el('div', {}, i.punchFrames ? `주먹 콤보 ${i.punchFrames}장 (${i.punchCol}열~)` : '주먹 그림 없음'),
-    ...(ch.id !== 'player' && (i.fallFrames || i.punchFrames) ? [el('div', {}, '※ 게임에서 넘어짐·주먹 그림은 주인공만 씁니다')] : []));
+    ...['rifle', 'pistol', 'rocket'].filter(p => i.poses[p]).map(p => el('div', {}, `${POSE_NAME[p]} ${ch.id}_${p}_dir8.png — ` +
+      Object.values(i.poses[p].clips).map(c => `${MODE_NAME[c.name] || c.name} ${c.frames}장`).join(' · ') + `: ${names(i.poses[p].ok)}`)),
+    ...(ch.id !== 'player' && !i.poses.ko && (i.fallFrames || i.punchFrames) ? [el('div', {}, '※ 게임에서 이 넘어짐·주먹 그림은 주인공만 씁니다')] : []));
 }
 function gOkFor(ch, mode) {
   const i = ch.info;
   if (mode === 'run' && i.runFrames) return i.runOk;
+  if (mode === 'fall' && i.poses.ko) return i.poses.ko.ok;
   if (mode === 'fall' && i.fallFrames) return i.fallOk;
+  if (mode === 'gun' && gGunPose(ch)) return i.poses[gGunPose(ch)].ok;
   if (mode === 'punch' && i.punchFrames >= 11) return i.punchOk;
   return i.ok;
 }
@@ -2248,6 +2271,32 @@ function gFrame(ch, act, a, key) {
               i: f, n: spec.frames, first: spec.col, atk: true};
     }
   }
+  // 따로 한 장 시트 (PersonRig._draw_dir8_fall 영상 넘어짐 · _draw_gun 총 자세)
+  const pose = act === 'fall' && i.poses.ko ? 'ko' : act === 'gun' ? gGunPose(ch) : null;
+  if (pose) {
+    const P = i.poses[pose], k = gPick(a, G.shown[key] ?? -1, P.ok);
+    if (k >= 0) {
+      G.shown[key] = k;
+      const row = P.ok[k][0], flip = P.ok[k][1], ko = pose === 'ko';
+      const base = {row, flip, k, img: ch.sheets[pose], cell: ko ? GR.KO_CELL : GR.CELL, foot: ko ? GR.KO_FOOT : GR.FOOT, sheet: pose};
+      if (ko) {
+        const drop = P.clips.fall, out = P.clips.out, t = Math.max(0, G.clock - G.fallAt);
+        if (t < drop.duration) {
+          const j = Math.min(Math.floor(t / drop.duration * drop.frames), drop.frames - 1);
+          return Object.assign(base, {col: drop.col + j, label: '넘어짐', i: j, n: drop.frames, first: drop.col, lie: j / Math.max(1, drop.frames - 1), dur: drop.duration / drop.frames});
+        }
+        const j = Math.floor((t - drop.duration) / out.duration * out.frames) % out.frames;
+        return Object.assign(base, {col: out.col + j, label: '기절 (숨쉬기)', i: j, n: out.frames, first: out.col, lie: 1, dur: out.duration / out.frames});
+      }
+      const fire = P.clips.fire, aim = P.clips.aim, since = G.clock - G.shotAt;
+      if (since >= 0 && since < fire.duration) {
+        const j = Math.min(Math.floor(since / fire.duration * fire.frames), fire.frames - 1);
+        return Object.assign(base, {col: fire.col + j, label: `${POSE_NAME[pose]} 쏘기`, i: j, n: fire.frames, first: fire.col, dur: fire.duration / fire.frames});
+      }
+      const j = Math.floor(G.clock / aim.duration * aim.frames) % aim.frames;
+      return Object.assign(base, {col: aim.col + j, label: `${POSE_NAME[pose]} 겨누기`, i: j, n: aim.frames, first: aim.col, dur: aim.duration / aim.frames});
+    }
+  }
   let ok = i.ok, run = false;
   if (act === 'run' && i.runFrames) { ok = i.runOk; run = true; }
   if (act === 'fall' && i.fallFrames) ok = i.fallOk;
@@ -2274,7 +2323,7 @@ function gFrame(ch, act, a, key) {
     if (f >= 0 && f < seg.length) return {col: i.punchCol + seg[f], row, flip, k, label: ['잽', '스트레이트', '훅'][G.punch[0]], i: seg[f], n: i.punchFrames, first: i.punchCol};
     return {col: i.punchCol, row, flip, k, label: '싸움 자세', i: 0, n: i.punchFrames, first: i.punchCol};
   }
-  if (act === 'idle' || act === 'fall' || act === 'punch') return {col: 0, row, flip, k, label: '서 있기', i: 0, n: 1, first: 0};
+  if (act === 'idle' || act === 'fall' || act === 'punch' || act === 'gun') return {col: 0, row, flip, k, label: '서 있기', i: 0, n: 1, first: 0};
   const sp = act === 'run' ? ch.run : ch.walk, ph = G.phase * sp / 9;   // walk_phase += delta × 속도 / 9
   if (run) {
     const m = i.runFrames, f = ((Math.floor(ph * GR.RUN_CADENCE * m / (Math.PI * 2)) % m) + m) % m;
@@ -2294,7 +2343,7 @@ function gDrawOne(ctx, ch, fr, x, y, z) {
   rg.addColorStop(0, `rgba(0,0,0,${0.32 + lie * 0.18})`); rg.addColorStop(lie > 0 ? 0.45 : 0.98, `rgba(0,0,0,${0.32 + lie * 0.18})`); rg.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   ctx.imageSmoothingEnabled = G.smooth; ctx.imageSmoothingQuality = 'high';
-  gCell(ctx, ch, fr.col, fr.row, fr.flip, x, y, zz, null, fr.atk ? ch.atk : null);
+  gCell(ctx, ch, fr.col, fr.row, fr.flip, x, y, zz, null, fr.img || (fr.atk ? ch.atk : null), fr.cell, fr.foot);
 }
 function gGround(ctx, W, H, step, ox, oy) {
   ctx.fillStyle = '#3d423f'; ctx.fillRect(0, 0, W, H);
@@ -2328,7 +2377,10 @@ function gTick(t) {
     else if (G.mode !== 'punch' && G.clock - G.punch[1] > gAttackDuration(ch, G.punch[0]) + GR.COMBO_GAP) G.punch = null;
   }
   if (act === 'fall' && G.fallAt < 0) G.fallAt = G.clock;
-  if (G.mode === 'fall' && ka == null && ch && G.clock - G.fallAt > ch.info.fallFrames * GR.FALL_FRAME + 1.2) G.fallAt = G.clock;   // 다시 처음부터
+  const fallLen = ch && ch.info.poses.ko ? ch.info.poses.ko.clips.fall.duration + 2 * ch.info.poses.ko.clips.out.duration : ch ? ch.info.fallFrames * GR.FALL_FRAME + 1.2 : 0;
+  if (G.mode === 'fall' && ka == null && ch && G.clock - G.fallAt > fallLen + 0.6) G.fallAt = G.clock;   // 다시 처음부터
+  // 총 자세: 1.6초마다 저절로 한 번 쏜다 (J·클릭으로도)
+  if (G.mode === 'gun' && ka == null && ch && G.clock - G.shotAt > 1.6) G.shotAt = G.clock;
   if (G.mode === 'punch' && ka == null && ch && ch.info.punchFrames >= 11 && (!G.punch || G.clock - G.punch[1] > gAttackDuration(ch, G.punch[0]) + 0.3)) {
     G.combo = G.punch ? (G.punch[0] + 1) % gAttackCount(ch) : 0; G.comboAt = G.clock; G.punch = [G.combo, G.clock];
   }
@@ -2348,7 +2400,7 @@ function gTick(t) {
     const gw = W / cols, gh = H / rows, zz = Math.min(gw / GR.CELL[0], gh / GR.CELL[1]) * 0.95;
     G.chars.forEach((c, j) => {
       const x = gw * (j % cols + 0.5), y = gh * ((j / cols | 0) + 0.5) + GR.CELL[1] * zz * 0.42;
-      const fr = gFrame(c, act === 'punch' && !c.info.punchFrames ? 'idle' : act, a, 'all:' + c.id);
+      const fr = gFrame(c, (act === 'punch' && !c.info.punchFrames) || (act === 'gun' && !gGunPose(c)) ? 'idle' : act, a, 'all:' + c.id);
       if (fr) gDrawOne(ctx, c, fr, x, y, zz);
       ctx.fillStyle = c === ch ? '#ffb347' : '#fff'; ctx.font = `${11 * dpr}px sans-serif`;
       ctx.fillText(c.name, gw * (j % cols) + 4 * dpr, gh * (j / cols | 0) + 13 * dpr);
@@ -2368,7 +2420,7 @@ function gTick(t) {
     main = gFrame(ch, act, a, 'main');
     if (main) {
       // 한 장 시간 (, . 로 한 장씩 넘길 때)
-      G.fdur = main.label === '넘어짐' ? GR.FALL_FRAME : act === 'punch' ? GR.PUNCH_FRAME : main.n > 1
+      G.fdur = main.dur ? main.dur : main.label === '넘어짐' ? GR.FALL_FRAME : act === 'punch' ? GR.PUNCH_FRAME : main.n > 1
         ? 2 * Math.PI * 9 / ((act === 'run' ? ch.run : ch.walk) * (act === 'run' ? GR.RUN_CADENCE : GR.CADENCE) * main.n) : 1 / 30;
       gDrawOne(ctx, ch, main, Math.round(W / 2), Math.round(H / 2 + (GR.FOOT[1] - GR.CELL[1] / 2) * z), z);
       const shownDir = DIRS[main.k], srcDir = DIRS[main.row];
@@ -2383,19 +2435,21 @@ function gTick(t) {
 // 지금 쓰는 그림 줄을 칸마다 보여 주고 지금 칸을 표시한다
 function gStrip(ch, fr) {
   const box = $('#gStrip');
-  const key = ch && fr ? `${ch.id}:${fr.atk ? 'atk' : ''}:${fr.first}:${fr.n}:${fr.row}:${fr.flip}:${ch.img.complete}` : '';
+  const sheet = fr && fr.img ? fr.img : ch && fr && fr.atk ? ch.atk : ch && ch.img;
+  const key = ch && fr ? `${ch.id}:${fr.sheet || (fr.atk ? 'atk' : '')}:${fr.first}:${fr.n}:${fr.row}:${fr.flip}:${sheet.complete}` : '';
   if (key !== G.stripKey) {
     G.stripKey = key; G.stripIdx = -1;
     if (!key) { box.replaceChildren(el('span', {class: 'hint'}, G.every || G.all8 ? '여럿을 함께 볼 때는 줄을 보이지 않습니다' : '')); $('#gStripHint').textContent = ''; return; }
     const cols = Array.from({length: fr.n}, (_, j) => fr.first + j);
     box.replaceChildren(...cols.map(col => {
-      const cv = mk(GR.CELL[0], GR.CELL[1]), x = cv.getContext('2d');
-      gCell(x, ch, col, fr.row, fr.flip, GR.FOOT[0], GR.FOOT[1], 1, null, fr.atk ? ch.atk : null);
+      const [cw, chh] = fr.cell || GR.CELL, [fx, fy] = fr.foot || GR.FOOT;
+      const cv = mk(cw, chh), x = cv.getContext('2d');
+      gCell(x, ch, col, fr.row, fr.flip, fx, fy, 1, null, sheet, fr.cell, fr.foot);
       cv.dataset.col = col;
       cv.title = `${col}열`;
       return cv;
     }));
-    $('#gStripHint').textContent = `— ${ch.id}${fr.atk ? '_attacks' : ''}_dir8.png ${fr.row + 1}행(${ARROW[DIRS[fr.row]]}) ${fr.first}~${fr.first + cols.length - 1}열` + (fr.flip ? ' · 뒤집어 씀' : '');
+    $('#gStripHint').textContent = `— ${ch.id}${fr.sheet ? '_' + fr.sheet : fr.atk ? '_attacks' : ''}_dir8.png ${fr.row + 1}행(${ARROW[DIRS[fr.row]]}) ${fr.first}~${fr.first + cols.length - 1}열` + (fr.flip ? ' · 뒤집어 씀' : '');
   }
   if (fr && fr.col !== G.stripIdx) {
     G.stripIdx = fr.col;
@@ -2429,7 +2483,7 @@ function gBind() {
     $(id).onchange = (e) => { G[k] = e.target.checked; if (k === 'all8' && G.all8) { G.every = false; $('#gEvery').checked = false; }
                               if (k === 'every' && G.every) { G.all8 = false; $('#gAll8').checked = false; } };
   }
-  $('#gv').addEventListener('mousedown', () => gPunch());
+  $('#gv').addEventListener('mousedown', () => { if (G.mode === 'gun') G.shotAt = G.clock; else gPunch(); });
   setZoom(G.zoom);
   addEventListener('keydown', (e) => {
     if (!G.on) return;
@@ -2437,7 +2491,7 @@ function gBind() {
     const t = e.target;
     if ((t.tagName === 'INPUT' && !['checkbox', 'range'].includes(t.type)) || t.tagName === 'SELECT') return;
     if (MOVE_KEYS[e.code]) { G.keys.add(e.code); e.preventDefault(); return; }
-    if (e.code === 'KeyJ' || (e.code.startsWith('Control') && !e.repeat)) { e.preventDefault(); if (!e.repeat) gPunch(); return; }
+    if (e.code === 'KeyJ' || (e.code.startsWith('Control') && !e.repeat)) { e.preventDefault(); if (!e.repeat) { if (G.mode === 'gun') G.shotAt = G.clock; else gPunch(); } return; }
     if (e.code === 'KeyF' && !e.repeat) { G.fallAt = G.mode === 'fall' ? -1 : G.clock; G.mode = G.mode === 'fall' ? 'idle' : 'fall'; gRenderPanel(); return; }
     if (e.code === 'Space') { e.preventDefault(); $('#gPause').click(); return; }
     if (e.code === 'Comma' || e.code === 'Period') { G.paused = true; $('#gPause').classList.add('on'); G.stepN = e.code === 'Comma' ? -1 : 1; }

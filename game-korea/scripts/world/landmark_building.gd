@@ -10,9 +10,16 @@ const STYLES := [&"landmark_tower", &"terminal", &"market", &"dock_crane", &"bro
 const YELLOW := Color(0.88, 0.61, 0.12)
 ## 부두 헬기장에 세워 두는 헬기 (4장 부두가 열려야 생긴다)
 const DOCK_HELI := "res://data/vehicles/sp_heli.tres"
-## 부두 야적장에 세워 둔 군용 차량 (선적을 기다리는 자주포·전술차량 — 4장, 탈 수 있다)
+## 부두에 세워 둔 군용 차량 (4장, 탈 수 있다): 자주포는 군 창고(격납고) 안, 전술차량은 야적장
 const DOCK_SPG := "res://data/vehicles/army_spg.tres"
 const DOCK_JEEP := "res://data/vehicles/army_jeep.tres"
+## 부두 군 창고: 남쪽 벽에 문이 열려 있고 안에 자주포가 문을 보고 선다. 지붕·앞벽은 들어가면 흐려진다(City._fade_pieces)
+const HANGAR_WALL := 6.0
+const HANGAR_H := 60.0
+const HANGAR_DOOR := Vector2(76.0, 36.0)     ## 문 폭·높이 (높이는 사람 키보다 커야 문 위 벽이 막지 않는다)
+const HANGAR_WALL_COLOR := Color("7f8a7c")
+const HANGAR_ROOF_COLOR := Color("4d5b4a")
+const HANGAR_FLOOR := Color("5d605c")
 const HELIPAD_RADIUS := 50.0
 const STEEL := Color("3b4144")
 const WOOD := Color("7a5536")
@@ -343,8 +350,9 @@ static func _dock_frame(r: Rect2) -> Dictionary:
 	var shed := Rect2(Vector2(area.position.x + area.size.x * 0.64, area.position.y + 10.0), Vector2(area.size.x * 0.36 - 6.0, area.size.y * 0.4))
 	# 헬기장: 창고 남쪽 빈 마당 (지게차·투광등·남쪽 컨테이너 더미·경비 초소 사이)
 	var pad := Vector2(area.position.x + area.size.x * 0.82, area.position.y + area.size.y * 0.7)
-	# 군용 차량: 창고 남쪽(지게차 동쪽)에 동쪽을 보는 자주포, 헬기장 서쪽에 전술차량
-	var spg := Vector2(area.position.x + area.size.x * 0.83, area.position.y + area.size.y * 0.53)
+	# 군용 차량: 군 창고 안에 남쪽 문을 보는 자주포(포신 끝까지 창고 안), 헬기장 서쪽에 전술차량
+	# (지붕은 가운데로 깊이 정렬한다 — 가운데보다 북쪽에 세워야 지붕이 덮는다)
+	var spg := Vector2(shed.get_center().x, shed.get_center().y - 12.0)
 	var jeep := Vector2(area.position.x + area.size.x * 0.62, area.position.y + area.size.y * 0.72)
 	return {"area": area, "crane": crane_r, "shed": shed, "pad": pad, "spg": spg, "jeep": jeep}
 
@@ -361,7 +369,7 @@ static func _dock(out: Array[BuildingModel.Piece], r: Rect2, seed: int) -> void:
 			var at := Vector2(cr.position.x + 26.0 + col * (w + 8.0), cr.position.y + 34.0 + row * 46.0)
 			var n := row * 2 + col
 			_container(out, Rect2(at, Vector2(w, 28)), 0, CONTAINER_COLORS[n % CONTAINER_COLORS.size()], BuildingModel.hash01(seed, n) < 0.55)
-	warehouse(out, f.shed)
+	hangar(out, f.shed)
 	# 남쪽 야적장: 컨테이너 더미 (2~3단)
 	var x := area.position.x + 10.0
 	var k := 0
@@ -442,6 +450,59 @@ static func warehouse(out: Array[BuildingModel.Piece], r: Rect2) -> void:
 	shed.eave = 6
 	shed.roof_color = Color("496c86")
 	shed.deco = [&"shutter", &"door"]
+
+
+## 군 창고(격납고): 얇은 벽 넷(남쪽 벽은 가운데 문을 비운다) + 문 위 벽(사람 키보다 높아 막지 않는다) + 박공 지붕(공중).
+## 통째 그림에는 예전 닫힌 창고가 그려져 있어 코드로 그린다(code_look) — 안이 비어 지붕·앞벽이 흐려지면 속이 보여야 한다.
+## 첫 덩어리가 예전 창고의 그림 번호 자리를 차지한다
+static func hangar(out: Array[BuildingModel.Piece], r: Rect2) -> void:
+	var w := HANGAR_WALL
+	var door := hangar_door(r)
+	var walls := [
+		Rect2(r.position, Vector2(r.size.x, w)),                                             # 북
+		Rect2(r.position + Vector2(0, w), Vector2(w, r.size.y - w)),                        # 서
+		Rect2(Vector2(r.end.x - w, r.position.y + w), Vector2(w, r.size.y - w)),            # 동
+		Rect2(Vector2(r.position.x + w, r.end.y - w), Vector2(door.position.x - r.position.x - w, w)),   # 남 (문 서쪽)
+		Rect2(Vector2(door.end.x, r.end.y - w), Vector2(r.end.x - w - door.end.x, w)),      # 남 (문 동쪽)
+	]
+	var first := true
+	for wr: Rect2 in walls:
+		var p := box(out, wr, 0, HANGAR_H, HANGAR_WALL_COLOR, &"metal")
+		p.roof_color = HANGAR_WALL_COLOR.darkened(0.2)
+		p.code_look = true
+		p.takes_slot = first
+		first = false
+	var lintel := box(out, Rect2(door.position.x, r.end.y - w, door.size.x, w), HANGAR_DOOR.y, HANGAR_H, HANGAR_WALL_COLOR.darkened(0.12), &"metal")
+	lintel.roof_color = HANGAR_WALL_COLOR.darkened(0.2)
+	lintel.code_look = true
+	var roof := box(out, r.grow(1.0), HANGAR_H - 2.0, HANGAR_H, HANGAR_WALL_COLOR, &"none", &"gable")
+	roof.rise = 26.0
+	roof.eave = 6.0
+	roof.roof_color = HANGAR_ROOF_COLOR
+	roof.code_look = true
+
+
+## 군 창고 남쪽 벽의 문 (바닥 사각형, 벽 두께만큼)
+static func hangar_door(r: Rect2) -> Rect2:
+	return Rect2(Vector2(r.get_center().x - HANGAR_DOOR.x * 0.5, r.end.y - HANGAR_WALL), Vector2(HANGAR_DOOR.x, HANGAR_WALL))
+
+
+## 군 창고 바닥: 콘크리트, 차 자리 노란 테두리, 문 앞 줄무늬 안전띠
+static func _hangar_floor(ci: CanvasItem, r: Rect2) -> void:
+	ci.draw_rect(r, HANGAR_FLOOR)
+	var inner := r.grow(-HANGAR_WALL)
+	for k in 5:
+		var y := inner.position.y + inner.size.y * (k + 0.5) / 5.0
+		ci.draw_line(Vector2(inner.position.x, y), Vector2(inner.end.x, y), Color(0, 0, 0, 0.08), 1.0)   # 바닥 판 이음
+	var bay := Rect2(Vector2(r.get_center().x - 36.0, inner.position.y + 14.0), Vector2(72.0, inner.size.y - 22.0))
+	ci.draw_rect(bay, Color(0.95, 0.8, 0.25, 0.75), false, 2.0)
+	_hazard(ci, Rect2(hangar_door(r).position - Vector2(0, 8.0), Vector2(HANGAR_DOOR.x, 8.0)))
+
+
+## 통째 그림 부지에서 그림에 없는 덩어리(code_look)의 바닥 — 그림 바닥 위에 덧그린다
+static func draw_ground_over_sprite(ci: CanvasItem, r: Rect2, t: BuildingType) -> void:
+	if t.style == &"industrial_dock":
+		_hangar_floor(ci, _dock_frame(r).shed)
 
 
 ## 출입구 차단기: 기둥(막는다)과 서쪽으로 뻗은 빨강·흰 막대(공중)
@@ -529,7 +590,7 @@ static func parking(r: Rect2, t: BuildingType) -> Array:
 	elif t.style == &"industrial_dock":
 		var f := _dock_frame(r)
 		out.append([f.pad, 0.0, DOCK_HELI])   # 4장 부두: 탈 수 있는 헬기
-		out.append([f.spg, PI * 0.5, DOCK_SPG])
+		out.append([f.spg, PI, DOCK_SPG])
 		out.append([f.jeep, 0.0, DOCK_JEEP])
 	return out
 
@@ -737,6 +798,7 @@ static func _dock_ground(ci: CanvasItem, r: Rect2, seed: int) -> void:
 	ci.draw_line(Vector2(area.position.x, cr.end.y + 12.0), Vector2(area.end.x, cr.end.y + 12.0), Color("e0b52a"), 3.0)
 	ci.draw_line(Vector2(area.position.x, cr.end.y + 22.0), Vector2(area.end.x, cr.end.y + 22.0), Color("e0b52a"), 3.0)
 	_dock_helipad(ci, f.pad)
+	_hangar_floor(ci, f.shed)
 	# 둘레 안전띠와 계선주(볼라드), 폐타이어 방현재
 	_hazard(ci, Rect2(r.position.x, r.position.y, r.size.x, 6.0))
 	_hazard(ci, Rect2(r.position.x, r.position.y, 6.0, r.size.y))

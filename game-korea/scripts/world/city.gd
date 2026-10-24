@@ -87,6 +87,12 @@ const LANDMARK_PLACEMENTS := [
 	["lake_park", &"jamsil", Vector2i(6,2)],    # 합친 블록 (6,2)~(6,3)
 ]
 var landmark_indices := {}
+## 옥상 소품이 이보다 높으면 막는다 (화단처럼 낮은 것은 밟고 지나간다)
+const ROOF_PROP_MIN := 5.0
+## 옥상 둘레 벽 두께 (월드 px) — 옥상 밖으로 걸어 나가지 못하게
+const ROOF_EDGE := 10.0
+## 옥상 계단 윗끝이 옥탑 벽에서 떨어진 거리 (월드 px)
+const STAIR_GAP := 14.0
 ## 블록 → 그 블록 랜드마크 부지 안 공터를 오가는 보행자 길들 (PedestrianManager가 인도 대신 쓰기도 한다)
 static var lot_loops := {}
 
@@ -196,6 +202,7 @@ func _ready() -> void:
 		material = RiverView.material()   # 바닥의 물 사각형에만 걸린다 (청크는 자기 그림)
 	_build_layout()
 	_build_collision()
+	_build_roofs()
 	if not presentation_enabled:
 		OverpassView.build(self, false)
 		refresh_locks()
@@ -628,6 +635,120 @@ func _build_collision() -> void:
 	rects.append_array(water)
 	for r: Rect2 in rects:
 		_add_box(body, r)
+
+
+## 옥상(층 1): 헬기가 내려앉고 주인공이 내려 걷는다 (CityMap.Roof) — 병원 본관·롯데월드몰·롯데호텔처럼 deck 덩어리의 윗면.
+## 둘레 벽·옥상 소품(계단실·실외기·옥탑)·더 높은 덩어리는 DECK 몸체로 막고, 강남 병원은 구급헬기가 선 헬리패드도 막는다.
+## 옥상마다 계단 두 끝(옥상 위 stair_top · 가까운 인도 stair_ground)을 정한다 — F로 오르내린다(Director.use_stairs).
+## 병원 옥상에는 구급헬기 하나만 선다 (사용자 요청 2026-10-23 — 탈 수 있는 헬기는 세우지 않는다)
+func _build_roofs() -> void:
+	var list: Array[CityMap.Roof] = []
+	var body := StaticBody2D.new()
+	body.collision_layer = Layers.DECK
+	add_child(body)
+	var lots: Array[int] = []
+	for idx in buildings.size():
+		if hospitals.has(buildings[idx]):
+			lots.append(idx)
+	for key in landmark_indices:
+		lots.append(landmark_indices[key])
+	for idx in lots:
+		var lot := buildings[idx]
+		var pieces := _pieces(idx)
+		for deck: BuildingModel.Piece in pieces:
+			if not deck.deck:
+				continue
+			var poly := deck.poly if not deck.poly.is_empty() else _rect_poly(deck.rect)
+			var blocks: Array = []   # 옥상 위 막는 것 (다각형)
+			for c: BuildingModel.Piece in deck.on_top:
+				if c.h1 - c.h0 >= ROOF_PROP_MIN:
+					blocks.append(c.poly if not c.poly.is_empty() else _rect_poly(c.rect))
+			for q in pieces:
+				if q != deck and q.h1 > deck.h1 and q.h0 < deck.h1 and q.rect.intersects(deck.rect):
+					blocks.append(q.poly if not q.poly.is_empty() else _rect_poly(q.rect))   # 옥상보다 높은 계단탑
+			if lot == hospital and deck.rect.is_equal_approx(SpecialBuilding.hospital_roof(lot)):
+				blocks.append(_rect_poly(SpecialBuilding.hospital_helipad(lot)))   # 구급헬기 자리 (EmsDispatcher)
+			var rf := CityMap.Roof.new()
+			rf.poly = poly
+			rf.rect = BuildingModel.bounds(poly)
+			rf.height = deck.h1
+			rf.stair_top = _stair_spot(deck, poly, blocks)
+			rf.stair_ground = _sidewalk_near(lot, rf.stair_top)
+			list.append(rf)
+			for k in poly.size():
+				_add_edge(body, poly[k], poly[(k + 1) % poly.size()], rf.rect.get_center())
+			for b: PackedVector2Array in blocks:
+				var shape := CollisionShape2D.new()
+				var convex := ConvexPolygonShape2D.new()
+				convex.points = b
+				shape.shape = convex
+				body.add_child(shape)
+	CityMap.set_roofs(list)
+
+
+static func _rect_poly(r: Rect2) -> PackedVector2Array:
+	return PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+
+
+## 옥상 둘레 벽 한 토막: 변 a→b의 바깥(옥상 가운데 c의 반대쪽)에 ROOF_EDGE 두께 (모서리는 두께만큼 늘려 틈을 막는다)
+func _add_edge(body: StaticBody2D, a: Vector2, b: Vector2, c: Vector2) -> void:
+	var along := (b - a).normalized()
+	var out := Vector2(-along.y, along.x)
+	if out.dot((a + b) * 0.5 - c) < 0.0:
+		out = -out
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(a.distance_to(b) + ROOF_EDGE * 2.0, ROOF_EDGE)
+	shape.shape = rect
+	shape.position = (a + b) * 0.5 + out * ROOF_EDGE * 0.5
+	shape.rotation = along.angle()
+	body.add_child(shape)
+
+
+## 옥상 계단 윗끝: 문 달린 옥탑(계단실)이나 가장 큰 옥탑의 남·동·서·북 앞 중 옥상 안 빈 곳 (옥탑이 없으면 옥상 가운데)
+func _stair_spot(deck: BuildingModel.Piece, poly: PackedVector2Array, blocks: Array) -> Vector2:
+	var house: BuildingModel.Piece = null
+	for c: BuildingModel.Piece in deck.on_top:
+		if c.h1 - c.h0 < ROOF_PROP_MIN:
+			continue
+		if house == null or &"door" in c.deco or (not &"door" in house.deco and c.rect.get_area() > house.rect.get_area()):
+			house = c
+	var tries: Array[Vector2] = []
+	if house:
+		var hr := house.rect
+		var gap := STAIR_GAP
+		tries.append_array([Vector2(hr.get_center().x, hr.end.y + gap), Vector2(hr.end.x + gap, hr.get_center().y),
+			Vector2(hr.position.x - gap, hr.get_center().y), Vector2(hr.get_center().x, hr.position.y - gap)])
+	tries.append(BuildingModel.bounds(poly).get_center())
+	for at in tries:
+		if _roof_free(at, poly, blocks):
+			return at
+	return tries[-1]
+
+
+func _roof_free(at: Vector2, poly: PackedVector2Array, blocks: Array) -> bool:
+	if not Geometry2D.is_point_in_polygon(at, poly):
+		return false
+	for k in poly.size():
+		if Geometry2D.get_closest_point_to_segment(at, poly[k], poly[(k + 1) % poly.size()]).distance_to(at) < Player.RADIUS + 4.0:
+			return false
+	for b: PackedVector2Array in blocks:
+		if BuildingModel.bounds(b).grow(Player.RADIUS + 2.0).has_point(at):
+			return false
+	return true
+
+
+## 부지 둘레 인도 가운데 중 at에서 가장 가까운 자리 (계단 아래끝)
+static func _sidewalk_near(lot: Rect2, at: Vector2) -> Vector2:
+	var half := SIDEWALK * 0.5
+	var x := clampf(at.x, lot.position.x + 20.0, lot.end.x - 20.0)
+	var y := clampf(at.y, lot.position.y + 20.0, lot.end.y - 20.0)
+	var sides := [Vector2(x, lot.end.y + half), Vector2(x, lot.position.y - half), Vector2(lot.end.x + half, y), Vector2(lot.position.x - half, y)]
+	var best: Vector2 = sides[0]
+	for q: Vector2 in sides:
+		if q.distance_to(at) < best.distance_to(at):
+			best = q
+	return best
 
 
 ## 사람과 차량이 공유하는 건물 장애물 (지도 벽·강물 빼고). 부지 전체 대신 실제 벽/기둥만 막는다.

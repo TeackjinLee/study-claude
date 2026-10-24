@@ -5,6 +5,8 @@ extends RefCounted
 ## 범죄마다 열기(heat)가 쌓이고, 열기가 문턱을 넘으면 별이 오른다. 무거운 범죄는 최소 별도 정한다.
 ## 경찰 눈에 띈 채 도망치는 동안에도 열기가 조금씩 오른다(체포 불응).
 ## 경찰 시야에서 LOSE_TIME 동안 벗어나 있으면 별이 하나 내려간다. ★4부터는 저절로 내려가지 않는다(카센터 도색으로 뗀다).
+## ★5(LOCK_LEVEL)부터는 어떻게도 떨어지지 않는다 — 카센터 도색·거리 이벤트 보상(lower)·자경단 부업도 못 뗀다.
+## 체포·기절(clear)로 추격이 끝나야 풀린다.
 ## 범죄마다 올릴 수 있는 별의 상한이 있다: 가벼운 범죄와 추격 중 쌓이는 열기는 ★3, 시민·경찰을 기절시키면 ★4(사람은 죽지 않고 기절한다), 구급대원은 바로 ★4,
 ## 특공대원 기절은 ★5(특공대 사상 → 헬기), 그 뒤 군인 기절·헬기 격추는 ★6(군 투입)까지 (docs/05 §4).
 
@@ -16,6 +18,7 @@ enum Crime { CAR_THEFT, HIT_PEDESTRIAN, RAM_POLICE, HIT_OFFICER, STEAL_POLICE_CA
 
 const MAX_LEVEL := 6
 const HEAT_LEVEL_CAP := 3                                ## 가벼운 범죄·추격 열기로는 이 별까지만
+const LOCK_LEVEL := 5                                    ## 이 별부터는 떨어지지 않는다 (clear만 푼다)
 const LEVEL_HEAT: Array[float] = [0.0, 1.0, 4.0, 9.0, 24.0, 40.0, 64.0]   ## 별마다 필요한 누적 열기
 const LETHAL := [Crime.KILL_PEDESTRIAN, Crime.KILL_OFFICER, Crime.KILL_SWAT, Crime.KILL_SOLDIER, Crime.DOWN_HELI, Crime.KO_PARAMEDIC]
 ## 범죄별 [열기, 최소 별, 알림 문구, 이 범죄로 오를 수 있는 최고 별]
@@ -80,9 +83,9 @@ func raise_to(to: int) -> void:
 	_raise(to)
 
 
-## 카센터 도색 등: 별을 n개 뗀다
+## 카센터 도색 등: 별을 n개 뗀다 (★5부터는 못 뗀다)
 func lower(n: int) -> void:
-	if level == 0:
+	if level == 0 or locked():
 		return
 	var previous := level
 	level = maxi(level - n, 0)
@@ -91,6 +94,11 @@ func lower(n: int) -> void:
 	level_changed.emit(level, previous)
 	if level == 0:
 		escaped.emit()
+
+
+## ★5부터: 도색·보상·자경단으로 별을 뗄 수 없다
+func locked() -> bool:
+	return level >= LOCK_LEVEL
 
 
 func clear() -> void:

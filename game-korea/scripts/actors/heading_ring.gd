@@ -5,7 +5,7 @@ extends Node2D
 
 const FOOT_RADIUS := 13.0         ## 도보일 때 원 반지름 (월드 px)
 const CAR_MARGIN := 6.0           ## 차일 때 차 반 길이에 더하는 몫
-const COLOR := Color(1.0, 0.24, 0.2)
+const COLOR := Color(0.3, 0.95, 0.42)   ## 주인공은 초록 (고른 표적은 빨강 — TargetRing)
 const ARROW := 7.0                ## 화살표 길이
 const GAP := 0.42                 ## 화살표 쪽 원을 비우는 반각 (rad)
 

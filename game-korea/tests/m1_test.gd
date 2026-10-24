@@ -16,6 +16,7 @@ func _ready() -> void:
 	await _frames(2)
 
 	await _test_walk()
+	await _test_arrow_turn()
 	await _test_enter_exit()
 	await _test_steal()
 	await _test_pedestrians_on_sidewalk()
@@ -44,6 +45,30 @@ func _test_walk() -> void:
 	_expect(p.velocity == Vector2.ZERO, "키를 떼면 즉시 정지")
 	var moved := start.y - p.global_position.y
 	_expect(moved > 40.0, "0.5초 걸어서 인도를 따라 위로 40px 이상 (실제 %.0f)" % moved)
+	main.reset()
+	await _frames(1)
+
+
+## 방향키 ←→는 제자리에서 돌기만, ↑는 바라보는 쪽으로 걷는다 (WASD는 화면 방향 그대로)
+func _test_arrow_turn() -> void:
+	var p: Player = main.player
+	var start := p.global_position
+	var face := p.facing
+	Input.action_press("turn_right")
+	await _frames(20)
+	Input.action_release("turn_right")
+	await _frames(1)
+	_expect(p.global_position.distance_to(start) < 0.5, "→는 걷지 않는다 (움직인 %.1fpx)" % p.global_position.distance_to(start))
+	var turned := angle_difference(face, p.facing)
+	_expect(turned > 0.8, "→로 오른쪽으로 돈다 (%.2f rad)" % turned)
+	var ahead := Vector2.UP.rotated(p.facing)
+	Input.action_press("walk_forward")
+	await _frames(20)
+	Input.action_release("walk_forward")
+	await _frames(1)
+	var step := p.global_position - start
+	_expect(step.length() > 15.0 and step.normalized().dot(ahead) > 0.9, "↑는 바라보는 쪽으로 걷는다 (%s)" % step)
+	_expect(absf(angle_difference(p.facing, ahead.angle() + PI / 2.0)) < 0.01, "↑로 걸어도 방향은 그대로")
 	main.reset()
 	await _frames(1)
 

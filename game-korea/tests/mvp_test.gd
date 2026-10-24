@@ -176,6 +176,17 @@ func _test_spray_shop() -> void:
 	car.global_position = City.spray_bay()
 	await _frames(3)
 	_expect(police.wanted.level == 2 and notices.back().contains("경찰"), "경찰이 보고 있으면 도색하지 않는다 (%s)" % notices.back())
+
+	# ★5부터는 고치고 칠해 주지만 별은 못 뗀다
+	cop.global_position = City.spray_bay() + Vector2(6000, 0)    # 경찰을 멀리 (목록에서 빼면 경찰 코드가 지워진 사람을 만진다)
+	car.global_position = City.spray_bay() + Vector2(0, 300)
+	await _frames(3)
+	police.wanted.raise_to(WantedSystem.LOCK_LEVEL)
+	car.take_damage(30.0, false)
+	car.global_position = City.spray_bay()
+	await _frames(3)
+	_expect(police.wanted.level == 5 and car.health == car.stats.durability and notices.back().contains("★5"),
+		"★5에서 도색하면 고쳐지지만 별은 그대로 (%d, %s)" % [police.wanted.level, notices.back()])
 	await _free(main)
 
 

@@ -104,6 +104,9 @@ func _test_pause() -> void:
 		_expect(not map.spray_alert(), "수배가 없으면 카센터를 강조하지 않는다")
 		main.police.wanted.raise_to(2)
 		_expect(map.spray_alert(), "수배 중에는 지도에서 카센터를 강조한다")
+		main.police.wanted.raise_to(WantedSystem.LOCK_LEVEL)
+		_expect(not map.spray_alert(), "★5부터는 도색으로 못 떼니 카센터를 강조하지 않는다")
+		main.police.wanted.clear()
 	menu._show_settings()
 	await get_tree().process_frame
 	_expect(menu._list.get_child_count() >= 7, "설정 화면 (%d)" % menu._list.get_child_count())

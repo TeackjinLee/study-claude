@@ -64,6 +64,8 @@ func available() -> SideJobType:
 		return null
 	for j in jobs:
 		if j.vehicles.has(v.stats.id):
+			if j.kind == SideJobType.Kind.VIGILANTE and police and police.wanted.locked():
+				return null    # ★5부터는 자경단 등록으로도 수배를 못 푼다
 			return j
 	return null
 

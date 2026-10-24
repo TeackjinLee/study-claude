@@ -2,6 +2,7 @@ extends Node
 ## 군용 차량 (자주포·소형 전술차량) · 중장비 (굴삭기·불도저) 검증.
 ##  1. 무한궤도는 제자리에서 돈다 (VehicleMotor, 노드 없이).
 ##  2. 4장 부두 야적장에 자주포·전술차량이 서 있고 건물과 겹치지 않는다. 모형에 포탑·포신 부품이 있다.
+##     자주포는 군 창고(격납고) 안에 서 있고, 타고 앞으로 가면 남쪽 문으로 나온다.
 ##  3. 자주포를 타면 포탑이 겨눈 쪽으로 돌고, 멀리 겨눌수록 포신을 든다. 쏘면 포탄이 겨눈 땅으로 날아가 터진다 (건물 너머로).
 ##     장전 중에는 다시 못 쏜다.
 ##  4. 자주포는 차에 막히지 않고 깔고 넘는다: 깔린 차는 납작해지며 크게 다치고, 자주포는 그 위로 올라탄다. 밑에 든 사람은 죽는다.
@@ -105,6 +106,26 @@ func _test_dock_parking() -> void:
 	var parts: Array = VehicleModel.model(SPG)
 	_expect(parts.any(func(p): return p.turret == 1) and parts.any(func(p): return p.turret == 2), "자주포 모형: 포탑·포신 부품")
 	_expect(VehicleModel.model(JEEP).any(func(p): return p.turret == 1), "전술차량 모형: 지붕 기관총(포탑) 부품")
+	# 군 창고: 자주포가 안에 있고, 몰고 나오면 문으로 나온다
+	var shed := Rect2()
+	for idx: int in main.city.looks:
+		if main.city.looks[idx].style == &"industrial_dock":
+			shed = LandmarkBuilding._dock_frame(main.city.buildings[idx]).shed
+	var spg: Vehicle = found.get(&"ARMY_SPG")
+	if spg and shed.has_area():
+		_expect(shed.has_point(spg.global_position), "자주포는 군 창고 안에 선다 %s / %s" % [spg.global_position, shed])
+		main.director.enter_immediately(spg)
+		Input.action_press("accelerate")
+		for f in 60 * 4:
+			await _frames(1)
+			main.player.revive()
+			if spg.global_position.y > shed.end.y + 60.0:
+				break
+		Input.action_release("accelerate")
+		_expect(spg.global_position.y > shed.end.y + 60.0 and absf(spg.global_position.x - shed.get_center().x) < 30.0,
+			"자주포를 몰면 군 창고 남쪽 문으로 나온다 %s" % spg.global_position)
+	else:
+		_expect(false, "부두 군 창고를 못 찾았다")
 	main.queue_free()
 	await _frames(2)
 

@@ -28,6 +28,7 @@ var active := true
 var health := 20.0
 var dead_time := 0.0               ## 기절한 뒤 지난 시간
 var rescuer: Object = null        ## 이 기절한 사람을 맡은 구급대 (구급차·구급헬기) — 맡은 사람은 치우지 않는다
+var targeted := false             ## 주인공이 고른 표적 (머리 위 체력 막대를 늘 띄운다 — PlayerWeapons.select)
 var carried := false              ## 들것에 실려 가는 중 (들것을 밑에 그린다)
 
 var shirt: Color
@@ -288,7 +289,6 @@ func _draw() -> void:
 		draw_string(font, Vector2(box.position.x, box.end.y - 5), speech, HORIZONTAL_ALIGNMENT_CENTER, w, 12, Color(0.1, 0.1, 0.12))
 
 
-const TAG_SIZE := Vector2(16, 3)   ## 머리 위 체력 막대
 ## 그림 걸음: 0 서 있기 · 1 걷기 · 2 달리기
 func _draw_gait() -> float:
 	if state == State.KNOCKED or state == State.DEAD or state == State.IDLE:
@@ -301,6 +301,7 @@ func _drawn_weapon() -> WeaponType:
 	return null
 
 
+const TAG_SIZE := Vector2(16, 3)   ## 머리 위 체력 막대
 
 
 ## 머리 위 표시 (몸을 가리지 않게 머리보다 위): 다쳤으면 체력 막대, 소속 색(tag_color)이 있으면 그 색 작은 삼각형.
@@ -310,14 +311,14 @@ func _draw_head_tag() -> void:
 		return
 	var tag := tag_color()
 	var hurt_ratio := health / npc.health if npc.health > 0.0 else 1.0
-	if tag.a <= 0.0 and hurt_ratio >= 1.0:
+	if tag.a <= 0.0 and hurt_ratio >= 1.0 and not targeted:
 		return
 	if IsoView.enabled:
 		draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, IsoView.PERSON_HEIGHT * npc.body_scale + 7.0 + IsoView.ground(global_position, level)))
 	else:
 		draw_set_transform(Vector2(0, -20), 0.0, Vector2.ONE)
 	var y := 0.0
-	if hurt_ratio < 1.0:
+	if hurt_ratio < 1.0 or targeted:
 		var r := Rect2(Vector2(-TAG_SIZE.x * 0.5, -TAG_SIZE.y), TAG_SIZE)
 		draw_rect(r.grow(1.0), Color(0, 0, 0, 0.75))
 		draw_rect(r, Color(0.35, 0.08, 0.08))

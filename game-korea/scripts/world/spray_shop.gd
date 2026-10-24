@@ -2,7 +2,7 @@ class_name SprayShop
 extends Node2D
 ## 카센터 정비 칸 (docs/05 §4 즉시 감소). 차를 몰고 들어와 세우면 돈을 받고 새로 칠하고 고친다.
 ## 수배 중이면 별이 STARS_REMOVED개 떨어진다 — 단, 경찰 눈앞에서는 안 된다(따돌리고 와야 한다).
-## ★4는 저절로 내려가지 않으므로 여기가 거의 유일한 탈출구다.
+## ★4는 저절로 내려가지 않으므로 여기가 거의 유일한 탈출구다. ★5부터는(WantedSystem.locked) 고치고 칠해 주지만 별은 못 뗀다.
 
 signal serviced(stars: int)          ## 도색 완료 (뗀 별 수)
 signal notice(text: String)          ## HUD 알림 문구
@@ -71,10 +71,12 @@ func service(v: Vehicle) -> bool:
 	v.paint = COLORS[_next_color % COLORS.size()]
 	_next_color += 1
 	v.queue_redraw()
-	var removed := mini(STARS_REMOVED, level)
-	if level > 0:
+	var locked := police.wanted.locked()
+	var removed := 0 if locked else mini(STARS_REMOVED, level)
+	if removed > 0:
 		police.wanted.lower(STARS_REMOVED)
-	notice.emit("도색·수리 완료 −₩%s%s" % [Hud.won(PRICE), "   수배 −%d" % removed if removed > 0 else ""])
+	var note := "   수배 −%d" % removed if removed > 0 else ("   ★5부터는 수배가 떨어지지 않는다" if locked else "")
+	notice.emit("도색·수리 완료 −₩%s%s" % [Hud.won(PRICE), note])
 	serviced.emit(removed)
 	return true
 

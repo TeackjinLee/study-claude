@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""헬기 방향 그림 다듬기 (output/imagegen/vehicles/GPT_HELI_PROMPT.md).
+"""헬기·차량 방향 그림 다듬기 (output/imagegen/vehicles/GPT_HELI_PROMPT.md·GPT_VEHICLE_PROMPT.md).
+포탑 차는 차체 <id>와 포탑 <id>_turret를 따로 다듬는다 (vehicle_guide.tscn -- --split).
 
 받은 시트 output/imagegen/vehicles/<id>_A.png · _B.png (3×3 칸) · _C.png (뒷모습 2×2 칸, 마젠타 배경)를
 가이드(tools/vehicle_guide.tscn이 낸 guides/<id>_<시트>_guide.png · <id>.json)에 칸마다 맞춰
@@ -322,6 +323,8 @@ def main() -> None:
     meta = {
         "id": vid, "dirs": info["dirs"], "cell": out_cell, "scale": OUT_SCALE,
         "rotor_z": info["rotor_z"], "bank_pivot": info["bank_pivot"],
+        # 포탑 차를 나눠 받았으면: hull 포탑 뺀 차체 · turret 포탑만 (원점 = 포탑 축). 게임 VehicleSprite가 읽는다
+        "part": info.get("part", "all"), "turret_axis_y": info.get("turret_axis_y", 0.0),
         # k번째 칸 = 회전 −45° + k × 11.25° (화면 ↑ → → → ↓). 왼쪽 반은 좌우로 뒤집어 쓴다 (회전 r ↔ −90° − r)
         "frames": [found[k] for k in sorted(found)],
     }

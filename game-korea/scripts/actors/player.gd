@@ -10,11 +10,14 @@ const FIST: WeaponType = preload("res://data/weapons/fist.tres")
 const MAX_HEALTH := 100.0
 const WALK_SPEED := 110.0
 const RUN_SPEED := 190.0
+const TURN_RATE := 3.6            ## 방향키 ←→ 제자리 회전 빠르기 (rad/s)
+const BACK_SCALE := 0.6           ## 방향키 ↓ 뒷걸음은 걷기의 이만큼 (달리지 않는다)
 const RADIUS := 7.0
 
 var control := PlayerControl.new()   ## 로컬 입력 또는 외부 입력을 이 플레이어에만 전달한다
 var input_enabled := true
 var health := MAX_HEALTH
+var invincible := false            ## 시험용 무적 (`-- --god`): 총·폭발·곤봉에 체력이 줄지 않고 쓰러지지 않는다
 var arsenal := Arsenal.new(FIST)
 var facing := 0.0
 var walk_phase := 0.0
@@ -82,13 +85,20 @@ func apply_movement(command: PlayerInputCommand, delta: float) -> void:
 	if _jump >= 0.0 or (pressed and not has_meta(&"punch_state")):
 		_jump_step(command, delta)
 		return
+	# ←→는 걷지 않고 그 자리에서 돈다 (주먹을 지르는 동안은 방향을 지킨다)
+	if command.turn != 0.0 and not has_meta(&"punch_state"):
+		facing = wrapf(facing + command.turn * TURN_RATE * delta, -PI, PI)
+		_aim_hold = 0.0
 	# 주먹을 지르는 동안은 제자리 (영상 그림의 발이 땅에 붙어 있다 — 움직이면 발이 미끄러져 보인다)
-	var dir := Vector2.ZERO if has_meta(&"punch_state") else command.move_world
-	var speed := RUN_SPEED if command.sprint else WALK_SPEED
+	var dir := Vector2.ZERO if has_meta(&"punch_state") else walk_dir(command)
+	var tank := command.move_world == Vector2.ZERO
+	var speed := RUN_SPEED if command.sprint and command.forward >= 0.0 else WALK_SPEED
+	if tank and command.forward < 0.0:
+		speed *= BACK_SCALE
 	velocity = dir * speed
 	_aim_hold = maxf(_aim_hold - delta, 0.0)
 	if dir != Vector2.ZERO:
-		if _aim_hold <= 0.0 and not has_meta(&"punch_state"):
+		if _aim_hold <= 0.0 and not has_meta(&"punch_state") and not tank:
 			facing = Vector2.UP.angle_to(dir)
 		walk_phase += delta * velocity.length() / 9.0
 		_step_dist += velocity.length() * delta
@@ -99,12 +109,19 @@ func apply_movement(command: PlayerInputCommand, delta: float) -> void:
 	_sort()
 
 
+## 걷는 월드 방향: WASD·스틱(move_world)이 있으면 그쪽, 없으면 방향키 ↑↓로 바라보는 쪽 앞뒤
+func walk_dir(command: PlayerInputCommand) -> Vector2:
+	if command.move_world != Vector2.ZERO:
+		return command.move_world
+	return Vector2.UP.rotated(facing) * command.forward
+
+
 ## 점프 한 틱: 처음이면 지금 걸음(입력 방향 × 걷기·달리기 속도)을 정하고, 끝날 때까지 그 속도로 간다
 func _jump_step(command: PlayerInputCommand, delta: float) -> void:
 	if _jump < 0.0:
 		_jump = 0.0
-		_jump_vel = command.move_world * (RUN_SPEED if command.sprint else WALK_SPEED)
-		if _jump_vel != Vector2.ZERO and _aim_hold <= 0.0:
+		_jump_vel = walk_dir(command) * (RUN_SPEED if command.sprint else WALK_SPEED)
+		if command.move_world != Vector2.ZERO and _aim_hold <= 0.0:
 			facing = Vector2.UP.angle_to(_jump_vel)
 	else:
 		_jump += delta
@@ -187,7 +204,7 @@ func blocked_at(pos: Vector2) -> bool:
 
 ## 총·폭발에 맞는다 (차 안에서는 차가 대신 맞는다). 0이 되면 died
 func take_damage(amount: float) -> void:
-	if health <= 0.0 or amount <= 0.0:
+	if health <= 0.0 or amount <= 0.0 or invincible:
 		return
 	health = maxf(health - amount, 0.0)
 	queue_redraw()
@@ -201,7 +218,8 @@ func take_damage(amount: float) -> void:
 func beaten(amount: float, push_dir: Vector2, stun_time: float) -> void:
 	if is_dead() or knocked_down:
 		return
-	health = maxf(health - amount, 1.0)
+	if not invincible:
+		health = maxf(health - amount, 1.0)
 	Sfx.play(&"hit", global_position)
 	Sfx.play(&"grunt_m", global_position)
 	_stun = maxf(_stun, stun_time)
@@ -217,6 +235,8 @@ func stun(seconds: float) -> void:
 
 ## 맞아 쓰러진다 (체포 직전)
 func knock_down() -> void:
+	if invincible:
+		return
 	knocked_down = true
 	input_enabled = false          # 차 타기·총 쏘기도 막는다 (체포 뒤 Main._respawn이 되돌린다)
 	velocity = Vector2.ZERO
@@ -278,12 +298,12 @@ func _draw() -> void:
 			PersonRig.draw(self, facing, walk_phase, 0.0, shirt, pants, hair, 1.0, null, 0, null, true)
 		else:
 			PersonDrawer.draw(self, facing, walk_phase, shirt, pants, hair, true)
+		if is_dead():
+			_draw_out_stars()
 		return
 	# 발밑 고리·진행 방향은 HeadingRing이 그린다 (몸 뒤 차례에)
 	if IsoView.enabled:
 		var gait: float = 0.0 if velocity.length_squared() < 1.0 else (2.0 if velocity.length() > WALK_SPEED + 20.0 else 1.0)
-		if is_dead():
-			_draw_out_stars()
 		PersonRig.draw(self, facing, walk_phase, gait, shirt, pants, hair, 1.0, null, 0, arsenal.current(), false)
 		if _hurt > 0.0:
 			_draw_hit_burst()

@@ -314,7 +314,7 @@ func _process(delta: float) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		_focused = false
-		for action in ["accelerate", "brake", "steer_left", "steer_right", "sprint"]:
+		for action in ["accelerate", "brake", "steer_left", "steer_right", "turn_left", "turn_right", "walk_forward", "walk_back", "sprint"]:
 			Input.action_release(action)
 		if _ready_for_input:
 			_send_input()

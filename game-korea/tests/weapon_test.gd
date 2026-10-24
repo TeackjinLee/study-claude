@@ -7,6 +7,8 @@ extends Node
 ##  5. 드라이브바이: 차 옆의 표적을 쏜다. 차 안에서 주먹은 못 쓴다.
 ##  6. 경찰 앞에서 쏘면 ★1, 시민을 죽이면 ★2, 경찰을 죽이면 ★3.
 ##  7. ★2부터 도보 경찰이 총을 쏜다.
+##  9. 표적 고르기: Tab은 가까운 사람부터, 오른쪽 클릭은 그린 몸을 누른 사람. 고르면 등 뒤에 있어도 쏘기가 그 사람을 향하고,
+##     기절하면 풀린다.
 ##  8. 죽으면 치료비를 내고 무기를 잃은 채 병원 앞에서, 체포되면 무기를 압수당한 채 경찰서 앞에서 다시 시작한다.
 ## 실행: godot --headless --fixed-fps 60 --path . res://tests/weapon_test.tscn
 
@@ -25,6 +27,7 @@ func _ready() -> void:
 	await _test_pickup()
 	await _test_kills()
 	await _test_mouse_aim()
+	await _test_select()
 	await _test_drive_by()
 	await _test_crimes()
 	await _test_police_shoot_back()
@@ -247,6 +250,35 @@ func _test_mouse_aim() -> void:
 	await _frames(30)
 	Input.action_release("accelerate")
 	_expect(absf(angle_difference(player.facing, Vector2.UP.angle_to(Vector2.RIGHT))) > 0.5, "잠시 뒤엔 다시 걷는 쪽을 본다")
+	await _free(main)
+
+
+func _test_select() -> void:
+	var main := _make_main()
+	await _frames(2)
+	var player: Player = main.player
+	var w: PlayerWeapons = main.weapons
+	var at := player.global_position
+	w.cycle_target()
+	var nearest: Pedestrian = null
+	for q: Pedestrian in main.pedestrians.peds:
+		if w.selectable(q) and (nearest == null or q.global_position.distance_to(at) < nearest.global_position.distance_to(at)):
+			nearest = q
+	_expect(nearest == null or (w.selected == nearest and nearest.targeted), "Tab은 가장 가까운 사람을 고른다")
+	var p := _civilian_ahead(main, 2, -80.0)    # 등 뒤 (주인공은 위를 본다)
+	var ct := IsoView.canvas(Vector2(1280, 720), at, 2.0)
+	var torso := ct * (p.global_position + IsoView.lift(IsoView.ground(p.global_position) + IsoView.PERSON_HEIGHT * 0.6 * p.npc.body_scale))
+	_expect(w.pick_person(torso, ct) == p, "오른쪽 클릭: 몸을 누르면 그 사람")
+	w.select(p)
+	_expect(w.locked() and p.targeted and not (nearest != null and nearest != p and nearest.targeted), "고른 사람만 표시한다")
+	player.arsenal.give(PISTOL, 20)
+	player.facing = 0.0
+	var start := p.health
+	await _hold_fire_until(func(): return p.health < start, 60)
+	_expect(p.health < start, "등 뒤에 있어도 고른 사람을 쏜다 (체력 %.0f → %.0f)" % [start, p.health])
+	main.pedestrians.damage(p, 999.0, Vector2.RIGHT, true, true)
+	await _frames(2)
+	_expect(w.selected == null and not p.targeted, "기절하면 고르기가 풀린다")
 	await _free(main)
 
 

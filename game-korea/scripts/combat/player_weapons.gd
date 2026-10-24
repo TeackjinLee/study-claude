@@ -13,6 +13,9 @@ extends Node
 ## 자주포는 곡사포 — 포탑 방향으로 커서까지 거리(사거리 안으로 당긴다)에 포탄이 떨어지고, 포신은 그 거리만큼 든다. 키보드만 쓰면 마지막 거리 그대로.
 ## 굴삭기는 상부가 커서 쪽으로 돌고 팔이 커서까지 뻗는다 — 쏘기 버튼은 퍼 올리기(찍은 곳의 차를 집고, 들고 있으면 놓는다).
 ## 불도저는 쏘기 버튼이 블레이드 올리기·내리기다.
+## 표적 고르기(도보): 사람을 오른쪽 클릭하면 고르고(빈 땅을 오른쪽 클릭하면 푼다), Tab·패드 RB는 가까운 사람부터 차례로 고른다.
+## 고른 사람은 발밑 빨간 원(TargetRing)·머리 위 체력 막대가 늘 보이고, 쏘기·주먹은 커서·부채꼴 대신 그 사람을 향한다.
+## 기절하거나 멀어지거나(SELECT_DROP) 차에 타면 풀린다.
 
 ## 커서가 사람 몸(발끝~머리, 화면 px·줌 1)에서 이만큼 안이면 그 사람을 겨눈다
 const AIM_PICK := 9.0
@@ -23,6 +26,9 @@ const AIM_HOLD := 0.35
 const DRIVE_BY_SPREAD := 0.6
 ## 헬기에서 키보드로 쏠 때 표적이 없으면 앞으로 사거리의 이만큼 떨어진 땅
 const HELI_AUTO_REACH := 0.5
+const SELECT_RANGE := 520.0    ## Tab으로 고를 수 있는 거리
+const SELECT_DROP := 760.0     ## 고른 사람이 이만큼 멀어지면 풀린다
+const SELECT_PICK := 14.0      ## 오른쪽 클릭: 사람 그림(발끝~머리)에서 이만큼(화면 px·줌 1) 안이면 그 사람
 
 var director: Director
 var player: Player
@@ -46,6 +52,7 @@ var _stance_left := 0.0
 const STANCE_HOLD := 2.0   ## 마지막 공격이 끝나고 이만큼(초) 서 있으면 싸움 자세를 풀고 평소 서 있기로 돌아간다
 
 var mouse_aim := false
+var selected: Pedestrian = null   ## 고른 표적 (오른쪽 클릭·Tab)
 var _cross := false
 const MOUNTED: Array[WeaponType] = [preload("res://data/weapons/water_cannon.tres"),
 	preload("res://data/weapons/tank_cannon.tres"), preload("res://data/weapons/jeep_mg.tres")]
@@ -61,6 +68,7 @@ func _aiming() -> bool:
 
 func _physics_process(delta: float) -> void:
 	player.arsenal.update(delta)
+	_check_selected()
 	_mounted_cooldown = maxf(_mounted_cooldown - delta, 0.0)
 	var v := director.current_vehicle
 	if v and v.stats.turret_rate > 0.0 and not v.wrecked and not player.is_dead():
@@ -74,8 +82,11 @@ func _physics_process(delta: float) -> void:
 			shoot()
 		return
 	if held:
-		if _aiming() and director.current_vehicle == null and player.input_enabled and not player.is_dead():
-			player.face(mouse_dir(player.global_position), AIM_HOLD)   # 연사 사이에도 커서를 따라 돈다
+		if director.current_vehicle == null and player.input_enabled and not player.is_dead():
+			if locked():
+				player.face(_lock_dir(player.global_position), AIM_HOLD)   # 고른 사람을 계속 본다
+			elif _aiming():
+				player.face(mouse_dir(player.global_position), AIM_HOLD)   # 연사 사이에도 커서를 따라 돈다
 		shoot()
 
 
@@ -110,7 +121,12 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not player.control.is_local():
 		return
-	for action: StringName in [&"fire", &"weapon_next", &"weapon_prev"]:
+	if event is InputEventMouseButton and event.pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT:
+		if director.current_vehicle == null:
+			var vp := player.get_viewport()
+			select(pick_person(vp.get_mouse_position(), vp.canvas_transform))
+		return
+	for action: StringName in [&"fire", &"weapon_next", &"weapon_prev", &"target_select"]:
 		if event.is_action_pressed(action):
 			player.control.request_action(action)
 			return
@@ -119,6 +135,9 @@ func _unhandled_input(event: InputEvent) -> void:
 ## 로컬 이벤트 또는 외부 제어 객체에서 요청한 한 번의 동작.
 func request_action(action: StringName) -> void:
 	var v := director.current_vehicle
+	if action == &"target_select":
+		cycle_target()
+		return
 	if action == &"fire" and v == null and player.arsenal.current() == Player.FIST:
 		_fire_event_tick = Engine.get_physics_frames()
 		_fire_held = true
@@ -174,7 +193,10 @@ func shoot() -> bool:
 	else:
 		exclude.append(player.get_rid())
 		from = player.global_position
-		if _aiming():
+		if locked():
+			dir = _lock_dir(from)
+			player.face(dir, AIM_HOLD)
+		elif _aiming():
 			dir = mouse_dir(from)
 			player.face(dir, AIM_HOLD)
 		else:
@@ -378,6 +400,80 @@ func screen_point(from: Vector2, m: Vector2, ct: Transform2D) -> Vector2:
 	return best if best != null else ct.affine_inverse() * m - IsoView.lift(IsoView.ground(from))
 
 
+# ── 표적 고르기 ───────────────────────────────────────────
+
+## 고른 사람이 있고 아직 칠 수 있다
+func locked() -> bool:
+	return selected != null and is_instance_valid(selected) and selectable(selected)
+
+
+func selectable(p: Pedestrian) -> bool:
+	return p.active and not p.is_dead() and not p.npc.protected
+
+
+func _lock_dir(from: Vector2) -> Vector2:
+	var rel := selected.global_position - from
+	return rel.normalized() if rel.length() > 1.0 else Vector2.UP.rotated(player.facing)
+
+
+## 고른다 (null이면 푼다). 고른 사람은 머리 위 체력 막대를 늘 띄운다 (Pedestrian.targeted)
+func select(p: Pedestrian) -> void:
+	if p == selected:
+		return
+	if selected != null and is_instance_valid(selected):
+		selected.targeted = false
+		selected.queue_redraw()
+	selected = p
+	if p != null:
+		p.targeted = true
+		p.queue_redraw()
+
+
+## 기절·멀어짐·차 타기면 푼다
+func _check_selected() -> void:
+	if selected == null:
+		return
+	if not locked() or director.current_vehicle != null or player.is_dead() \
+			or selected.global_position.distance_to(player.global_position) > SELECT_DROP:
+		select(null)
+
+
+## Tab: 가까운 사람부터 차례로 (마지막 다음은 처음). 고를 사람이 없으면 푼다
+func cycle_target() -> void:
+	if director.current_vehicle != null or player.is_dead():
+		return
+	var me := player.global_position
+	var list: Array[Pedestrian] = []
+	for p in pedestrians.peds:
+		if selectable(p) and p.global_position.distance_to(me) < SELECT_RANGE:
+			list.append(p)
+	if list.is_empty():
+		select(null)
+		return
+	list.sort_custom(func(a: Pedestrian, b: Pedestrian) -> bool:
+		return a.global_position.distance_squared_to(me) < b.global_position.distance_squared_to(me))
+	select(list[(list.find(selected) + 1) % list.size()])
+
+
+## 화면 점 m(캔버스 변환 ct) 가까이 그려진 사람 (없으면 null) — 오른쪽 클릭으로 고르기
+func pick_person(m: Vector2, ct: Transform2D) -> Pedestrian:
+	var zoom := (ct.basis_xform(IsoView.LIFT)).length() if IsoView.enabled else ct.x.length()
+	var up := IsoView.PERSON_HEIGHT if IsoView.enabled else 0.0
+	var best: Pedestrian = null
+	var best_d := SELECT_PICK * zoom
+	for p in pedestrians.peds:
+		if not selectable(p):
+			continue
+		var g := IsoView.ground(p.global_position, p.level) if IsoView.enabled else 0.0
+		var a := ct * (p.global_position + IsoView.lift(g))
+		var b := ct * (p.global_position + IsoView.lift(g + up * p.npc.body_scale))
+		var d := m.distance_to(Geometry2D.get_closest_point_to_segment(m, a, b))
+		if d < best_d:
+			best_d = d
+			best = p
+	return best
+
+
 ## 떨어지지 않은 경찰·군 헬기 (자동 조준·커서 겨누기)
 func _police_helis() -> Array:
 	if combat == null or combat.police == null:
@@ -397,7 +493,7 @@ func _request_punch() -> bool:
 	var count := PersonRig.punch_attacks().size()
 	_punch_index = (_punch_index + 1) % count if _combo_left > 0.0 else 0
 	_punch_spec = PersonRig.punch_attacks()[_punch_index]
-	_punch_dir = mouse_dir(player.global_position) if _aiming() else aim(player.global_position, Vector2.UP.rotated(player.facing), Player.FIST.max_range + 10.0, null)
+	_punch_dir = _lock_dir(player.global_position) if locked() else mouse_dir(player.global_position) if _aiming() else aim(player.global_position, Vector2.UP.rotated(player.facing), Player.FIST.max_range + 10.0, null)
 	player.face(_punch_dir, float(_punch_spec["duration"]))
 	_punch_active = true
 	_punch_queued = false

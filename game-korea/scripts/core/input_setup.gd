@@ -2,10 +2,15 @@ extends Node
 ## 입력 액션을 코드로 등록한다 (project.godot을 손으로 편집하지 않기 위해).
 
 const KEYS := {
-	"accelerate": [KEY_W, KEY_UP],
-	"brake": [KEY_S, KEY_DOWN],
-	"steer_left": [KEY_A, KEY_LEFT],
-	"steer_right": [KEY_D, KEY_RIGHT],
+	"accelerate": [KEY_W],
+	"brake": [KEY_S],
+	"steer_left": [KEY_A],
+	"steer_right": [KEY_D],
+	## 방향키: 걸을 때 ←→는 제자리 회전, ↑↓는 바라보는 쪽 앞뒤로 걷기. 차에서는 WASD와 같다 (LocalPlayerInput)
+	"turn_left": [KEY_LEFT],
+	"turn_right": [KEY_RIGHT],
+	"walk_forward": [KEY_UP],
+	"walk_back": [KEY_DOWN],
 	"handbrake": [KEY_SPACE],
 	"enter_exit": [KEY_F],
 	"sprint": [KEY_SHIFT],
@@ -20,6 +25,7 @@ const KEYS := {
 	"view_toggle": [KEY_F9],   ## 2.5D ↔ 위에서 보기
 	"radio_next": [KEY_T],     ## 차 라디오 다음 채널
 	"pause": [KEY_ESCAPE, KEY_P],   ## 일시정지 메뉴 (지도·설정)
+	"target_select": [KEY_TAB],     ## 가까운 사람부터 표적 고르기 (오른쪽 클릭으로도 고른다)
 }
 
 ## [action, axis, 방향]
@@ -42,6 +48,7 @@ const PAD_BUTTONS := {
 	"side_job": JOY_BUTTON_DPAD_UP,
 	"radio_next": JOY_BUTTON_DPAD_DOWN,
 	"pause": JOY_BUTTON_START,
+	"target_select": JOY_BUTTON_RIGHT_SHOULDER,
 }
 
 

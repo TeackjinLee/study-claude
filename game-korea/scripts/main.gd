@@ -250,6 +250,9 @@ func _ready() -> void:
 	weapons.pedestrians = pedestrians
 	weapons.vehicles = vehicles
 	add_child(weapons)
+	var target_ring := TargetRing.new()
+	target_ring.weapons = weapons
+	add_child(target_ring)
 	var local_session := session.local_player()
 	local_session.director = director
 	local_session.weapons = weapons
@@ -429,6 +432,7 @@ func _ready() -> void:
 		hud.banner(Locale.t("%d장 · %s") % [chapter, chapter_type().title], Locale.t("시험 시작 (--chapter=%d) — 저장 불러오기 없음") % chapter, 3.5, Hud.GOLD)
 	if get_parent() == get_tree().root:
 		_give_arg_weapons()
+		_apply_test_args.call_deferred()
 	elif from_title != "":
 		# 타이틀에서 골랐다: 불러오기 메뉴를 다시 띄우지 않는다
 		if from_title == "load" and not load_game(entry_slot):
@@ -464,6 +468,16 @@ static func start_chapter_arg() -> int:
 		if a.begins_with("--chapter="):
 			return clampi(int(a.get_slice("=", 1)), 1, CityMap.LAST_CHAPTER)
 	return 0
+
+
+## 시험용: `-- --god`이면 주인공 무적, `-- --wanted=N`이면 수배 ★N으로 시작한다 (본편으로 켰을 때만)
+func _apply_test_args() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a == "--god":
+			player.invincible = true
+			hud.notify("시험: 무적")
+		elif a.begins_with("--wanted="):
+			police.wanted.raise_to(clampi(int(a.get_slice("=", 1)), 1, 6))
 
 
 ## 시험용: `-- --give=rifle,pistol`이면 그 무기(data/weapons/<이름>.tres)를 탄 넉넉히 쥐고, 맨 앞 것을 든 채 시작한다
@@ -513,6 +527,8 @@ func _spawn_landmark_parking() -> void:
 		v.stats = t
 		add_child(v)
 		v.place(spot[0], spot[1])
+		if spot.size() > 3:
+			v.set_level(spot[3])   # 옥상(층 1)에 선 헬기
 		v.landing_blocked.connect(func(): if hud: hud.notify("밑이 막혀 내려앉을 수 없다 — 빈 땅이나 도로 위로 옮긴다"))
 		vehicles.append(v)
 

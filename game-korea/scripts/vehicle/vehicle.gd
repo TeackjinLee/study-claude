@@ -18,6 +18,7 @@ const WRECK_FLAME_TIME := 7.0 ## 잔해 위 남은 불꽃이 이만큼 타다 �
 const ROT_STEP := 0.03        ## 이만큼(약 1.7도) 돌아야 모형을 다시 그린다
 const REDRAW_RANGE := 2400.0 ## 카메라에서 이보다 먼 차는 다시 그리지 않는다 (가장 멀리 줌아웃해도 화면 밖)
 const AIRBORNE_HEIGHT := 4.0  ## 헬기가 이보다 높이 떠 있으면 아무것과도 부딪히지 않는다
+const ROOF_CLEAR := 40.0      ## 날 높이보다 높은 옥상 위를 날 때 옥상보다 이만큼 위로 넘는다
 const LIFTOFF := 0.35         ## 헬기는 날 높이의 이만큼 오르기 전에는 움직이지 않는다 (시동·이륙)
 const LAND_SPEED := 70.0      ## 내려앉는 동안 이보다 빨리 못 간다 (보행자를 치는 속도보다 느리게)
 const ELEV_MIN := 0.06         ## 포신을 가장 낮게 든 각 (rad, 가까이 쏠 때)
@@ -96,6 +97,7 @@ var handbrake_input := false
 
 var _shape: CollisionShape2D
 var level := 0                ## 고가차도 층 (0 땅 · 1 고가 위, CityMap.level_zone) — 충돌 비트를 Layers.at으로 옮긴다
+var _roof_h := -1.0           ## 옥상(층 1)에 있으면 그 옥상 높이 — 헬기가 옥상 밖으로 날아 나가면 그만큼 altitude에 더한다
 var _col_base := Vector2i(Layers.VEHICLES, Layers.WORLD | Layers.VEHICLES)   ## 땅 기준 충돌 (층, 마스크)
 var _drawn_look: Array = []   ## 마지막으로 그린 모습 (같으면 다시 그리지 않는다)
 var _fx: Node2D               ## 불·연기를 그리는 위층 — 매 프레임 다시 그려도 차 모형은 다시 그리지 않는다
@@ -210,6 +212,8 @@ func _physics_process(delta: float) -> void:
 		z_index = IsoView.Z_AIR if airborne() else maxi(IsoView.z_at(global_position, level), over_z)
 	else:
 		z_index = 20 if airborne() else 1
+	if stats.flies:
+		_track_level()   # 옥상 밖으로 날아 나간 틱에 바로 층을 바꾼다 (한 틱 늦으면 그리는 높이가 툭 떨어졌다가 오른다)
 	ground = IsoView.ground(global_position, level) + climb
 
 
@@ -413,11 +417,40 @@ func _set_collision(layer: int, mask: int) -> void:
 		collision_mask = m
 
 
-## 자리가 정하는 고가 층으로 바꾼다 (넘는 교차로 상자 안이면 그대로)
+## 자리가 정하는 고가 층으로 바꾼다 (넘는 교차로 상자·옥상 안이면 그대로)
 func _track_level() -> void:
 	var z := CityMap.level_zone(global_position)
 	if z >= 0 and z != level:
+		if _roof_h >= 0.0:
+			altitude += _roof_h - CityMap.ground_height(global_position, z)   # 옥상에서 날아 나갔다 — 그리는 높이가 툭 떨어지지 않게
+			_roof_h = -1.0
 		level = z
+		_set_collision(_col_base.x, _col_base.y)
+
+
+## 층을 정한다 (옥상에 세워 둔 헬기 — Main). 옥상 위면 옥상 높이를 기억한다
+func set_level(l: int) -> void:
+	if l == level:
+		return
+	level = l
+	var rf := CityMap.roof_at(global_position)
+	_roof_h = CityMap.roofs[rf].height if l == 1 and rf >= 0 else -1.0
+	_set_collision(_col_base.x, _col_base.y)
+
+
+## 옥상 위로 내려오는 헬기(내려앉는 중이거나 아무도 안 탔다)가 옥상 높이에 닿으면 옥상 층(1)으로 옮긴다 —
+## 그 뒤로는 옥상 바닥에서 재는 높이로 내려앉는다 (can_land_here는 옥상 둘레 벽·소품·세워 둔 헬기를 본다)
+func _roof_descent() -> void:
+	if level != 0 or altitude <= 0.0 or (controlled and not landing):
+		return
+	var rf := CityMap.roof_at(global_position)
+	if rf < 0:
+		return
+	var top := CityMap.roofs[rf].height
+	if altitude >= top - 2.0 and altitude <= top + AIRBORNE_HEIGHT + 3.0:
+		level = 1
+		_roof_h = top
+		altitude = maxf(altitude - top, 0.0)
 		_set_collision(_col_base.x, _col_base.y)
 
 
@@ -442,7 +475,14 @@ func _rotor_spinning() -> bool:
 ## 땅에 닿기 직전 밑이 막혀 있으면 조종 중인 헬기는 그 높이에서 기다리고(옮기면 내려앉는다),
 ## 버려진 헬기는 떨어져 부서진다. 이륙 높이(LIFTOFF)에 닿기 전에는 움직이지 않는다
 func _fly(delta: float) -> void:
+	_roof_descent()
 	var goal := stats.fly_height if controlled and not landing and not wrecked else 0.0
+	if level == 0 and controlled and not wrecked:
+		var rf := CityMap.roof_at(global_position)
+		if rf >= 0:
+			# 옥상 위: 날 높이보다 높은 옥상(롯데호텔)은 넘어 날고, 내려앉을 때는 옥상 높이로 가서 옥상 층으로 옮긴다
+			var top: float = CityMap.roofs[rf].height
+			goal = top if landing else maxf(goal, top + ROOF_CLEAR)
 	var next := move_toward(altitude, goal, stats.climb_rate * delta)
 	if altitude > AIRBORNE_HEIGHT and next <= AIRBORNE_HEIGHT and not can_land_here():
 		if controlled:

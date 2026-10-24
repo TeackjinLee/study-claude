@@ -239,6 +239,10 @@ static func bridge_spans(k: int) -> Array[Vector2]:
 ## 그 자리 땅 높이 (2.5D 화면 px): 다리 위면 DECK_HEIGHT, 경사로면 그 사이, 나머지는 0.
 ## 고가차도 위는 level이 1이면 상판 높이, 0이면 밑(넘는 교차로 밑은 0, 경사로 입구는 그 높이). -1(층을 모름)이면 넘는 교차로만 밑으로 본다
 static func ground_height(pos: Vector2, level := -1) -> float:
+	if level == 1:
+		var rf := roof_at(pos)
+		if rf >= 0:
+			return roofs[rf].height
 	for k in BRIDGES:
 		if absf(pos.x - City.road_center(k)) > City.ROAD * 0.5 + 8.0:
 			continue
@@ -311,12 +315,44 @@ static func over_switch_distance() -> float:
 
 ## 그 자리가 정하는 층: 1 고가 위(경사로가 OVER_SWITCH보다 높은 곳·상판), 0 땅, -1 넘는 교차로 상자(위아래가 다 지나가므로 지금 층을 그대로 둔다)
 static func level_zone(pos: Vector2) -> int:
+	if roof_at(pos) >= 0:
+		return -1   # 옥상 자리: 헬기로 내려앉은 것(1)만 옥상에 있고, 떠 있는 헬기(0)는 그대로
 	var o := overpass_at(pos)
 	if o < 0:
 		return 0
 	if _in_over_cell(OVERPASSES[o], pos):
 		return -1
 	return 1 if over_height(o, pos) >= OVER_SWITCH else 0
+
+
+# ── 옥상 (층 1) ────────────────────────────────────────────
+## 헬기가 내려앉고 사람이 내려 걷는 건물 옥상 (병원·롯데월드몰·롯데호텔 — City가 도시를 세울 때 정한다, set_roofs).
+## 옥상 위는 고가 위와 같은 층 1이다: 충돌은 Layers.DECK 쪽 비트(옥상 둘레 벽·옥상 소품은 City의 DECK 몸체),
+## 높이는 ground_height(위치, 1) = 옥상 높이. 헬기로 내려앉거나 계단(stair_top ↔ stair_ground, F)으로 오르내린다
+
+class Roof extends RefCounted:
+	var poly: PackedVector2Array   ## 걸어 다니는 옥상 (월드 볼록 다각형 — 돌린 건물도 있다)
+	var rect: Rect2                ## poly를 감싸는 사각형
+	var height := 0.0              ## 옥상 바닥 높이 (땅·단에서, 화면 px)
+	var stair_top: Vector2         ## 계단 윗끝 (옥상 위, 옥탑 문 앞)
+	var stair_ground: Vector2      ## 계단 아래끝 (부지 둘레 인도)
+
+	func has_point(pos: Vector2) -> bool:
+		return rect.has_point(pos) and Geometry2D.is_point_in_polygon(pos, poly)
+
+static var roofs: Array[Roof] = []
+
+
+static func set_roofs(list: Array[Roof]) -> void:
+	roofs = list
+
+
+## pos가 든 옥상 번호 (없으면 -1)
+static func roof_at(pos: Vector2) -> int:
+	for i in roofs.size():
+		if roofs[i].has_point(pos):
+			return i
+	return -1
 
 
 ## 고가가 넘는 교차로면 고가 축(0 세로·1 가로 — 진행 방향 d의 d % 2와 같다), 아니면 -1

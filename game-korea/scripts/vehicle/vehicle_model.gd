@@ -89,6 +89,9 @@ static var _jangles := Vector3.ZERO   ## 관절 각 (Vehicle.joints)
 static var _cur: Part = null     ## 지금 그리는 부품 (포탑·포신이면 점을 돌린다)
 static var hide_blades := false  ## 주 회전날개를 빼고 그린다 (헬기 그림 가이드 — 날개는 코드가 따로 그린다)
 static var even_light := false   ## 옆면을 좌우 같은 밝기로 (헬기 그림 가이드 — 좌우 뒤집어 쓰는 그림이라 빛이 한쪽이면 안 된다)
+## 그릴 부품 (차량 그림 가이드 — 포탑 차는 차체·포탑을 따로 받는다): ALL 모두 · HULL 포탑·포신 빼고 · TURRET 포탑(포신 빼고)만
+enum Only { ALL, HULL, TURRET }
+static var only := Only.ALL
 
 
 static func model(stats: VehicleType) -> Array:
@@ -107,22 +110,29 @@ static func draw(ci: CanvasItem, car: Vehicle) -> void:
 	var up := IsoView.lift_local(1.0, rot)
 	var v2 := Vector2(VIEW.x, VIEW.y).rotated(-rot)
 	var view := Vector3(v2.x, v2.y, VIEW.z)
-	# 방향 그림이 있는 헬기(VehicleSprite)는 그림으로 — 멈춘 주 날개만 모형으로 얹는다 (돌 때는 Vehicle._draw_rotor)
+	# 방향 그림(VehicleSprite)이 있으면 그림으로 — 그림에 없는 것만 모형으로 얹는다:
+	# 멈춘 주 날개(돌 때는 Vehicle._draw_rotor), 켜진 불빛(그림은 꺼진 불빛으로 그린다), 찌그러진 자국
 	var sprite := VehicleSprite.of(car.stats) if IsoView.enabled else null
 	if sprite and sprite.draw(ci, car):
 		ci.draw_set_transform(IsoView.lift_local(car.ground + car.altitude, rot), 0.0, Vector2.ONE)
-		if not car._rotor_spinning() and not hide_blades:
-			_bank = car.bank
-			_pitch = car.pitch
-			for p: Part in parts:
-				if p.blade:
+		_pose(car)
+		if sprite.part == Only.HULL:
+			_draw_turret(ci, parts, view, up, rot, car)
+		for p: Part in parts:
+			if p.blade:
+				if not car._rotor_spinning() and not hide_blades:
 					_draw_part(ci, p, view, up, rot, car, [])
+			elif not p.rider or car.occupied():
+				_draw_lights(ci, p, view, up, rot, car)
+		_draw_dents(ci, car.dents, view, up, car)
 		return
 	var before: Array[Part] = []
 	var middle: Array[Part] = []
 	var after: Array[Part] = []
 	for p: Part in parts:
 		if p.rider and not car.occupied():
+			continue
+		if (only == Only.HULL and p.turret != 0) or (only == Only.TURRET and p.turret != 1):
 			continue
 		# 멈춘 주 날개: 날개가 도는 동안엔 도는 원판(Vehicle.draw_rotor)만 보인다
 		if p.blade and (hide_blades or car._rotor_spinning()):
@@ -134,22 +144,84 @@ static func draw(ci: CanvasItem, car: Vehicle) -> void:
 				before.append(p)
 		else:
 			middle.append(p)
-	_turret = car.turret
-	_elev = car.elevation
-	_recoil = car.recoil * RECOIL
-	_squash = 1.0 - CRUSH_FLAT * car.crushed
-	_jangles = car.joints
+	_pose(car)
 	middle.sort_custom(func(a: Part, b: Part) -> bool:
 		return a.layer * 100000.0 + _posed(a.center, a).dot(view) < b.layer * 100000.0 + _posed(b.center, b).dot(view))
 	var dents: Array = car.dents
-	_dent_height = maxf(car.stats.height, 1.0)
-	_bank = car.bank
-	_pitch = car.pitch
 	for list in [before, middle, after]:
 		for p: Part in list:
 			# 바퀴·사람은 찌그러지지 않는다
 			_draw_part(ci, p, view, up, rot, car, [] if p.wheel != 0 or p.rider else dents)
 	_draw_dents(ci, dents, view, up, car)
+
+
+## 차체 그림 위의 포탑: 포탑 그림이 있으면 그것 + 포신은 코드 모형(든 각·밀림이 있다 — 포신이 보는 사람 쪽을 향하면 포탑 앞, 아니면 뒤),
+## 없으면 포탑·포신 모두 코드 모형으로. 그리고 나면 변환을 차 바닥(lift)으로 되돌린다
+static func _draw_turret(ci: CanvasItem, parts: Array, view: Vector3, up: Vector2, rot: float, car: Vehicle) -> void:
+	var lift := IsoView.lift_local(car.ground + car.altitude, rot)
+	var gun: Array[Part] = []
+	var body: Array[Part] = []
+	for p: Part in parts:
+		if p.turret == 2:
+			gun.append(p)
+		elif p.turret == 1:
+			body.append(p)
+	var top := VehicleSprite.turret_of(car.stats)
+	if top == null:
+		body.append_array(gun)
+		body.sort_custom(func(a: Part, b: Part) -> bool:
+			return a.layer * 100000.0 + _posed(a.center, a).dot(view) < b.layer * 100000.0 + _posed(b.center, b).dot(view))
+		for p: Part in body:
+			_draw_part(ci, p, view, up, rot, car, [])
+		return
+	var aim := Vector2(0, -1).rotated(car.turret)
+	var gun_front := Vector3(aim.x, aim.y, 0.0).dot(view) > 0.0
+	if not gun_front:
+		for p: Part in gun:
+			_draw_part(ci, p, view, up, rot, car, [])
+	var drawn := top.draw(ci, car)
+	ci.draw_set_transform(lift, 0.0, Vector2.ONE)
+	if not drawn:   # 그 방향 그림이 없다 — 포탑도 코드 모형으로
+		for p: Part in body:
+			_draw_part(ci, p, view, up, rot, car, [])
+	if gun_front:
+		for p: Part in gun:
+			_draw_part(ci, p, view, up, rot, car, [])
+
+
+## 지금 그리는 차의 자세(포탑·포신·깔림·관절·기울기)를 부품 점 돌리기에 넣는다
+static func _pose(car: Vehicle) -> void:
+	_turret = car.turret
+	_elev = car.elevation
+	_recoil = car.recoil * RECOIL
+	_squash = 1.0 - CRUSH_FLAT * car.crushed
+	_jangles = car.joints
+	_dent_height = maxf(car.stats.height, 1.0)
+	_bank = car.bank
+	_pitch = car.pitch
+
+
+## 방향 그림 위에 켜진 불빛 면만 덧그린다 (꺼진 불빛은 그림 그대로). 그림은 찌그러지지 않으니 불빛도 펴진 모양으로
+static func _draw_lights(ci: CanvasItem, p: Part, view: Vector3, up: Vector2, rot: float, car: Vehicle) -> void:
+	_cur = p
+	for i in p.faces.size():
+		if not _lit(p.colors[i], car):
+			continue
+		var n := _rolled(_posed(p.normals[i], p, true), 0.0)
+		if n.dot(view) > 0.03:
+			_poly(ci, p.pts, p.faces[i], up, _shade(_color(p.colors[i], car), n, rot))
+	for d: Array in p.decals:
+		if not _lit(d[2], car):
+			continue
+		var n := _rolled(_posed(d[1], p, true), 0.0)
+		if n.dot(view) <= 0.03:
+			continue
+		var pts: PackedVector3Array = d[0]
+		var idx := PackedInt32Array()
+		for k in pts.size():
+			idx.append(k)
+		_poly(ci, pts, idx, up, _shade(_color(d[2], car), n, rot))
+	_cur = null
 
 
 static func _draw_part(ci: CanvasItem, p: Part, view: Vector3, up: Vector2, rot: float, car: Vehicle, dents: Array) -> void:
@@ -311,6 +383,21 @@ static func _shade(c: Color, n: Vector3, rot: float) -> Color:
 	return c.darkened(dark)
 
 
+## 불빛 색 키(HEAD·TAIL·REVERSE·SIREN_R·SIREN_B, [키, 어둡게]도)가 지금 켜져 있나. 다른 색은 false
+static func _lit(spec: Variant, car: Vehicle) -> bool:
+	if spec is Array:
+		spec = spec[0]
+	if not (spec is StringName):
+		return false
+	match spec:
+		HEAD: return car.occupied()
+		TAIL: return car.is_braking()
+		REVERSE: return car.motor.forward_speed() < -5.0
+		SIREN_R: return car.siren and car._siren_phase()
+		SIREN_B: return car.siren and not car._siren_phase()
+	return false
+
+
 static func _color(spec: Variant, car: Vehicle) -> Color:
 	var amount := 0.0
 	if spec is Array:
@@ -323,11 +410,11 @@ static func _color(spec: Variant, car: Vehicle) -> Color:
 		match spec:
 			BODY: c = car.paint
 			ACCENT: c = car.stats.roof_color
-			HEAD: c = Color(1.0, 0.96, 0.78) if car.occupied() else Color(0.75, 0.75, 0.7)
-			TAIL: c = Color(1.0, 0.15, 0.2) if car.is_braking() else Color(0.62, 0.06, 0.09)
-			REVERSE: c = Color(1.0, 1.0, 0.95) if car.motor.forward_speed() < -5.0 else Color(0.55, 0.55, 0.56)
-			SIREN_R: c = Color(1.0, 0.2, 0.25) if car.siren and car._siren_phase() else Color(0.5, 0.08, 0.1)
-			SIREN_B: c = Color(0.3, 0.55, 1.0) if car.siren and not car._siren_phase() else Color(0.1, 0.15, 0.45)
+			HEAD: c = Color(1.0, 0.96, 0.78) if _lit(spec, car) else Color(0.75, 0.75, 0.7)
+			TAIL: c = Color(1.0, 0.15, 0.2) if _lit(spec, car) else Color(0.62, 0.06, 0.09)
+			REVERSE: c = Color(1.0, 1.0, 0.95) if _lit(spec, car) else Color(0.55, 0.55, 0.56)
+			SIREN_R: c = Color(1.0, 0.2, 0.25) if _lit(spec, car) else Color(0.5, 0.08, 0.1)
+			SIREN_B: c = Color(0.3, 0.55, 1.0) if _lit(spec, car) else Color(0.1, 0.15, 0.45)
 			_: c = Color.MAGENTA
 	if amount > 0.0:
 		c = c.darkened(amount)

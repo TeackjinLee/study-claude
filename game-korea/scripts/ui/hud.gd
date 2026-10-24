@@ -536,6 +536,10 @@ func _process(delta: float) -> void:
 	_prompt.visible = near != null and not director.is_entering()
 	if near:
 		_prompt.text = Locale.t("F  %s 빼앗기" if near.has_driver else "F  %s 타기") % Locale.t(near.stats.display_name)
+	var st := director.nearest_stairs() if not director.is_entering() else []
+	if not st.is_empty() and director.stairs_before(near):
+		_prompt.text = Locale.t("F  계단으로 옥상에" if st[1] else "F  계단으로 내려가기")
+		_prompt.visible = true
 	var phone := missions.phone_prompt()
 	if phone != "" and not _prompt.visible:
 		_prompt.text = phone

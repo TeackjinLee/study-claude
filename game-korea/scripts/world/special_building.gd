@@ -91,6 +91,11 @@ static func _body_hospital(r: Rect2) -> Rect2:
 	return _fit(r, Vector2(320, 200), Vector2(0.3, 0.1))
 
 
+## 병원 본관 옥상 (월드 사각형) — 헬기가 내려앉고 주인공이 내려 걷는다 (City._build_roofs)
+static func hospital_roof(r: Rect2) -> Rect2:
+	return _body_hospital(r)
+
+
 ## 병원 옥상 헬리패드 자리 (월드 사각형) — 구급헬기(EmsDispatcher)가 여기 선다
 static func hospital_helipad(r: Rect2) -> Rect2:
 	var b := _body_hospital(r)
@@ -109,6 +114,7 @@ static func _hospital(out: Array[BuildingModel.Piece], r: Rect2, t: BuildingType
 	var main_r := b
 	var main := _box(main_r, 0.0, h, t.wall_color, &"flat", BuildingModel.top_color(t, seed), &"punched", seed)
 	main.accent = GREEN
+	main.deck = true   # 옥상에 헬기가 내려앉고 사람이 걷는다
 	BuildingModel._stair_house(main, seed)
 	BuildingModel._units(main, seed, 4)
 	BuildingModel._plant(main, Vector2(0.06, 0.62), Vector2(0.22, 0.22), 4.0, BuildingModel.HEDGE)   # 옥상 화단

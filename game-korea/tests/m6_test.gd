@@ -614,6 +614,9 @@ func _test_side_jobs() -> void:
 	# 자경단: 수배를 풀고 범인 차를 부숴라
 	var cop := _vehicle_of(main, "res://data/vehicles/police_patrol.tres", start + Vector2(0, -300))
 	main.director.enter_immediately(cop)
+	main.police.wanted.raise_to(WantedSystem.LOCK_LEVEL)
+	_expect(jobs.available() == null, "★5부터는 자경단 등록으로도 수배를 못 푼다")
+	main.police.wanted.clear()
 	main.police.wanted.raise_to(2)
 	await _frames(2)
 	jobs.start(jobs.available())

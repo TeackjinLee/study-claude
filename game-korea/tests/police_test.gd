@@ -106,6 +106,15 @@ func _test_wanted_logic() -> void:
 	_expect(hard.level == WantedSystem.MAX_LEVEL, "헬기를 떨어뜨리면 ★%d (%d)" % [WantedSystem.MAX_LEVEL, hard.level])
 	hard.update(600.0, false)
 	_expect(hard.level == WantedSystem.MAX_LEVEL, "★6은 숨어 있어도 내려가지 않는다")
+	hard.lower(2)
+	_expect(hard.level == WantedSystem.MAX_LEVEL and hard.locked(), "★6은 도색·보상으로도 안 떨어진다 (%d)" % hard.level)
+	var five := WantedSystem.new()
+	five.raise_to(WantedSystem.LOCK_LEVEL)
+	five.update(600.0, false)
+	five.lower(1)
+	_expect(five.level == 5 and five.locked(), "★5부터는 별이 떨어지지 않는다 (%d)" % five.level)
+	five.clear()
+	_expect(five.level == 0 and not five.locked(), "체포·기절(clear)이면 풀린다")
 
 
 ## 경찰이 없으면 차를 빼앗아도 수배가 없고, 순찰차가 보고 있으면 ★1
