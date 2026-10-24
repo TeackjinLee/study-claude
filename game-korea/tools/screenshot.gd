@@ -112,6 +112,11 @@ func _ready() -> void:
 		await _citizen_shots(main)
 		get_tree().quit()
 		return
+	if "--only=gang_fight" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _gang_fight_shots(main)
+		get_tree().quit()
+		return
 	if "--only=punch" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _punch_shots(main)
@@ -918,6 +923,48 @@ func _punch_shots(main: Node2D) -> void:
 			seen.append(weapons._punch_index)
 		await _frames(1)
 	print("  다섯 번 연타: 공격 순서 ", seen, " (기대 [0, 1] — 예약은 한 번만)")
+
+
+## 조직원 주먹 (`-- --only=gang_fight`): 폭력배·여성 조직원·보스를 경호원으로 세워 주인공과 싸우게 하고, 주먹 그림을 시작한 뒤
+## 주인공이 맞은 틱(= 그림의 타격 장)에 찍는다(gang_<id>_hit). 폭력배는 멀리서 달려오는 모습(gang_thug_run)도.
+## 주먹을 시작하고 주인공 체력이 깎이기까지 걸린 시간을 그림의 타격 시각과 함께 출력한다 — 박자가 맞는지 본다
+func _gang_fight_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	cam.target = null
+	cam.global_position = player.global_position
+	cam.zoom = Vector2(3.5, 3.5)
+	var e_dir := IsoView.BASIS.affine_inverse().basis_xform(Vector2(1, 0.3)).normalized()
+	for id in ["thug", "gang_f", "boss"]:
+		var npc: NpcType = load("res://data/npc/%s.tres" % id)
+		var attack := PersonRig.npc_punch(npc)
+		player.revive()
+		var far: bool = id == "thug"
+		var m: GangMember = main.gangs.spawn_guard(npc, player.global_position + e_dir * (90.0 if far else 22.0))
+		player.facing = Vector2.UP.angle_to(e_dir)
+		var start := -1
+		var hurt := -1
+		var health := player.health
+		for f in 300:
+			await _frames(1)
+			player.global_position = cam.global_position   # 주인공은 제자리
+			if far and f == 12:
+				await _save("gang_thug_run")
+			if start < 0 and m.has_meta(&"punch_state"):
+				start = f
+			if start >= 0 and hurt < 0 and player.health < health:
+				hurt = f
+				await _save("gang_%s_hit" % id)   # 맞은 틱 = 그림의 타격 장
+				break
+		print("  %s %s: 주먹 시작 %d틱, 맞음 %d틱 뒤 (그림 타격 %.2f초 = %d틱)" % [id, attack.get("name", "-"), start, hurt - start,
+				float(attack["hit_frame"]) / int(attack["frames"]) * float(attack["duration"]),
+				int(float(attack["hit_frame"]) / int(attack["frames"]) * float(attack["duration"]) * 60.0)])
+		main.gangs.members.erase(m)
+		main.pedestrians.remove(m)
+		await _frames(10)
 
 
 ## 한강 (`-- --only=river`): 강변 가까이(호안·물거품·밤 불빛) → 넓게 → 낮 → 북쪽 둑 옹벽 → 비 → 밤 둑 가로등 → 0.5초 뒤 (물살이 흘렀는지)

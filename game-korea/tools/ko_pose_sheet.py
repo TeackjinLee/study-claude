@@ -9,9 +9,15 @@
 
 소총(--kind=rifle)도 같다: 주인공 소총 시트(00_player_rifle_dir8.png, ↘ → ↖ ←)에서 겨누기 4장 + 쏘기 8장을 고른 참고
 (reference/soldier_motion/rifle12_motion_ref_a·b.png, 6열 × 4행)로 받은 <NN>_<id>_rifle12_a·b.png → <NN>_<id>_rifle_dir8.png.
+주먹(--kind=punch --attack=<잽 jab·스트레이트 straight·어퍼컷 uppercut·카운터 counter>)도 같다: 주인공 영상 주먹 시트
+(00_player_attacks_dir8.png, ↓ ↙ → ↖)의 그 공격에서 고르게 12장(타격 장은 꼭 넣는다)을 고른 참고
+(reference/punch_motion/<공격>12_motion_ref_a·b.png, 6열 × 4행 — --make-ref가 만든다)로 받은 <NN>_<id>_punch12_a·b.png
+→ <NN>_<id>_attacks_dir8.png (주인공 주먹 시트와 같은 꼴 — prepare_character_sprites.py가 punch_attacks로 넣는다).
 
   python3 tools/ko_pose_sheet.py 01_civ_f [--debug]
   python3 tools/ko_pose_sheet.py 25_soldier --kind=rifle
+  python3 tools/ko_pose_sheet.py - --kind=punch --attack=uppercut --make-ref
+  python3 tools/ko_pose_sheet.py 07_thug --kind=punch --attack=uppercut
 """
 import json
 import sys
@@ -37,6 +43,39 @@ KINDS = {
               "order": list(range(12)),
               "clips": [("aim", 0, 4, 0.84, True), ("fire", 4, 8, 0.3, False)]},
 }
+PUNCH_N = 12   ## 주먹: 공격 하나에서 고르는 장 수 (6열 × 2장)
+
+
+def _punch_kind(attack: str) -> dict:
+    """주먹 공격 하나를 고르게 PUNCH_N장으로 — 타격 장을 꼭 넣고, 게임 시트 타격 장 차례(hit)도 적는다"""
+    info = json.loads((CHARS / "00_player_attacks_dir8.json").read_text())
+    a = next(x for x in info["attacks"] if x["name"] == attack)
+    pick = [a["col"] + round(i * (a["frames"] - 1) / (PUNCH_N - 1)) for i in range(PUNCH_N)]
+    hit = min(range(PUNCH_N), key=lambda i: abs(pick[i] - a["col"] - a["hit_frame"]))
+    pick[hit] = a["col"] + a["hit_frame"]
+    return {"ref": "00_player_attacks_dir8.png", "pick": pick, "cols": PUNCH_N // 2, "rows": len(info["rows"]),
+            "src": "reference/punch_motion/{stem}_punch12_{part}.png", "wide_from": 99, "out": "attacks",
+            "ref_img": f"reference/punch_motion/{attack}12_motion_ref_{{part}}.png",
+            "order": list(range(PUNCH_N)), "hit": hit,
+            "clips": [(attack, 0, PUNCH_N, a["duration"], False)]}
+
+
+def make_ref(K: dict) -> None:
+    """주인공 시트에서 고른 장을 회색 바탕 참고 두 장(앞 반·뒤 반)으로 — 코덱스에 줄 동작 참고"""
+    REF = CHARS / K["ref"]
+    W, H = json.loads(REF.with_suffix(".json").read_text())["cell"]
+    ref = Image.open(REF).convert("RGBA")
+    cols = K["cols"]
+    for n, part in enumerate("ab"):
+        img = Image.new("RGBA", (W * cols, H * K["rows"]), (205, 205, 205, 255))
+        for r in range(K["rows"]):
+            for c in range(cols):
+                f = K["pick"][n * cols + c]
+                img.alpha_composite(ref.crop((f * W, r * H, (f + 1) * W, (r + 1) * H)), (c * W, r * H))
+        dst = CHARS / K["ref_img"].format(part=part)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        img.convert("RGB").save(dst)
+        print(f"{dst.relative_to(CHARS)}: {img.width}×{img.height}, 장 {K['pick'][n * cols:(n + 1) * cols]}")
 
 
 def _bbox(a: np.ndarray):
@@ -107,7 +146,10 @@ def _cells(path: Path, COLS: int, ROWS: int) -> list:
 def main() -> None:
     stem = sys.argv[1]
     kind = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--kind=")), "ko")
-    K = KINDS[kind]
+    K = _punch_kind(next(a.split("=", 1)[1] for a in sys.argv if a.startswith("--attack="))) if kind == "punch" else KINDS[kind]
+    if "--make-ref" in sys.argv:
+        make_ref(K)
+        return
     REF = CHARS / K["ref"]
     info = json.loads(REF.with_suffix(".json").read_text())
     W, H = info["cell"]
@@ -139,11 +181,13 @@ def main() -> None:
             out[r * H:(r + 1) * H, j * W:(j + 1) * W] = np.array(cell)
         print(f"  {info['rows'][r]['dir']}: 배율 {k:.3f}")
     cid = stem[3:]
-    dst = CHARS / f"{stem}_{kind}_dir8.png"
+    out_kind = K.get("out", kind)   # 주먹은 주인공 주먹 시트와 같은 이름(attacks)
+    dst = CHARS / f"{stem}_{out_kind}_dir8.png"
     Image.fromarray(out).save(dst)
-    meta = {"source": f"{K['src'].format(stem=stem, part='a·b')} (주인공 영상 시트에서 포즈 옮기기)", "kind": kind,
+    meta = {"source": f"{K['src'].format(stem=stem, part='a·b')} (주인공 영상 시트에서 포즈 옮기기)", "kind": out_kind,
             "cell": [W, H], "rows": info["rows"],
-            "attacks": [{"name": n, "col": c, "frames": f, "hit_frame": 0, "duration": d, "loop": lp} for n, c, f, d, lp in K["clips"]],
+            "attacks": [{"name": n, "col": c, "frames": f, "hit_frame": K.get("hit", 0), "duration": d, "loop": lp}
+                        for n, c, f, d, lp in K["clips"]],
             "muzzle": info.get("muzzle", {})}
     dst.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
     if "--debug" in sys.argv:

@@ -3,6 +3,8 @@ extends Node
 ## 갱 조직원들: 구역에 조직원을 세우고, 누구와 싸울지 정하고, 쏜다(폭력배는 주먹).
 ## 싸우는 조건 — 미션 경호원(guard)이거나, 맞아서 화가 났거나(aggro), 그 갱 존경도가 적대 수준이다.
 ## 조직원을 죽이면 그 갱 존경도가 깎이고, 주변 동료가 화가 난다. 아군(존경도 높음)은 맞아도 참는다.
+## 주먹 그림이 있는 사람(PersonRig.npc_punch — 폭력배 어퍼컷·여성 조직원 카운터·보스 스트레이트)은 그림을 넘기고 타격 장에 친다.
+## 총을 든 조직원도 걸어서 바짝 붙은 주인공에게는 주먹을 지른다.
 
 const SEED := 5151
 const SIGHT := 420.0             ## 싸울 조직원이 주인공을 알아보는 거리 (건물에 가리면 못 본다)
@@ -14,6 +16,7 @@ const AGGRO_RADIUS := 300.0      ## 동료가 맞으면 이 안의 같은 갱 �
 const MAINTAIN_INTERVAL := 1.0
 const OFFSCREEN := 950.0
 const RESPAWN_DISTANCE := 1100.0
+const FIST := preload("res://data/weapons/fist.tres")   ## 총 든 조직원이 바짝 붙었을 때 쓰는 주먹
 
 var gangs: Array[GangType] = []
 var respect: Respect
@@ -25,6 +28,7 @@ var members: Array[GangMember] = []
 var rng := RandomNumberGenerator.new()
 var shoot_rng := RandomNumberGenerator.new()
 var _maintain_timer := MAINTAIN_INTERVAL
+var _punches: Array = []         ## [조직원, 타격 장까지 남은 초, 무기] — 주먹 그림의 타격 장에 친다
 
 
 func _ready() -> void:
@@ -123,6 +127,7 @@ func _physics_process(delta: float) -> void:
 	if _maintain_timer <= 0.0:
 		_maintain_timer = MAINTAIN_INTERVAL
 		_maintain()
+	_land_punches(delta)
 	var pcar := director.current_vehicle
 	var ppos := director.controlled_target().global_position
 	var space := get_viewport().world_2d.direct_space_state
@@ -151,6 +156,9 @@ func _shoot(m: GangMember, space: PhysicsDirectSpaceState2D, target: Vector2, in
 	var w := m.npc.weapon
 	if combat == null or w == null or m.reload > 0.0 or m.state != Pedestrian.State.WALK:
 		return
+	if not w.melee and not in_air and director.current_vehicle == null and not PersonRig.npc_punch(m.npc).is_empty() \
+			and m.global_position.distance_to(target) <= FIST.max_range + Player.RADIUS:
+		w = FIST
 	if in_air and w.melee:
 		return      # 하늘의 헬기는 주먹·칼이 안 닿는다
 	var pos := m.global_position
@@ -165,7 +173,25 @@ func _shoot(m: GangMember, space: PhysicsDirectSpaceState2D, target: Vector2, in
 		# 공격 한 번의 사본에만 적용한다 — 플레이어와 다른 NPC의 무기는 그대로다.
 		w = w.duplicate() as WeaponType
 		w.damage *= m.npc.melee_multiplier()
+	var hit := m.punch() if w.melee else -1.0
+	if hit >= 0.0:
+		m.reload = maxf(m.reload, float(PersonRig.npc_punch(m.npc)["duration"]))
+		_punches.append([m, hit, w])
+		return
 	combat.fire(pos if w.melee else pos + dir * 10.0, dir, w, false, exclude, 0.0, m.level)
+
+
+## 주먹 그림의 타격 장이 되면 바라보는 쪽으로 친다 — 그 사이 쓰러졌거나 싸움을 그만뒀으면 헛손질
+func _land_punches(delta: float) -> void:
+	for p: Array in _punches.duplicate():
+		p[1] -= delta
+		if p[1] > 0.0:
+			continue
+		_punches.erase(p)
+		var m: GangMember = p[0]
+		if not is_instance_valid(m) or m.state != Pedestrian.State.WALK or not m.fighting:
+			continue
+		combat.fire(m.global_position, Vector2.UP.rotated(m.facing), p[2], false, [m.get_rid()] as Array[RID], 0.0, m.level)
 
 
 func _clear(space: PhysicsDirectSpaceState2D, from: Vector2, to: Vector2) -> bool:

@@ -1581,19 +1581,44 @@ static func punch_attacks() -> Array:
 	return [{"duration": 0.4, "frames": 3, "hit_frame": 1}]
 
 
-## 영상 주먹 공격 그림 (주인공만). 노드 메타 punch_state = {index 공격 번호, elapsed 지난 시간, facing 시작 때 방향}이면
+## 보행자 주먹 공격 (.json punch_attacks 첫 공격 — 폭력배 어퍼컷·조직원 카운터·보스 스트레이트처럼 사람마다 하나). 그림이 없으면 {}
+static func npc_punch(look: NpcType) -> Dictionary:
+	var info := dir8_for(look)
+	var attacks: Array = info.get("punch_attacks", [])
+	return attacks[0] if look != null and info.has("attack_tex") and not attacks.is_empty() else {}
+
+
+## 보행자 주먹 그림의 지금 장 번호 (-1 = 주먹 중이 아님). 보행자는 이 값이 바뀔 때만 다시 그린다 (Pedestrian._process의 열쇠)
+static func punch_frame(ci: CanvasItem, look: NpcType) -> int:
+	if look == null or not ci.has_meta(&"punch_state"):
+		return -1
+	var attack := npc_punch(look)
+	if attack.is_empty():
+		return -1
+	var t := Time.get_ticks_msec() / 1000.0 - float(ci.get_meta(&"punch_state").get("start", 0.0))
+	return int(t / float(attack["duration"]) * int(attack["frames"])) if t < float(attack["duration"]) else -1
+
+
+## 영상 주먹 공격 그림. 노드 메타 punch_state = {index 공격 번호, elapsed 지난 시간, facing 시작 때 방향}이면
 ## 그 공격 칸을 지난 시간 비율로 넘기고, 공격이 없어도 combat_stance(전투 대기)면 서 있을 때 싸움 자세(첫 공격 첫 칸)를 그린다.
+## 보행자(look)는 elapsed 대신 시작 시각 start를 적어 두고(Pedestrian.punch) 그림이 지난 시간을 재며, 끝나면 메타를 지운다.
 ## 방향은 영상에 있는 방향(↓ ↙ → ↖)과 그 좌우 뒤집기(↘ ← ↗)를 쓰고, 영상에 없는 ↑는 가까운 방향 그림을 쓴다 —
 ## 예전 펀치 시트(제미나이 그림)를 섞으면 방향을 틀 때 그림체·크기가 바뀌어 보였다
 static func _draw_video_punch(ci: CanvasItem, facing: float, size: float, look: NpcType, gait: float) -> bool:
-	if look != null or (not ci.has_meta(&"punch_state") and (not ci.get_meta(&"combat_stance", false) or gait > 0.0)):
+	if not ci.has_meta(&"punch_state") and (look != null or not ci.get_meta(&"combat_stance", false) or gait > 0.0):
 		return false
-	var info := dir8_for(null)
+	var info := dir8_for(look)
 	var attacks: Array = info.get("punch_attacks", [])
 	if attacks.is_empty() or not info.has("attack_tex"):
 		return false
 	var state: Dictionary = ci.get_meta(&"punch_state", {})
 	var attack: Dictionary = attacks[int(state.get("index", 0)) % attacks.size()]
+	if state.has("start"):
+		var t := Time.get_ticks_msec() / 1000.0 - float(state["start"])
+		if t >= float(attack["duration"]):
+			ci.remove_meta(&"punch_state")
+			return false
+		state = {"index": 0, "elapsed": t, "facing": state.get("facing", facing)}
 	var ok: Array = info["attack_ok"]
 	var dir := IsoView.to_screen_dir(Vector2.UP.rotated(float(state.get("facing", facing))))
 	var k := dir8_pick(dir, ci.get_meta(&"dir8_punch", -1), ok)

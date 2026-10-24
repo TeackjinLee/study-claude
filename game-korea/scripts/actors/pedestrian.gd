@@ -157,6 +157,15 @@ func say(text: String, seconds := 2.5) -> void:
 
 
 ## 이 사람의 그 상황 대사(data/dialogue/lines.csv)로 말풍선을 띄운다. 대사가 있었으면 true
+## 주먹 그림을 처음부터 넘긴다 (PersonRig.npc_punch — 사람마다 다른 공격 하나). 타격 장까지 걸리는 초를 돌려준다 (-1 = 그림 없음)
+func punch() -> float:
+	var attack := PersonRig.npc_punch(npc)
+	if attack.is_empty():
+		return -1.0
+	set_meta(&"punch_state", {"start": Time.get_ticks_msec() / 1000.0, "facing": facing})
+	return float(attack["hit_frame"]) / int(attack["frames"]) * float(attack["duration"])
+
+
 func say_line(situation: StringName, seconds := 2.5, salt := 0) -> bool:
 	var text := Dialogue.pick(npc.id, situation, get_instance_id() + salt)
 	if text == "":
@@ -259,7 +268,7 @@ func _process(_delta: float) -> void:
 	z_index = IsoView.z_at(global_position, level) if IsoView.enabled else 0
 	var key := [int(walk_phase * 24.0 / TAU), snappedf(facing, 0.05), state, speech_time > 0.0, speech,
 		IsoView.enabled, npc, shirt, snappedf(IsoView.ground(global_position, level), 0.5), carried,
-		PersonRig.ko_frame(self, npc), PersonRig.idle_frame(self, npc, _draw_gait())]
+		PersonRig.ko_frame(self, npc), PersonRig.idle_frame(self, npc, _draw_gait()), PersonRig.punch_frame(self, npc)]
 	if key != _drawn_key:
 		_drawn_key = key
 		queue_redraw()

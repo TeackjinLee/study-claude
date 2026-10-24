@@ -4,7 +4,8 @@ extends Node2D
 ## 저장: ... -- --shot  →  .screenshots/person_gallery.png
 ## 몇 종만 크게: ... -- --shot --ids=office,boss  →  .screenshots/person_gallery_office.png (설계도와 비교할 때)
 ## 관절 있는 사람(PersonRig) 비교: ... -- --rig [--ids=civ_m,police,office] (주인공은 player). --walk면 8방향 걷기만, --run이면 8방향 달리기만, --fall이면 8방향 넘어짐만(2초마다 다시), --punch면 8방향 주먹 콤보만 크게
-##   (--rig --ids=player --punch: 영상 공격마다 한 줄, --shot이면 타격 장면 → .screenshots/person_rig.png)
+##   (--rig --ids=player --punch: 영상 공격마다 한 줄, --shot이면 타격 장면 → .screenshots/person_rig.png.
+##    보행자도 주먹 그림이 있으면 그 사람 공격 하나 — --rig --ids=thug,gang_f,boss --punch --shot)
 ##   (--rig --rifle: 주인공 소총 조준·발사 8방향)  — 한 줄에 기존 그림 · 새 뼈대 8방향 걷기 · 달리기 · 서 있기.
 ##   움직이는 걸 창으로 보거나, --shot이면 .screenshots/person_rig.png
 ## 설계도(성인 12종 앞·뒤)와 맞춰 보기: ... -- --sheet [--shot]  →  .screenshots/person_sheet.png (--all이면 그림이 있는 종 전부)
@@ -55,7 +56,7 @@ class RigDoll:
 				_fire_t = fire_every
 				set_meta(&"shot_at", Time.get_ticks_msec() / 1000.0)
 		if attack >= 0:
-			var spec: Dictionary = PersonRig.punch_attacks()[attack]
+			var spec: Dictionary = PersonRig.punch_attacks()[attack] if npc == null else PersonRig.npc_punch(npc)
 			_punch_t = attack_at if attack_at >= 0.0 else _punch_t + delta
 			if _punch_t >= float(spec["duration"]) + 0.4:
 				_punch_t = 0.0
@@ -219,11 +220,13 @@ func _rig_compare() -> void:
 				wd.gait = 2.0 if run_only else 1.0
 				if punch_only:
 					wd.gait = 0.0
-					wd.punch_loop = attacks.size() <= 1
-					if attacks.size() > 1:
-						wd.attack = row
+					# 보행자: 주먹 그림이 있으면 그 사람 공격 하나(PersonRig.npc_punch)를 되풀이한다
+					var own := {} if npc == null else PersonRig.npc_punch(npc)
+					wd.punch_loop = attacks.size() <= 1 and own.is_empty()
+					if attacks.size() > 1 or not own.is_empty():
+						wd.attack = row if own.is_empty() else 0
 						if "--shot" in OS.get_cmdline_user_args():
-							var a: Dictionary = attacks[row]
+							var a: Dictionary = attacks[row] if own.is_empty() else own
 							wd.attack_at = float(a["duration"]) * (float(a["hit_frame"]) + 0.5) / float(a["frames"])
 				if rifle_only:
 					wd.gait = 0.0
@@ -262,6 +265,10 @@ func _rig_compare() -> void:
 		label.text = "%s  %s" % ["주인공" if npc == null else npc.display_name, ids[row]]
 		if rifle_only:
 			label.text = "주인공  소총 " + ("조준" if row == 0 else "발사 (0.5초마다)")
+		if punch_only and npc != null and not PersonRig.npc_punch(npc).is_empty():
+			var own := PersonRig.npc_punch(npc)
+			label.text = "%s  %s (타격 %d/%d장, %.2f초)" % [npc.display_name, own["name"], int(own["hit_frame"]) + 1, int(own["frames"]),
+					float(own["duration"])]
 		if attacks.size() > 1:
 			label.text = "주인공  %s (타격 %d/%d장, %.2f초)" % [attacks[row]["name"], int(attacks[row]["hit_frame"]) + 1,
 					int(attacks[row]["frames"]), float(attacks[row]["duration"])]

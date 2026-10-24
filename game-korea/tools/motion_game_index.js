@@ -1,6 +1,6 @@
 // tools/gen_motion_index.py가 만든다 — 손으로 고치지 않는다
 window.GAME_DIR8 = {
- "version": 1792826405,
+ "version": 1792845894,
  "chars": [
   {
    "name": "주인공",
@@ -1898,9 +1898,9 @@ window.GAME_DIR8 = {
    "meta": {
     "dirs": [
      "s",
-     "sw",
-     "w",
-     "nw",
+     "se",
+     "e",
+     "ne",
      "n"
     ],
     "frames": 12,
@@ -1909,13 +1909,75 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "attack_dirs": [
+     "s",
+     "sw",
+     "e",
+     "nw"
+    ],
+    "punch_attacks": [
+     {
+      "name": "straight",
+      "col": 0,
+      "frames": 12,
+      "hit_frame": 3,
+      "duration": 0.48
+     }
+    ],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -26.0,
+      -71.0
+     ],
+     "ne": [
+      23.0,
+      -72.0
+     ],
+     "n": [
+      24.0,
+      -67.0
+     ],
+     "nw": [
+      -27.0,
+      -69.0
+     ],
+     "e": [
+      14.0,
+      -66.0
+     ],
+     "sw": [
+      -28.0,
+      -55.0
+     ]
+    }
    }
   },
   {
@@ -1927,9 +1989,9 @@ window.GAME_DIR8 = {
    "meta": {
     "dirs": [
      "s",
-     "sw",
-     "w",
-     "nw",
+     "se",
+     "e",
+     "ne",
      "n"
     ],
     "frames": 12,
@@ -1938,13 +2000,75 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "attack_dirs": [
+     "s",
+     "sw",
+     "e",
+     "nw"
+    ],
+    "punch_attacks": [
+     {
+      "name": "counter",
+      "col": 0,
+      "frames": 12,
+      "hit_frame": 5,
+      "duration": 1.25
+     }
+    ],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -29.0,
+      -66.0
+     ],
+     "ne": [
+      25.0,
+      -69.0
+     ],
+     "n": [
+      25.0,
+      -65.0
+     ],
+     "nw": [
+      -28.0,
+      -64.0
+     ],
+     "e": [
+      15.0,
+      -68.0
+     ],
+     "sw": [
+      -28.0,
+      -55.0
+     ]
+    }
    }
   },
   {
@@ -2067,9 +2191,9 @@ window.GAME_DIR8 = {
    "meta": {
     "dirs": [
      "s",
-     "sw",
-     "w",
-     "nw",
+     "se",
+     "e",
+     "ne",
      "n"
     ],
     "frames": 12,
@@ -2078,13 +2202,75 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "attack_dirs": [
+     "s",
+     "sw",
+     "e",
+     "nw"
+    ],
+    "punch_attacks": [
+     {
+      "name": "uppercut",
+      "col": 0,
+      "frames": 12,
+      "hit_frame": 6,
+      "duration": 0.85
+     }
+    ],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -27.5,
+      -68.0
+     ],
+     "ne": [
+      24.0,
+      -70.0
+     ],
+     "n": [
+      25.0,
+      -66.0
+     ],
+     "nw": [
+      -27.0,
+      -68.0
+     ],
+     "e": [
+      15.0,
+      -66.0
+     ],
+     "sw": [
+      -28.0,
+      -51.0
+     ]
+    }
    }
   }
  ]

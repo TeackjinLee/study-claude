@@ -24,6 +24,7 @@ func _ready() -> void:
 	await _test_swat()
 	await _test_spray_shop()
 	await _test_thugs()
+	await _test_gang_punch()
 	if _failures.is_empty():
 		print("mvp_test: PASS")
 		get_tree().quit(0)
@@ -209,6 +210,27 @@ func _test_thugs() -> void:
 			break
 	_expect(player.health < Player.MAX_HEALTH, "건달파와 척지면 폭력배가 달려와 주먹질한다 (체력 %.0f)" % player.health)
 	_expect(t.global_position.distance_to(player.global_position) < 40.0, "바짝 붙어서 때린다")
+	await _free(main)
+
+
+## 총 든 보스도 걸어서 바짝 붙은 주인공에게는 주먹 — 주먹 그림(스트레이트)을 넘기고 타격 장에 친다
+func _test_gang_punch() -> void:
+	var boss: NpcType = load("res://data/npc/boss.tres")
+	_expect(not PersonRig.npc_punch(boss).is_empty(), "보스는 자기 주먹 그림이 있다")
+	var main := _make_main()
+	await _frames(2)
+	var player: Player = main.player
+	var m: GangMember = main.gangs.spawn_guard(boss, player.global_position + Vector2(0, -20))
+	var punched := false
+	var hit_at := -1
+	for f in 240:
+		await _frames(1)
+		punched = punched or m.has_meta(&"punch_state")
+		if player.health < Player.MAX_HEALTH:
+			hit_at = f
+			break
+	_expect(punched, "보스가 주먹 그림을 넘긴다")
+	_expect(hit_at >= 0, "바짝 붙은 주인공을 주먹으로 친다 (체력 %.0f)" % player.health)
 	await _free(main)
 
 
