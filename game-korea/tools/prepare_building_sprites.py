@@ -425,6 +425,7 @@ def prepare(name: str, debug: bool) -> None:
     DST.mkdir(parents=True, exist_ok=True)
     base = name.lower()
     Image.fromarray(bleed(rgba)).save(DST / f"{base}.png")
+    import_settings(DST / f"{base}.png")
     if lit is not None:
         lum = lit.max(2).astype(float)
         a = np.clip((lum - 45.0) / 70.0, 0.0, 1.0)
@@ -437,6 +438,7 @@ def prepare(name: str, debug: bool) -> None:
         out[:, w + ORDER_GAP:, :3] = order[..., None]
         out[:, w + ORDER_GAP:, 3] = 255
         Image.fromarray(out).save(DST / f"{base}_lights.png")
+        import_settings(DST / f"{base}_lights.png")
     info = {"id": guide["id"], "lot": guide["lot"], "lot_size": guide["lot_size"], "seed": guide["seed"],
             "size": [w, h], "origin": [round(origin[0], 2), round(origin[1], 2)], "scale": round(scale, 5)}
     if "floors" in guide:
@@ -472,6 +474,25 @@ def prepare(name: str, debug: bool) -> None:
             ov[lost] = (255, 40, 40)
             print(f"  윤곽을 넓히고도 잘리는 그림 {int(lost.sum())}px (빨강)")
         Image.fromarray(ov).save(SRC / f"{name}_fit_debug.png")
+
+
+# 가져오기 설정: VRAM 압축(BC7)·밉맵 (BuildingSkin._vram이 보고 그대로 쓴다 — RGBA로 풀면 GPU 메모리가 4배)
+IMPORT_PARAMS = {"compress/mode": "2", "compress/high_quality": "true", "mipmaps/generate": "true"}
+
+
+def import_settings(png: Path) -> None:
+    """그림 옆 .import에 IMPORT_PARAMS를 넣는다. 없으면 이것만 적은 파일을 두고 godot --import가 나머지를 채운다."""
+    imp = png.with_name(png.name + ".import")
+    if not imp.exists():
+        imp.write_text('[remap]\n\nimporter="texture"\ntype="CompressedTexture2D"\n\n[params]\n\n'
+                       + "".join(f"{k}={v}\n" for k, v in IMPORT_PARAMS.items()))
+        return
+    lines = imp.read_text().splitlines()
+    for i, ln in enumerate(lines):
+        k = ln.split("=", 1)[0]
+        if k in IMPORT_PARAMS:
+            lines[i] = f"{k}={IMPORT_PARAMS[k]}"
+    imp.write_text("\n".join(lines) + "\n")
 
 
 BASIS = np.array([[0.78, -0.78], [0.39, 0.39]])   # IsoView.BASIS (열 = x축·y축)

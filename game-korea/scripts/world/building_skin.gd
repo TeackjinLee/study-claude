@@ -59,6 +59,8 @@ static func has_png(path: String) -> bool:
 ## 밉맵 붙인 그림 (없으면 null). 가져오기 전이면 PNG를 바로 읽는다
 static func texture(path: String) -> Texture2D:
 	if ResourceLoader.exists(path):
+		if _vram(path):
+			return load(path)
 		return _mipmapped(load(path))
 	if not FileAccess.file_exists(path):
 		return null
@@ -69,7 +71,17 @@ static func texture(path: String) -> Texture2D:
 	return ImageTexture.create_from_image(img)
 
 
-## 크게 그린 그림을 줄여 그리므로 밉맵을 만든다 (가져오기 설정은 저장소에 남지 않는다 — *.import는 git 밖)
+## 가져오기에서 VRAM 압축(BC7)·밉맵까지 만든 그림인가 (통째 그림 — assets/buildings/whole/*.import는 저장소에 있다).
+## 그런 그림은 그대로 쓴다: 풀어서 RGBA로 다시 올리면 GPU 메모리가 4배가 되고 밉맵을 만드느라 도시 짓기가 몇 초 늦다
+static func _vram(path: String) -> bool:
+	var f := FileAccess.open(path + ".import", FileAccess.READ)
+	if f == null:
+		return false
+	var text := f.get_as_text()
+	return text.contains("compress/mode=2") and text.contains("mipmaps/generate=true")
+
+
+## 크게 그린 그림을 줄여 그리므로 밉맵을 만든다 (벽면 그림 등 — 이쪽 *.import는 git 밖이라 가져오기 설정이 저장소에 남지 않는다)
 static func _mipmapped(tex: Texture2D) -> Texture2D:
 	var img := tex.get_image() if tex else null
 	if img == null or img.is_empty():
