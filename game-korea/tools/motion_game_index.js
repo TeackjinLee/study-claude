@@ -1,6 +1,6 @@
 // tools/gen_motion_index.py가 만든다 — 손으로 고치지 않는다
 window.GAME_DIR8 = {
- "version": 1792800197,
+ "version": 1792810699,
  "chars": [
   {
    "name": "주인공",
@@ -496,26 +496,171 @@ window.GAME_DIR8 = {
    }
   },
   {
+   "name": "DJ",
+   "scale": 1.0,
+   "walk": 52.5,
+   "run": 170.0,
+   "id": "dj",
+   "meta": {
+    "dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n"
+    ],
+    "frames": 12,
+    "run_dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n"
+    ],
+    "run_frames": 8,
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -26.0,
+      -70.0
+     ],
+     "ne": [
+      23.0,
+      -70.0
+     ],
+     "n": [
+      25.0,
+      -68.0
+     ],
+     "nw": [
+      -26.0,
+      -69.0
+     ],
+     "e": [
+      16.0,
+      -65.0
+     ],
+     "sw": [
+      -28.0,
+      -54.0
+     ]
+    },
+    "idle_dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n"
+    ],
+    "idle_clips": [
+     {
+      "name": "idle",
+      "col": 0,
+      "frames": 12,
+      "duration": 1.5,
+      "loop": true
+     }
+    ]
+   }
+  },
+  {
    "name": "강남 조직원",
    "scale": 1.0,
    "walk": 65.0,
    "run": 175.0,
    "id": "gang_gangnam",
    "meta": {
-    "dirs": [],
-    "frames": 0,
+    "dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n"
+    ],
+    "frames": 12,
     "run_dirs": [
      "s",
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -26.5,
+      -68.0
+     ],
+     "ne": [
+      24.0,
+      -72.0
+     ],
+     "n": [
+      25.0,
+      -68.0
+     ],
+     "nw": [
+      -27.0,
+      -67.0
+     ],
+     "e": [
+      15.0,
+      -65.0
+     ],
+     "sw": [
+      -27.0,
+      -52.0
+     ]
+    }
    }
   },
   {
@@ -559,24 +704,68 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
-    "frames": 8,
+    "frames": 12,
     "run_dirs": [
      "s",
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -28.0,
+      -72.0
+     ],
+     "ne": [
+      23.0,
+      -70.0
+     ],
+     "n": [
+      24.0,
+      -67.0
+     ],
+     "nw": [
+      -27.0,
+      -65.0
+     ],
+     "e": [
+      15.0,
+      -64.0
+     ],
+     "sw": [
+      -27.0,
+      -55.0
+     ]
+    }
    }
   },
   {
@@ -588,9 +777,9 @@ window.GAME_DIR8 = {
    "meta": {
     "dirs": [
      "s",
-     "sw",
-     "w",
-     "nw",
+     "se",
+     "e",
+     "ne",
      "n"
     ],
     "frames": 12,
@@ -599,13 +788,60 @@ window.GAME_DIR8 = {
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -29.0,
+      -66.0
+     ],
+     "ne": [
+      25.0,
+      -71.0
+     ],
+     "n": [
+      26.0,
+      -69.0
+     ],
+     "nw": [
+      -28.0,
+      -64.0
+     ],
+     "e": [
+      15.0,
+      -72.0
+     ],
+     "sw": [
+      -28.0,
+      -52.0
+     ]
+    }
    }
   },
   {
@@ -988,24 +1224,69 @@ window.GAME_DIR8 = {
      "s",
      "se",
      "e",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "ne",
+     "n"
     ],
-    "frames": 8,
+    "frames": 12,
     "run_dirs": [
      "s",
      "se",
      "e",
      "ne",
-     "n",
-     "nw",
-     "w",
-     "sw"
+     "n"
     ],
     "run_frames": 8,
-    "turns": []
+    "turns": [],
+    "ko_dirs": [
+     "s",
+     "ne",
+     "n",
+     "nw",
+     "e",
+     "sw"
+    ],
+    "ko_clips": [
+     {
+      "name": "fall",
+      "col": 0,
+      "frames": 9,
+      "duration": 1.2,
+      "loop": false
+     },
+     {
+      "name": "out",
+      "col": 9,
+      "frames": 2,
+      "duration": 1.6,
+      "loop": true
+     }
+    ],
+    "ko_head": {
+     "s": [
+      -28.0,
+      -71.0
+     ],
+     "ne": [
+      25.0,
+      -75.0
+     ],
+     "n": [
+      26.0,
+      -70.0
+     ],
+     "nw": [
+      -28.0,
+      -70.0
+     ],
+     "e": [
+      15.0,
+      -65.0
+     ],
+     "sw": [
+      -29.0,
+      -54.0
+     ]
+    }
    }
   },
   {
@@ -1160,6 +1441,32 @@ window.GAME_DIR8 = {
      "nw",
      "w",
      "sw"
+    ],
+    "run_frames": 8,
+    "turns": []
+   }
+  },
+  {
+   "name": "스트리트 뮤지션",
+   "scale": 1.0,
+   "walk": 47.5,
+   "run": 160.0,
+   "id": "busker",
+   "meta": {
+    "dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n"
+    ],
+    "frames": 12,
+    "run_dirs": [
+     "s",
+     "se",
+     "e",
+     "ne",
+     "n"
     ],
     "run_frames": 8,
     "turns": []

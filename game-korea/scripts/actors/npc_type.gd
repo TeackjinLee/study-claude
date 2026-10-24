@@ -45,6 +45,11 @@ extends Resource
 @export var fearless := false
 ## 이 구역에서만 걷는다 (DistrictType.id). 비우면 어디서나
 @export var districts: Array[StringName] = []
+## 한자리에 서 있는 사람: &"shop" 가게(상가·상가주택·편의점·시장) 앞 인도에서 길 쪽을 보고 호객 · &"street" 블록 둘레 인도에서 길 쪽을 보고 공연.
+## 서 있는 동안 대기 그림(assets/characters/<id>_idle_dir8.png)을 되풀이한다. 비우면 늘 걷는다
+@export var station: StringName = &""
+## 새로 나올 때 station 자리에 설 몫 (0~1, 나머지는 걷는다)
+@export var station_share := 0.0
 ## 이 시각(게임 시각, 0~24시) 사이에만 나온다. x > y면 밤을 넘긴다 (예: 20 → 4)
 @export var hours := Vector2i(0, 24)
 @export var shirt_colors: Array[Color] = [Color(0.5, 0.5, 0.5)]

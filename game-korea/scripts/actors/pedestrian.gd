@@ -30,6 +30,7 @@ var dead_time := 0.0               ## 기절한 뒤 지난 시간
 var rescuer: Object = null        ## 이 기절한 사람을 맡은 구급대 (구급차·구급헬기) — 맡은 사람은 치우지 않는다
 var targeted := false             ## 주인공이 고른 표적 (머리 위 체력 막대를 늘 띄운다 — PlayerWeapons.select)
 var carried := false              ## 들것에 실려 가는 중 (들것을 밑에 그린다)
+var stationed := false            ## 한자리에 서서 호객·공연하는 중 (NpcType.station) — 겁먹어 달아나면 그때부터 걷는다
 
 var shirt: Color
 var pants: Color
@@ -106,6 +107,14 @@ func _physics_process(delta: float) -> void:
 		facing = Vector2.UP.angle_to(vel)
 		walk_phase += delta * vel.length() / 9.0
 	move_and_slide()
+
+
+## 이 자리에 서서 out(길 쪽)을 보고 호객·공연한다 (대기 그림을 되풀이)
+func station_at(pos: Vector2, out: Vector2) -> void:
+	position = pos
+	facing = Vector2.UP.angle_to(out)
+	stationed = true
+	_set_state(State.IDLE, INF)
 
 
 ## 다가오는 차 옆으로 비켜선다
@@ -227,6 +236,7 @@ func is_scared() -> bool:
 
 ## 도망이 끝나면 가장 가까운 블록 인도로 돌아가 다시 걷는다
 func resume_walking() -> void:
+	stationed = false
 	loop = City.sidewalk_loop(City.nearest_block(global_position))
 	var best := 0
 	for i in loop.size():
@@ -243,7 +253,7 @@ func _process(_delta: float) -> void:
 	z_index = IsoView.z_at(global_position, level) if IsoView.enabled else 0
 	var key := [int(walk_phase * 24.0 / TAU), snappedf(facing, 0.05), state, speech_time > 0.0, speech,
 		IsoView.enabled, npc, shirt, snappedf(IsoView.ground(global_position, level), 0.5), carried,
-		PersonRig.ko_frame(self, npc)]
+		PersonRig.ko_frame(self, npc), PersonRig.idle_frame(self, npc, _draw_gait())]
 	if key != _drawn_key:
 		_drawn_key = key
 		queue_redraw()

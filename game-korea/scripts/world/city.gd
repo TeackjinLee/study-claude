@@ -95,6 +95,10 @@ const ROOF_EDGE := 10.0
 const STAIR_GAP := 14.0
 ## 블록 → 그 블록 랜드마크 부지 안 공터를 오가는 보행자 길들 (PedestrianManager가 인도 대신 쓰기도 한다)
 static var lot_loops := {}
+## 블록 → 그 블록 가게(상가·상가주택·편의점·시장) 앞 인도 자리 [위치, 길 쪽 방향]들 (상인이 서서 호객한다 — PedestrianManager)
+static var shop_fronts := {}
+const SHOP_KINDS := [&"COMMERCIAL", &"MIXED"]
+const SHOP_LOOKS := [&"CONVENIENCE", &"MARKET"]
 
 const GANGS: Array[GangType] = [
 	preload("res://data/gangs/gangnam.tres"),
@@ -439,6 +443,7 @@ func _build_layout() -> void:
 
 	_assign_looks()
 	_assign_landmarks()
+	_find_shop_fronts()
 
 
 ## 2.5D 기능 건물 겉모습을 정한다 (RNG 없이 건물 번호로만 — 늘 같은 도시)
@@ -517,6 +522,39 @@ func _assign_landmarks() -> void:
 							cells.append(Vector2i(ii, jj))
 				for cell in cells:
 					lot_loops[cell] = (lot_loops.get(cell, []) as Array) + Array(loops)   # 한 블록에 둘이면 합친다
+
+
+## 가게 부지마다 가장 가까운 길 쪽 인도 한가운데 자리 (부지 가운데를 그 변에 내린 점)
+func _find_shop_fronts() -> void:
+	shop_fronts.clear()
+	for idx in buildings.size():
+		var shop := false
+		if looks.has(idx):
+			shop = looks[idx].id in SHOP_LOOKS
+		elif kinds[idx] != null:
+			shop = kinds[idx].id in SHOP_KINDS
+		if not shop:
+			continue
+		var b := buildings[idx]
+		var cell: Vector2i = _owners[idx]
+		var area := block_area(cell)
+		var walk := area.grow(-SIDEWALK * 0.5)
+		var c := b.get_center()
+		# 블록 네 변 중 부지에서 가장 가까운 변 (그쪽 길을 보고 선다)
+		var gaps := [b.position.y - area.position.y, area.end.x - b.end.x, area.end.y - b.end.y, b.position.x - area.position.x]
+		var side := 0
+		for k in 4:
+			if gaps[k] < gaps[side]:
+				side = k
+		var pos: Vector2
+		var out: Vector2
+		match side:
+			0: pos = Vector2(c.x, walk.position.y); out = Vector2.UP
+			1: pos = Vector2(walk.end.x, c.y); out = Vector2.RIGHT
+			2: pos = Vector2(c.x, walk.end.y); out = Vector2.DOWN
+			_: pos = Vector2(walk.position.x, c.y); out = Vector2.LEFT
+		pos = pos.clamp(walk.position, walk.end)
+		shop_fronts[cell] = (shop_fronts.get(cell, []) as Array) + [[pos, out]]
 
 
 ## 랜드마크 공터에 세워 둘 차 [위치, 방향] (열린 구역만). 차종은 Main이 정한다

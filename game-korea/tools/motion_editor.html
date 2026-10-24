@@ -2059,7 +2059,7 @@ const GR = {
   SPRITE_HEIGHT: 31, SPRITE_BODY: 96, SCREEN_ZOOM: 1.1,               // 화면 키 = SPRITE_HEIGHT × size × ChaseCamera.BASE_ZOOM
   MIRROR: [4, 3, 2, 1, 0, 7, 6, 5],
   KO_CELL: [256, 112], KO_FOOT: [128, 108],  // PersonRig.KO_CELL·KO_FOOT (영상·포즈 옮기기 넘어짐 — 누운 몸이 옆으로 길다)
-  POSES: ['ko', 'rifle', 'pistol', 'rocket'], // 따로 한 장인 시트 <id>_<자세>_dir8.png (.json <자세>_dirs·<자세>_clips)
+  POSES: ['ko', 'rifle', 'pistol', 'rocket', 'idle'], // 따로 한 장인 시트 <id>_<자세>_dir8.png (.json <자세>_dirs·<자세>_clips)
 };
 const GMODES = [['idle', '서 있기'], ['walk', '걷기'], ['run', '달리기'], ['fall', '넘어짐'], ['punch', '주먹 콤보'], ['gun', '총 겨누기·쏘기']];
 const POSE_NAME = {rifle: '소총', pistol: '권총', rocket: '로켓포'};
@@ -2189,6 +2189,7 @@ function gRenderList() {
     if (i.punchFrames || ch.atk) tags.push('주먹');
     const gp = gGunPose(ch);
     if (gp) tags.push(POSE_NAME[gp]);
+    if (i.poses.idle) tags.push('대기 동작');
     if (ch.scale !== 1) tags.push(`키 ×${ch.scale}`);
     return el('button', {class: 'gc' + (ch === G.cur ? ' on' : ''), title: ch.id, onclick: () => { G.cur = ch; G.shown = {}; G.fallAt = -1; G.punch = null; gRenderList(); gRenderPanel(); }},
       gThumb(ch), el('span', {}, el('b', {}, ch.name), el('small', {}, `${ch.id} · ${tags.join(' · ')}`)));
@@ -2221,6 +2222,7 @@ function gRenderPanel() {
     el('div', {}, i.runFrames ? `달리기 ${i.runFrames}장 (${1 + i.frames}~${i.frames + i.runFrames}열): ${names(i.runOk)}` : '달리기 그림 없음 — 걷기를 빠르게 넘긴다'),
     el('div', {}, i.poses.ko ? `넘어짐 ${ch.id}_ko_dir8.png — 쓰러짐 ${i.poses.ko.clips.fall.frames}장 · 기절 숨쉬기 ${i.poses.ko.clips.out.frames}장: ${names(i.poses.ko.ok)}`
       : i.fallFrames ? `넘어짐 ${i.fallFrames}장 (${i.fallCol}열~): ${names(i.fallOk)}` : '넘어짐 그림 없음 (게임은 눕힌 그림)'),
+    el('div', {}, i.poses.idle ? `대기 동작 ${ch.id}_idle_dir8.png — ${i.poses.idle.clips.idle.frames}장 ${i.poses.idle.clips.idle.duration}초 되풀이: ${names(i.poses.idle.ok)}` : '대기 동작 없음 (서 있기 한 장)'),
     el('div', {}, i.punchFrames ? `주먹 콤보 ${i.punchFrames}장 (${i.punchCol}열~)` : '주먹 그림 없음'),
     ...['rifle', 'pistol', 'rocket'].filter(p => i.poses[p]).map(p => el('div', {}, `${POSE_NAME[p]} ${ch.id}_${p}_dir8.png — ` +
       Object.values(i.poses[p].clips).map(c => `${MODE_NAME[c.name] || c.name} ${c.frames}장`).join(' · ') + `: ${names(i.poses[p].ok)}`)),
@@ -2232,6 +2234,7 @@ function gOkFor(ch, mode) {
   if (mode === 'fall' && i.poses.ko) return i.poses.ko.ok;
   if (mode === 'fall' && i.fallFrames) return i.fallOk;
   if (mode === 'gun' && gGunPose(ch)) return i.poses[gGunPose(ch)].ok;
+  if (mode === 'idle' && i.poses.idle) return i.poses.idle.ok;
   if (mode === 'punch' && i.punchFrames >= 11) return i.punchOk;
   return i.ok;
 }
@@ -2272,7 +2275,7 @@ function gFrame(ch, act, a, key) {
     }
   }
   // 따로 한 장 시트 (PersonRig._draw_dir8_fall 영상 넘어짐 · _draw_gun 총 자세)
-  const pose = act === 'fall' && i.poses.ko ? 'ko' : act === 'gun' ? gGunPose(ch) : null;
+  const pose = act === 'fall' && i.poses.ko ? 'ko' : act === 'gun' ? gGunPose(ch) : act === 'idle' && i.poses.idle ? 'idle' : null;
   if (pose) {
     const P = i.poses[pose], k = gPick(a, G.shown[key] ?? -1, P.ok);
     if (k >= 0) {
@@ -2287,6 +2290,10 @@ function gFrame(ch, act, a, key) {
         }
         const j = Math.floor((t - drop.duration) / out.duration * out.frames) % out.frames;
         return Object.assign(base, {col: out.col + j, label: '기절 (숨쉬기)', i: j, n: out.frames, first: out.col, lie: 1, dur: out.duration / out.frames});
+      }
+      if (pose === 'idle') {   // 대기 동작 되풀이 (PersonRig.idle_frame)
+        const c = P.clips.idle, j = Math.floor(G.clock / c.duration * c.frames) % c.frames;
+        return Object.assign(base, {col: c.col + j, label: '대기 동작', i: j, n: c.frames, first: c.col, dur: c.duration / c.frames});
       }
       const fire = P.clips.fire, aim = P.clips.aim, since = G.clock - G.shotAt;
       if (since >= 0 && since < fire.duration) {

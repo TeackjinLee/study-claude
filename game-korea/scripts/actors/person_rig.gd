@@ -1214,7 +1214,8 @@ static func dir8_for(look: NpcType) -> Dictionary:
 					info["attack_tex"] = load(attacks)
 				# 총 자세(소총·권총)도 자세마다 따로 한 장 (.json <자세>_dirs·<자세>_clips — 조준 · 발사 [· 겨눈 채 걷기], <자세>_muzzle 총구 자리)
 				# 점프(jump_clips — 웅크림 · 공중 · 받기, 장마다 떠오른 높이 lift)·넘어짐(ko_clips — fall 쓰러짐 · out 기절해 숨쉬기)도 같은 방식
-				for pose: String in GUN_POSES + ["jump", "ko"]:
+				# 대기(idle_clips — 서 있는 동안 되풀이: 상인 손뼉 호객·뮤지션 기타·DJ 춤)도
+				for pose: String in GUN_POSES + ["jump", "ko", "idle"]:
 					var gun := SPRITE_DIR + id + "_" + pose + "_dir8.png"
 					if ResourceLoader.exists(gun) and data.has(pose + "_clips"):
 						info[pose + "_tex"] = load(gun)
@@ -1283,7 +1284,18 @@ static func _draw_dir8(ci: CanvasItem, facing: float, phase: float, gait: float,
 	var row: int = ok[k][0]
 	var flip := -1.0 if ok[k][1] else 1.0
 	var col := 0
-	if turn_cell.x >= 0:
+	var tex: Texture2D = info["tex"]
+	var idle := idle_frame(ci, look, gait)
+	var ik := dir8_pick(dir, ci.get_meta(&"dir8_idle", -1), info["idle_ok"]) if idle >= 0 else -1
+	if ik >= 0:
+		# 서 있으면 대기 그림 (방향은 대기 그림이 있는 것 중 가까운 것)
+		var iok: Array = info["idle_ok"]
+		ci.set_meta(&"dir8_idle", ik)
+		tex = info["idle_tex"]
+		row = iok[ik][0]
+		flip = -1.0 if iok[ik][1] else 1.0
+		col = int(info["idle_idle"]["col"]) + idle
+	elif turn_cell.x >= 0:
 		col = turn_cell.x
 		row = turn_cell.y
 		flip = -1.0 if turn_flip else 1.0
@@ -1300,9 +1312,23 @@ static func _draw_dir8(ci: CanvasItem, facing: float, phase: float, gait: float,
 	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g))
 	ci.draw_colored_polygon(_ellipse_pts(Vector2.ZERO, 6.5 * size, 2.6 * size), Color(0, 0, 0, 0.32))
 	ci.draw_set_transform_matrix(IsoView.screen_frame(Vector2.ZERO, g).scaled_local(Vector2(flip * s, s)))
-	ci.draw_texture_rect_region(info["tex"], Rect2(-DIR4_FOOT, DIR4_CELL), Rect2(Vector2(col, row) * DIR4_CELL, DIR4_CELL))
+	ci.draw_texture_rect_region(tex, Rect2(-DIR4_FOOT, DIR4_CELL), Rect2(Vector2(col, row) * DIR4_CELL, DIR4_CELL))
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	return true
+
+
+## 서 있을 때 그릴 대기 그림 장 번호 (-1 = 대기 그림 없음·걷는 중). 사람마다 시작을 어긋나게 해 여럿이 같은 박자로 움직이지 않는다.
+## 보행자는 이 값이 바뀔 때만 다시 그린다 (Pedestrian._process의 열쇠)
+static func idle_frame(ci: CanvasItem, look: NpcType, gait: float) -> int:
+	if gait > 0.3 or look == null:
+		return -1
+	var info := dir8_for(look)
+	if not info.has("idle_tex"):
+		return -1
+	var clip: Dictionary = info["idle_idle"]
+	var n := int(clip["frames"])
+	var t := Time.get_ticks_msec() / 1000.0 + float(ci.get_instance_id() % 1000) * 0.0137
+	return posmod(int(t / float(clip["duration"]) * n), n)
 
 
 ## 넘어짐 그림으로 쓰러진다 (주인공만 — 매 프레임 다시 그리는 것만 장면이 넘어간다. 보행자는 예전처럼 눕힌 그림).

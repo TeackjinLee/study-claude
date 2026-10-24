@@ -14,7 +14,7 @@ func _ready() -> void:
 	var heli_only := "--only=heli" in OS.get_cmdline_user_args()
 	var army_only := "--only=army" in OS.get_cmdline_user_args()
 	var heavy_only := "--only=heavy" in OS.get_cmdline_user_args()
-	if heli_only or army_only or heavy_only:
+	if heli_only or army_only or heavy_only or "--only=npc_idle" in OS.get_cmdline_user_args():
 		main.chapter = 4   # 헬기·군용 차량은 4장 부두에 있다
 	add_child(main)
 	if heli_only:
@@ -95,6 +95,11 @@ func _ready() -> void:
 	if "--only=npc_ko" in OS.get_cmdline_user_args():
 		await _frames(30)
 		await _npc_ko_shots(main)
+		get_tree().quit()
+		return
+	if "--only=npc_idle" in OS.get_cmdline_user_args():
+		await _frames(30)
+		await _npc_idle_shots(main)
 		get_tree().quit()
 		return
 	if "--only=citizen" in OS.get_cmdline_user_args():
@@ -1648,7 +1653,7 @@ func _npc_ko_shots(main: Node2D) -> void:
 	if peds.size() < 4:
 		print("  보행자가 모자람 (%d)" % peds.size())
 		return
-	for id in ["civ_m", "civ_f", "office", "paramedic", "soldier", "foreigner", "merchant", "homeless", "police", "gang_gangnam", "gang_oldtown", "gang_smuggler"]:
+	for id in ["civ_m", "civ_f", "office", "paramedic", "soldier", "foreigner", "merchant", "homeless", "police", "gang_gangnam", "gang_oldtown", "gang_smuggler", "busker", "dj"]:
 		for i in 4:
 			var p: Pedestrian = peds[i]
 			var k := i * 2
@@ -1667,6 +1672,51 @@ func _npc_ko_shots(main: Node2D) -> void:
 		await _frames(90)
 		await _save("nko_%s_out" % id)
 		print("  %s: 머리 %s" % [id, peds.map(func(p): return p.get_meta(&"ko_head", "없음"))])
+
+
+## 대기 동작 (`-- --only=npc_idle`): 종로 가게 앞에 선 상인 셋(손뼉 호객)·홍대 인도에 선 뮤지션 둘(기타)·DJ 둘(춤) —
+## 자리는 게임과 같은 규칙(City.shop_fronts·블록 둘레 인도, 길 쪽을 본다). 한 자리에서 0.25초 간격 세 장 (idle_<곳>_<n>)
+func _npc_idle_shots(main: Node2D) -> void:
+	var cam: ChaseCamera = main.camera
+	var player: Player = main.player
+	if main.director.current_vehicle:
+		main.director.exit_vehicle()
+	await _frames(20)
+	cam.target = null
+	cam.zoom = Vector2(3.0, 3.0)
+	var places := [["shop", &"jongno", ["merchant", "merchant", "merchant"]], ["street", &"hongdae", ["busker", "dj", "busker", "dj"]]]
+	for place in places:
+		var block := Vector2i(999, 999)
+		for b: Vector2i in City.shop_fronts:
+			var dist := CityMap.district_of(b)
+			var seen: Array = City.shop_fronts[b].filter(func(f): return f[1].x > 0.5 or f[1].y > 0.5)   # 동·남을 보는 가게 (2.5D에서 앞에 보인다)
+			if dist and dist.id == place[1] and CityMap.is_open_block(b) and (place[0] == "street" or seen.size() >= 1):
+				block = b
+				break
+		if block.x == 999:
+			print("  %s 블록 없음 (가게 앞 자리 %d블록)" % [place[1], City.shop_fronts.size()])
+			continue
+		var spots: Array = City.shop_fronts[block].filter(func(f): return f[1].x > 0.5 or f[1].y > 0.5)
+		if place[0] == "street":
+			spots = []
+			var loop := City.sidewalk_loop(block)
+			var along := (loop[3] - loop[2]).normalized()
+			for t in [0.3, 0.45, 0.6, 0.75]:
+				spots.append([loop[2].lerp(loop[3], t), Vector2(along.y, -along.x)])
+		var ids: Array = place[2]
+		for i in ids.size():
+			var p := Pedestrian.new()
+			p.setup(load("res://data/npc/%s.tres" % ids[i]), main.pedestrians.rng, City.sidewalk_loop(block), 0, 0.0, 1)
+			main.pedestrians.add(p)
+			var spot: Array = spots[i % spots.size()]
+			p.station_at(spot[0] + Vector2(spot[1].y, -spot[1].x) * 18.0 * (i / spots.size()), spot[1])
+		var c: Vector2 = spots[0][0]
+		player.global_position = c + Vector2(500, 500)
+		cam.global_position = c
+		await _frames(20)
+		for n in 3:
+			await _save("idle_%s_%d" % [place[1], n])
+			await get_tree().create_timer(0.25).timeout
 
 
 ## 주인공 넘어짐·기절 (`-- --only=player_ko`): 화면 →·↓·←·↑을 보고 체력이 0이 되면 쓰러지는 도중(pko_<방향>_fall)·

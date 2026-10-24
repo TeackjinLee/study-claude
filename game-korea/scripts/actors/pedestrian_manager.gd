@@ -60,6 +60,7 @@ var spawn_center := City.start_position()
 var rng := RandomNumberGenerator.new()
 var _lod_timer := 0.0
 var _maintain_timer := MAINTAIN_INTERVAL
+var _placed := 0                 ## 새로 나온 사람 수 — 한자리에 설지·어디 설지를 rng 없이 정한다 (보행자 배치가 바뀌지 않게)
 
 
 func _ready() -> void:
@@ -76,8 +77,33 @@ func _spawn_on_sidewalk() -> Pedestrian:
 	var p := Pedestrian.new()
 	p.setup(_pick_type(block), rng, _walk_loop(block), rng.randi_range(0, 3), rng.randf(),
 		1 if rng.randf() < 0.5 else -1)
+	_station(p, block)
 	add(p)
 	return p
+
+
+## 상인·뮤지션·DJ는 몇은 한자리에 서서 호객·공연한다 (NpcType.station). 상인은 가게 앞(City.shop_fronts) — 그 블록에 가게가 없으면 걷는다.
+## 자리·몫은 나온 차례(_placed)로 정한다 — rng를 더 뽑으면 뒤 보행자 배치와 행동이 통째로 바뀐다
+func _station(p: Pedestrian, block: Vector2i) -> void:
+	_placed += 1
+	var t := p.npc
+	if t.station == &"" or posmod(_placed * 37, 100) >= int(t.station_share * 100.0):
+		return
+	var spots := []
+	if t.station == &"shop":
+		spots = City.shop_fronts.get(block, [])
+	else:
+		# 블록 둘레 인도의 동·남 변 가운데쯤 (모퉁이는 비운다 — 북·서 변은 2.5D에서 건물 뒤라 안 보인다)
+		var loop := City.sidewalk_loop(block)
+		for k in [1, 2]:
+			var a := loop[k]
+			var b := loop[(k + 1) % 4]
+			var along := (b - a).normalized()
+			spots.append([a.lerp(b, 0.3 + 0.4 * posmod(_placed * 13 + k * 29, 100) / 100.0), Vector2(along.y, -along.x)])
+	if spots.is_empty():
+		return
+	var spot: Array = spots[posmod(_placed * 7, spots.size())]
+	p.station_at(spot[0], spot[1])
 
 
 ## 걷게 할 길: 보통은 블록 둘레 인도, 랜드마크 블록이면 셋 중 둘은 부지 안 공터(광장·골목·승강장)
@@ -265,6 +291,7 @@ func _maintain() -> void:
 			continue
 		var p := Pedestrian.new()
 		p.setup(_pick_type(block), rng, loop, edge, t, 1 if rng.randf() < 0.5 else -1)
+		_station(p, block)
 		add(p)
 		return
 
